@@ -78,3 +78,36 @@ test("patchPiExtensionLoaderSource aliases both Pi runtime namespaces to the bun
 	assert.match(patched, /"@earendil-works\/pi-coding-agent": packageIndex/);
 	assert.match(patched, /"@earendil-works\/pi-tui": resolveWorkspaceOrImport\("tui\/dist\/index\.js", "@mariozechner\/pi-tui"\)/);
 });
+
+test("patchPiExtensionLoaderSource preserves legacy aliases for current namespace loaders", () => {
+	const input = [
+		'import { fileURLToPath, pathToFileURL } from "node:url";',
+		"const VIRTUAL_MODULES = {",
+		'    "@earendil-works/pi-agent-core": _bundledPiAgentCore,',
+		'    "@earendil-works/pi-tui": _bundledPiTui,',
+		'    "@earendil-works/pi-ai": _bundledPiAi,',
+		'    "@earendil-works/pi-ai/oauth": _bundledPiAiOauth,',
+		'    "@earendil-works/pi-coding-agent": _bundledPiCodingAgent,',
+		"};",
+		"function getAliases() {",
+		"    _aliases = {",
+		'        "@earendil-works/pi-coding-agent": packageIndex,',
+		'        "@earendil-works/pi-agent-core": resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core"),',
+		'        "@earendil-works/pi-tui": resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/pi-tui"),',
+		'        "@earendil-works/pi-ai": resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/pi-ai"),',
+		'        "@earendil-works/pi-ai/oauth": resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth"),',
+		"    };",
+		"}",
+		"",
+	].join("\n");
+
+	const patched = patchPiExtensionLoaderSource(input);
+
+	assert.match(patched, /"@mariozechner\/pi-agent-core": _bundledPiAgentCore/);
+	assert.match(patched, /"@mariozechner\/pi-tui": _bundledPiTui/);
+	assert.match(patched, /"@mariozechner\/pi-ai": _bundledPiAi/);
+	assert.match(patched, /"@mariozechner\/pi-ai\/oauth": _bundledPiAiOauth/);
+	assert.match(patched, /"@mariozechner\/pi-coding-agent": _bundledPiCodingAgent/);
+	assert.match(patched, /"@mariozechner\/pi-coding-agent": packageIndex/);
+	assert.match(patched, /"@mariozechner\/pi-tui": resolveWorkspaceOrImport\("tui\/dist\/index\.js", "@earendil-works\/pi-tui"\)/);
+});

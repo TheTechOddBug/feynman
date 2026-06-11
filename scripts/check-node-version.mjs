@@ -42,5 +42,11 @@ if (!isSupportedNodeVersion()) {
 	for (const line of getUnsupportedNodeVersionLines()) {
 		console.error(line);
 	}
-	process.exit(1);
+	// Too-new Node must not abort the install: failing preinstall makes npm roll
+	// back to the previously installed version, which pins users to a release that
+	// predates the fix they are trying to get (issue #177). The launcher in
+	// bin/feynman.js enforces the supported range at runtime with the same message.
+	if (parseNodeVersion(process.versions.node).major <= MAX_NODE_MAJOR) {
+		process.exit(1);
+	}
 }

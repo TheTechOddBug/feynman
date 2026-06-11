@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import type { ExtensionAPI, SlashCommandInfo, ToolInfo } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 function resolveFeynmanSettingsPath(): string {
 	const configured = process.env.PI_CODING_AGENT_DIR?.trim();

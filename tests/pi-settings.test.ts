@@ -124,6 +124,25 @@ test("normalizeFeynmanSettings seeds OpenAI gpt-5.5 as the preferred OpenAI defa
 	assert.equal(settings.defaultModel, "gpt-5.5");
 });
 
+test("normalizeFeynmanSettings seeds OpenCode Go Kimi as the preferred OpenCode Go default", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, JSON.stringify({ "opencode-go": { type: "api_key", key: "opencode-test-key" } }) + "\n", "utf8");
+
+	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		defaultProvider?: string;
+		defaultModel?: string;
+	};
+	assert.equal(settings.defaultProvider, "opencode-go");
+	assert.equal(settings.defaultModel, "kimi-k2.6");
+});
+
 test("optional package presets map friendly aliases", () => {
 	assert.deepEqual(getOptionalPackagePresetSources("memory"), ["npm:@samfp/pi-memory"]);
 	assert.deepEqual(getOptionalPackagePresetSources("hindsight"), ["npm:@luxusai/pi-hindsight"]);

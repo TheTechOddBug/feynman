@@ -167,3 +167,70 @@ test("patchPiWebAccessSource is idempotent", () => {
 
 	assert.equal(twice, once);
 });
+
+test("patchPiWebAccessSource cancels a clobbered parallel curate session in index.ts", () => {
+	const input = [
+		"\t\t\t\tconst onAbort = () => closeCurator();",
+		"\t\t\t\tpendingCurate = pc;",
+		"",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("index.ts", input);
+
+	assert.match(patched, /cancelPendingCurate\(\);\n\t\t\t\tpendingCurate = pc;/);
+
+	const twice = patchPiWebAccessSource("index.ts", patched);
+	assert.equal(twice, patched);
+});
+
+test("patchPiWebAccessSource bounds web_search query calls with a deadline in index.ts", () => {
+	const input = [
+		"const MAX_INLINE_CONTENT = 30000; // Content returned directly to agent",
+		"",
+		"async function run() {",
+		"\t\t\t\t\tconst { answer, results, inlineContent, provider } = await search(queryList[qi], {",
+		"\t\t\t\t\t\tprovider: requestedProvider,",
+		"\t\t\t\t\t});",
+		"\t\t\t\tconst { answer, results, inlineContent, provider } = await search(query, {",
+		"\t\t\t\t\tprovider: resolvedProvider,",
+		"\t\t\t\t});",
+		"}",
+		"",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("index.ts", input);
+
+	assert.match(patched, /const SEARCH_CALL_TIMEOUT_MS = 90000;/);
+	assert.match(patched, /async function searchWithDeadline\(/);
+	assert.match(patched, /await searchWithDeadline\(queryList\[qi\], \{/);
+	assert.match(patched, /await searchWithDeadline\(query, \{/);
+	assert.doesNotMatch(patched, /await search\(/);
+
+	const twice = patchPiWebAccessSource("index.ts", patched);
+	assert.equal(twice, patched);
+});
+
+test("patchPiWebAccessSource enforces a curator browser-connect deadline in curator-server.ts", () => {
+	const input = [
+		"const STALE_THRESHOLD_MS = 30000;",
+		"const WATCHDOG_INTERVAL_MS = 5000;",
+		"",
+		"\t\t\twatchdog = setInterval(() => {",
+		"\t\t\t\tif (completed || !browserConnected) return;",
+		"\t\t\t\tif (Date.now() - lastHeartbeatAt <= STALE_THRESHOLD_MS) return;",
+		"\t\t\t\tif (!markCompleted()) return;",
+		'\t\t\t\tsetImmediate(() => callbacks.onCancel("stale"));',
+		"\t\t\t}, WATCHDOG_INTERVAL_MS);",
+		"",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("curator-server.ts", input);
+
+	assert.match(patched, /const BROWSER_CONNECT_TIMEOUT_MS = 120000;/);
+	assert.match(patched, /const serverStartedAt = Date\.now\(\);/);
+	assert.match(patched, /Date\.now\(\) - serverStartedAt <= BROWSER_CONNECT_TIMEOUT_MS/);
+	assert.doesNotMatch(patched, /if \(completed \|\| !browserConnected\) return;/);
+
+	const twice = patchPiWebAccessSource("curator-server.ts", patched);
+	assert.equal(twice, patched);
+});

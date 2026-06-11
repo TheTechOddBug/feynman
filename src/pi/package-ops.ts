@@ -3,7 +3,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, re
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { DefaultPackageManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 
 import { NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
 import { applyFeynmanPackageManagerEnv, getFeynmanNpmPrefixPath } from "./runtime.js";
@@ -23,6 +23,12 @@ type NpmSource = {
 	source: string;
 	spec: string;
 	pinned: boolean;
+};
+
+type PackageManagerCommand = {
+	command: string;
+	args: string[];
+	shell?: boolean;
 };
 
 export type MissingConfiguredPackageSummary = {
@@ -48,22 +54,29 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^run `npm fund` for details$/i,
 ];
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const PI_RUNTIME_FALLBACK_VERSION = "0.74.2";
+const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
+	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
+	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
+	"@mariozechner/pi-coding-agent": "@earendil-works/pi-coding-agent",
+	"@mariozechner/pi-tui": "@earendil-works/pi-tui",
+} as const;
 const PI_RUNTIME_PEER_PACKAGE_NAMES = [
-	"@mariozechner/pi-agent-core",
-	"@mariozechner/pi-ai",
-	"@mariozechner/pi-coding-agent",
-	"@mariozechner/pi-tui",
 	"@earendil-works/pi-agent-core",
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
+	"@mariozechner/pi-agent-core",
+	"@mariozechner/pi-ai",
+	"@mariozechner/pi-coding-agent",
+	"@mariozechner/pi-tui",
 	"typebox",
 ] as const;
 const FALLBACK_RUNTIME_PEER_SPECS: Partial<Record<(typeof PI_RUNTIME_PEER_PACKAGE_NAMES)[number], string>> = {
-	"@earendil-works/pi-agent-core": "@earendil-works/pi-agent-core@0.74.0",
-	"@earendil-works/pi-ai": "@earendil-works/pi-ai@0.74.0",
-	"@earendil-works/pi-coding-agent": "@earendil-works/pi-coding-agent@0.74.0",
-	"@earendil-works/pi-tui": "@earendil-works/pi-tui@0.74.0",
+	"@earendil-works/pi-agent-core": `@earendil-works/pi-agent-core@${PI_RUNTIME_FALLBACK_VERSION}`,
+	"@earendil-works/pi-ai": `@earendil-works/pi-ai@${PI_RUNTIME_FALLBACK_VERSION}`,
+	"@earendil-works/pi-coding-agent": `@earendil-works/pi-coding-agent@${PI_RUNTIME_FALLBACK_VERSION}`,
+	"@earendil-works/pi-tui": `@earendil-works/pi-tui@${PI_RUNTIME_FALLBACK_VERSION}`,
 };
 
 function createPackageContext(workingDir: string, agentDir: string) {
@@ -169,6 +182,14 @@ function resolveRuntimePeerSpec(packageName: string): string | undefined {
 		const version = readInstalledPackageVersion(packageRoot);
 		if (version) return `${packageName}@${version}`;
 	}
+
+	const aliasTarget = LEGACY_PI_RUNTIME_PACKAGE_ALIASES[packageName as keyof typeof LEGACY_PI_RUNTIME_PACKAGE_ALIASES];
+	if (aliasTarget) {
+		const targetSpec = resolveRuntimePeerSpec(aliasTarget);
+		const targetVersion = targetSpec?.match(/@(\d+\.\d+\.\d+)$/)?.[1] ?? PI_RUNTIME_FALLBACK_VERSION;
+		return `${packageName}@npm:${aliasTarget}@${targetVersion}`;
+	}
+
 	return FALLBACK_RUNTIME_PEER_SPECS[packageName as (typeof PI_RUNTIME_PEER_PACKAGE_NAMES)[number]];
 }
 
@@ -202,17 +223,29 @@ function ensureProjectInstallRoot(workingDir: string): string {
 	return installRoot;
 }
 
-function resolveAdjacentNpmExecutable(): string | undefined {
-	const executableName = process.platform === "win32" ? "npm.cmd" : "npm";
-	const candidate = resolve(dirname(process.execPath), executableName);
-	return existsSync(candidate) ? candidate : undefined;
+export function resolveAdjacentNpmCommand(
+	nodeExecutablePath = process.execPath,
+	platform = process.platform,
+): PackageManagerCommand | undefined {
+	const executableDir = dirname(nodeExecutablePath);
+	if (platform === "win32") {
+		const npmCliPath = resolve(executableDir, "node_modules", "npm", "bin", "npm-cli.js");
+		if (existsSync(npmCliPath)) {
+			return { command: nodeExecutablePath, args: [npmCliPath] };
+		}
+		const npmCmdPath = resolve(executableDir, "npm.cmd");
+		return existsSync(npmCmdPath) ? { command: npmCmdPath, args: [], shell: true } : undefined;
+	}
+
+	const candidate = resolve(executableDir, "npm");
+	return existsSync(candidate) ? { command: candidate, args: [] } : undefined;
 }
 
-function resolvePackageManagerCommand(settingsManager: SettingsManager): { command: string; args: string[] } | undefined {
+function resolvePackageManagerCommand(settingsManager: SettingsManager): PackageManagerCommand | undefined {
 	const configured = settingsManager.getNpmCommand();
 	if (!configured || configured.length === 0) {
-		const adjacentNpm = resolveAdjacentNpmExecutable() ?? resolveExecutable("npm");
-		return adjacentNpm ? { command: adjacentNpm, args: [] } : undefined;
+		const npmExecutable = resolveExecutable("npm");
+		return resolveAdjacentNpmCommand() ?? (npmExecutable ? { command: npmExecutable, args: [] } : undefined);
 	}
 
 	const [command = "npm", ...args] = configured;
@@ -225,7 +258,11 @@ function resolvePackageManagerCommand(settingsManager: SettingsManager): { comma
 		return undefined;
 	}
 
-	return { command: executable, args };
+	return {
+		command: executable,
+		args,
+		shell: process.platform === "win32" && /\.(?:cmd|bat)$/i.test(executable),
+	};
 }
 
 function childPackageManagerEnv(): NodeJS.ProcessEnv {
@@ -277,6 +314,7 @@ async function runPackageManagerInstall(
 			cwd: scope === "user" ? agentDir : workingDir,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: childPackageManagerEnv(),
+			shell: packageManagerCommand.shell,
 		});
 
 		child.stdout?.on("data", (chunk) => {

@@ -86,19 +86,108 @@ test("buildModelStatusSnapshotFromRecords returns available models sorted by res
 			{ provider: "openai", id: "gpt-5.4" },
 			{ provider: "openai", id: "gpt-5.5" },
 			{ provider: "anthropic", id: "claude-opus-4-6" },
+			{ provider: "anthropic", id: "claude-opus-4-7" },
 		],
 		[
 			{ provider: "openai", id: "gpt-5.4" },
 			{ provider: "openai", id: "gpt-5.5" },
 			{ provider: "anthropic", id: "claude-opus-4-6" },
+			{ provider: "anthropic", id: "claude-opus-4-7" },
 		],
 		undefined,
 	);
 
-	assert.equal(snapshot.availableModels[0], "anthropic/claude-opus-4-6");
-	assert.equal(snapshot.availableModels[1], "openai/gpt-5.5");
-	assert.equal(snapshot.availableModels[2], "openai/gpt-5.4");
-	assert.equal(snapshot.recommended, "anthropic/claude-opus-4-6");
+	assert.equal(snapshot.availableModels[0], "anthropic/claude-opus-4-7");
+	assert.equal(snapshot.availableModels[1], "anthropic/claude-opus-4-6");
+	assert.equal(snapshot.availableModels[2], "openai/gpt-5.5");
+	assert.equal(snapshot.availableModels[3], "openai/gpt-5.4");
+	assert.equal(snapshot.recommended, "anthropic/claude-opus-4-7");
+});
+
+test("buildModelStatusSnapshotFromRecords prefers current OpenCode Zen models over older Zen fallbacks", () => {
+	const snapshot = buildModelStatusSnapshotFromRecords(
+		[
+			{ provider: "opencode", id: "gpt-5.5" },
+			{ provider: "opencode", id: "claude-opus-4-6" },
+			{ provider: "opencode", id: "claude-opus-4-8" },
+			{ provider: "opencode", id: "gemini-3.1-pro" },
+		],
+		[
+			{ provider: "opencode", id: "gpt-5.5" },
+			{ provider: "opencode", id: "claude-opus-4-6" },
+			{ provider: "opencode", id: "claude-opus-4-8" },
+			{ provider: "opencode", id: "gemini-3.1-pro" },
+		],
+		undefined,
+	);
+
+	assert.equal(snapshot.availableModels[0], "opencode/claude-opus-4-8");
+	assert.equal(snapshot.availableModels[1], "opencode/claude-opus-4-6");
+	assert.equal(snapshot.availableModels[2], "opencode/gpt-5.5");
+	assert.equal(snapshot.availableModels[3], "opencode/gemini-3.1-pro");
+	assert.equal(snapshot.recommended, "opencode/claude-opus-4-8");
+});
+
+test("buildModelStatusSnapshotFromRecords prefers the OpenCode Go default lineup", () => {
+	const snapshot = buildModelStatusSnapshotFromRecords(
+		[
+			{ provider: "opencode-go", id: "glm-5" },
+			{ provider: "opencode-go", id: "glm-5.1" },
+			{ provider: "opencode-go", id: "kimi-k2.6" },
+			{ provider: "opencode-go", id: "minimax-m2.7" },
+		],
+		[
+			{ provider: "opencode-go", id: "glm-5" },
+			{ provider: "opencode-go", id: "glm-5.1" },
+			{ provider: "opencode-go", id: "kimi-k2.6" },
+			{ provider: "opencode-go", id: "minimax-m2.7" },
+		],
+		undefined,
+	);
+
+	assert.equal(snapshot.availableModels[0], "opencode-go/kimi-k2.6");
+	assert.equal(snapshot.availableModels[1], "opencode-go/glm-5.1");
+	assert.equal(snapshot.availableModels[2], "opencode-go/minimax-m2.7");
+	assert.equal(snapshot.availableModels[3], "opencode-go/glm-5");
+	assert.equal(snapshot.recommended, "opencode-go/kimi-k2.6");
+});
+
+test("buildModelStatusSnapshotFromRecords sorts OpenCode providers with first-class providers", () => {
+	const snapshot = buildModelStatusSnapshotFromRecords(
+		[
+			{ provider: "xai", id: "grok-4" },
+			{ provider: "opencode-go", id: "kimi-k2.6" },
+			{ provider: "opencode", id: "gpt-5.5" },
+			{ provider: "google", id: "gemini-3-pro-preview" },
+		],
+		[],
+		undefined,
+	);
+
+	assert.deepEqual(snapshot.providers.map((provider) => provider.id), [
+		"opencode",
+		"opencode-go",
+		"google",
+		"xai",
+	]);
+});
+
+test("buildModelStatusSnapshotFromRecords prefers MiniMax M3 over M2.7 when both are available", () => {
+	const snapshot = buildModelStatusSnapshotFromRecords(
+		[
+			{ provider: "minimax", id: "MiniMax-M2.7" },
+			{ provider: "minimax", id: "MiniMax-M3" },
+		],
+		[
+			{ provider: "minimax", id: "MiniMax-M2.7" },
+			{ provider: "minimax", id: "MiniMax-M3" },
+		],
+		undefined,
+	);
+
+	assert.equal(snapshot.availableModels[0], "minimax/MiniMax-M3");
+	assert.equal(snapshot.availableModels[1], "minimax/MiniMax-M2.7");
+	assert.equal(snapshot.recommended, "minimax/MiniMax-M3");
 });
 
 test("buildModelStatusSnapshotFromRecords sets currentValid false when current model is not in available list", () => {

@@ -4,6 +4,31 @@ This file is the public release history for Feynman. Keep entries user-facing: w
 
 GitHub release notes are generated from the matching `## vX.Y.Z` section in this file.
 
+## v0.2.59 - 2026-06-11
+
+### Research Tools
+
+- Fixed `alpha_search` returning empty results in every mode (#167). alphaXiv search tools now return structured JSON instead of the old numbered-text format; the result parser understands both, so semantic/keyword/both/agentic/all searches return real papers again.
+
+### Runtime Reliability
+
+- Fixed parallel `web_search` calls hanging the session forever (#169). A parallel call could silently clobber a sibling's pending curator session, leaving its promise unresolved and blocking every toolResult in the batch; the loser is now cancelled cleanly. Each search query is also bounded by a 90s deadline that surfaces as a per-query error instead of an indefinite "Working" state, and a curator page that never connects times out after 2 minutes instead of waiting forever.
+- Relaunching `feynman` now continues your most recent session instead of starting from scratch (#168). `--new-session`, one-shot prompts, and RPC/JSON launches still start fresh.
+
+### Windows
+
+- Fixed subagent launches failing with `Cannot find module '...\--mode'` (#172). The runtime patch that points pi-subagents at Feynman's Pi CLI now applies to the package's current `src/` layout.
+- Fixed `feynman update` failing with `spawn EINVAL` (#170). Package installs now invoke npm through `npm-cli.js` with the running Node executable instead of spawning `npm.cmd`.
+
+### Updates
+
+- Installing a new Feynman release on an unsupported (too new) Node version no longer aborts the install and silently pins you to the old version (#177). The version gate still refuses to run and explains what to install, but the package itself updates so the fix is in place once you switch Node versions.
+- `feynman update` now tells you when a newer Feynman CLI release exists and prints the exact upgrade command for your install type (npm or standalone).
+
+### Validation
+
+- Added regression coverage for the structured alphaXiv search parser, the web_search hang patches, and the self-update notice. Verified live: all five `alpha_search` modes return results, and two parallel `web_search` calls with `includeContent: true` complete with toolResults.
+
 ## v0.2.58 - 2026-05-16
 
 ### Optional Packages

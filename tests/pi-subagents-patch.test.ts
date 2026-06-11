@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "../scripts/lib/pi-subagents-patch.mjs";
+import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "../scripts/lib/pi-subagents-patch.mjs";
 
 const CASES = [
 	{
@@ -88,6 +88,37 @@ for (const scenario of CASES) {
 		assert.ok(!patched.includes(scenario.original));
 	});
 }
+
+test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () => {
+	assert.deepEqual(
+		[
+			"src/extension/index.ts",
+			"src/agents/agents.ts",
+			"src/shared/artifacts.ts",
+			"src/runs/shared/run-history.ts",
+			"src/agents/skills.ts",
+			"src/runs/foreground/chain-clarify.ts",
+			"src/runs/shared/pi-spawn.ts",
+			"src/runs/foreground/subagent-executor.ts",
+			"src/extension/schemas.ts",
+		].filter((entry) => !PI_SUBAGENTS_PATCH_TARGETS.includes(entry)),
+		[],
+	);
+});
+
+test("patchPiSubagentsSource rewrites current src paths", () => {
+	const input = [
+		'import * as os from "node:os";',
+		'import * as path from "node:path";',
+		'const configPath = path.join(os.homedir(), ".pi", "agent", "extensions", "subagent", "config.json");',
+		"",
+	].join("\n");
+
+	const patched = patchPiSubagentsSource("src/extension/index.ts", input);
+
+	assert.match(patched, /function resolvePiAgentDir\(\): string \{/);
+	assert.match(patched, /path\.join\(resolvePiAgentDir\(\), "extensions", "subagent", "config\.json"\)/);
+});
 
 test("patchPiSubagentsSource is idempotent", () => {
 	const input = [
@@ -290,7 +321,7 @@ test("patchPiSubagentsSource makes pi-spawn prefer the real Pi CLI over Feynman 
 		"}",
 	].join("\n");
 
-	const patched = patchPiSubagentsSource("pi-spawn.ts", input);
+	const patched = patchPiSubagentsSource("src/runs/shared/pi-spawn.ts", input);
 
 	assert.match(patched, /process\.env\.FEYNMAN_PI_CLI_PATH/);
 	assert.match(patched, /path\.basename\(argvPath\) !== "pi-cli-wrapper\.js"/);

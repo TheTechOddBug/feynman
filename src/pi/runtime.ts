@@ -19,6 +19,7 @@ export type PiRuntimeOptions = {
 	mode?: "text" | "json" | "rpc";
 	thinkingLevel?: string;
 	explicitModelSpec?: string;
+	resumeRecentSession?: boolean;
 	oneShotPrompt?: string;
 	initialPrompt?: string;
 	preLaunchNotice?: string;
@@ -36,10 +37,18 @@ export function applyFeynmanPackageManagerEnv(feynmanAgentDir: string): string {
 	return feynmanNpmPrefixPath;
 }
 
+function resolvePiPackageRoot(nodeModulesPath: string): string {
+	const candidates = [
+		resolve(nodeModulesPath, "@earendil-works", "pi-coding-agent"),
+		resolve(nodeModulesPath, "@mariozechner", "pi-coding-agent"),
+	];
+	return candidates.find((candidate) => existsSync(resolve(candidate, "dist", "cli.js"))) ?? candidates[0]!;
+}
+
 export function resolvePiPaths(appRoot: string) {
-	const packageLocalPiRoot = resolve(appRoot, "node_modules", "@mariozechner", "pi-coding-agent");
 	const workspaceNodeModulesPath = resolve(appRoot, ".feynman", "npm", "node_modules");
-	const workspacePiRoot = resolve(workspaceNodeModulesPath, "@mariozechner", "pi-coding-agent");
+	const packageLocalPiRoot = resolvePiPackageRoot(resolve(appRoot, "node_modules"));
+	const workspacePiRoot = resolvePiPackageRoot(workspaceNodeModulesPath);
 	const piPackageRoot = existsSync(resolve(packageLocalPiRoot, "dist", "cli.js")) || !existsSync(resolve(workspacePiRoot, "dist", "cli.js"))
 		? packageLocalPiRoot
 		: workspacePiRoot;
@@ -113,6 +122,9 @@ export function buildPiArgs(options: PiRuntimeOptions, paths: PiPaths = resolveP
 	}
 	if (options.thinkingLevel) {
 		args.push("--thinking", options.thinkingLevel);
+	}
+	if (options.resumeRecentSession) {
+		args.push("--continue");
 	}
 	if (options.oneShotPrompt) {
 		args.push("-p", options.oneShotPrompt);

@@ -109,20 +109,88 @@ export function getSettingsListTheme() {
 }
 `;
 
+const PACKAGE_MANAGER_SOURCE = `
+export class DefaultPackageManager {
+    async install(specs) {
+        await this.exec("npm", ["install", "-g", ...specs]);
+        await this.exec("npm", ["install", ...specs, "--prefix", installRoot]);
+    }
+}
+`;
+
+const ALPHA_SEARCH_SOURCE = `
+function getErrorMessage(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function getValidToken() {
+  return null;
+}
+
+async function callTool(name, args) {
+  return { name, args };
+}
+
+export async function searchByEmbedding(query) {
+  return await callTool('embedding_similarity_search', { query });
+}
+
+export async function searchByKeyword(query) {
+  return await callTool('full_text_papers_search', { query });
+}
+
+export async function agenticSearch(query) {
+  return await callTool('agentic_paper_retrieval', { query });
+}
+`;
+
+const WEB_ACCESS_INDEX_SOURCE = `
+import { join } from "node:path";
+import { homedir } from "node:os";
+const WEB_SEARCH_CONFIG_PATH = join(homedir(), ".pi", "web-search.json");
+function saveConfig() {
+    const dir = join(homedir(), ".pi");
+}
+async function execute(params, configWorkflow, ctx) {
+    const workflow = resolveWorkflow(params.workflow ?? configWorkflow, ctx?.hasUI !== false);
+}
+pi.registerCommand("search", { description: "Browse stored web search results" });
+`;
+
+const SUBAGENT_PI_SPAWN_SOURCE = `
+export function resolveWindowsPiCliScript(deps: PiSpawnDeps = {}): string | undefined {
+	const existsSync = deps.existsSync ?? fs.existsSync;
+	const argv1 = deps.argv1 ?? process.argv[1];
+
+	if (argv1) {
+		const argvPath = normalizePath(argv1);
+		if (isRunnableNodeScript(argvPath, existsSync)) {
+			return argvPath;
+		}
+	}
+}
+`;
+
 test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-runtime-patches-"));
-	const agentLoopPath = join(appRoot, "node_modules", "@mariozechner", "pi-agent-core", "dist", "agent-loop.js");
-	const tuiPath = join(appRoot, "node_modules", "@mariozechner", "pi-tui", "dist", "tui.js");
-	const editorPath = join(appRoot, "node_modules", "@mariozechner", "pi-tui", "dist", "components", "editor.js");
-	const themePath = join(appRoot, "node_modules", "@mariozechner", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
+	const agentLoopPath = join(appRoot, "node_modules", "@earendil-works", "pi-agent-core", "dist", "agent-loop.js");
+	const tuiPath = join(appRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "tui.js");
+	const editorPath = join(appRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "components", "editor.js");
+	const themePath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
+	const packageManagerPath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "package-manager.js");
+	const alphaSearchPath = join(appRoot, "node_modules", "@companion-ai", "alpha-hub", "src", "lib", "alphaxiv.js");
 	await mkdir(dirname(agentLoopPath), { recursive: true });
 	await mkdir(dirname(tuiPath), { recursive: true });
 	await mkdir(dirname(editorPath), { recursive: true });
 	await mkdir(dirname(themePath), { recursive: true });
+	await mkdir(dirname(packageManagerPath), { recursive: true });
+	await mkdir(dirname(alphaSearchPath), { recursive: true });
 	writeFileSync(agentLoopPath, SOURCE, "utf8");
 	writeFileSync(tuiPath, TUI_SOURCE, "utf8");
 	writeFileSync(editorPath, EDITOR_SOURCE, "utf8");
 	writeFileSync(themePath, THEME_SOURCE, "utf8");
+	writeFileSync(packageManagerPath, PACKAGE_MANAGER_SOURCE, "utf8");
+	writeFileSync(alphaSearchPath, ALPHA_SEARCH_SOURCE, "utf8");
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot), true);
 
@@ -137,6 +205,8 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 	assert.doesNotMatch(patchedTui, /throw new Error\(errorMsg\)/);
 	assert.match(readFileSync(editorPath, "utf8"), /displayText = styleInput\(before\) \+ marker \+ styleInput\(after\)/);
 	assert.match(readFileSync(themePath, "utf8"), /input: \(text\) => theme\.fg\("text", text\)/);
+	assert.match(readFileSync(packageManagerPath, "utf8"), /"--legacy-peer-deps", "-g"/);
+	assert.match(readFileSync(alphaSearchPath, "utf8"), /async function searchRestFast/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
 
@@ -146,14 +216,20 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	const tuiPath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-tui", "dist", "tui.js");
 	const editorPath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-tui", "dist", "components", "editor.js");
 	const themePath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
+	const webAccessPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access", "index.ts");
+	const subagentSpawnPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-subagents", "src", "runs", "shared", "pi-spawn.ts");
 	await mkdir(dirname(agentLoopPath), { recursive: true });
 	await mkdir(dirname(tuiPath), { recursive: true });
 	await mkdir(dirname(editorPath), { recursive: true });
 	await mkdir(dirname(themePath), { recursive: true });
+	await mkdir(dirname(webAccessPath), { recursive: true });
+	await mkdir(dirname(subagentSpawnPath), { recursive: true });
 	writeFileSync(agentLoopPath, SOURCE, "utf8");
 	writeFileSync(tuiPath, TUI_SOURCE, "utf8");
 	writeFileSync(editorPath, EDITOR_SOURCE, "utf8");
 	writeFileSync(themePath, THEME_SOURCE, "utf8");
+	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
+	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot), true);
 
@@ -161,6 +237,10 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.match(readFileSync(tuiPath, "utf8"), /line = sliceByColumn\(line, 0, width, true\)/);
 	assert.match(readFileSync(editorPath, "utf8"), /displayText = styleInput\(before\) \+ marker \+ styleInput\(after\)/);
 	assert.match(readFileSync(themePath, "utf8"), /input: \(text\) => theme\.fg\("text", text\)/);
+	assert.match(readFileSync(webAccessPath, "utf8"), /params\.workflow \?\? configWorkflow \?\? "none"/);
+	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.match(readFileSync(subagentSpawnPath, "utf8"), /process\.env\.FEYNMAN_PI_CLI_PATH/);
+	assert.match(readFileSync(subagentSpawnPath, "utf8"), /path\.basename\(argvPath\) !== "pi-cli-wrapper\.js"/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
 

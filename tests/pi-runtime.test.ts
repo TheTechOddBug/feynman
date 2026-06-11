@@ -56,6 +56,20 @@ test("buildPiArgs omits thinking arg when launch thinking is not explicit", () =
 	assert.equal(args.includes("--thinking"), false);
 });
 
+test("buildPiArgs passes --continue when resuming the recent persisted session", () => {
+	const args = buildPiArgs({
+		appRoot: "/repo/feynman",
+		workingDir: "/workspace",
+		sessionDir: "/sessions",
+		feynmanAgentDir: "/home/.feynman/agent",
+		mode: "text",
+		resumeRecentSession: true,
+	});
+
+	assert.ok(args.includes("--continue"));
+	assert.equal(args.includes("--new-session"), false);
+});
+
 test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 	const previousUppercasePrefix = process.env.NPM_CONFIG_PREFIX;
 	const previousLowercasePrefix = process.env.npm_config_prefix;
@@ -81,7 +95,7 @@ test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 	try {
 		assert.equal(env.FEYNMAN_SESSION_DIR, "/sessions");
 		assert.equal(env.FEYNMAN_BIN_PATH, "/repo/feynman/bin/feynman.js");
-		assert.equal(env.FEYNMAN_PI_CLI_PATH, "/repo/feynman/node_modules/@mariozechner/pi-coding-agent/dist/cli.js");
+		assert.equal(env.FEYNMAN_PI_CLI_PATH, "/repo/feynman/node_modules/@earendil-works/pi-coding-agent/dist/cli.js");
 		assert.equal(env.FEYNMAN_MEMORY_DIR, "/home/.feynman/memory");
 		assert.equal(env.FEYNMAN_NPM_PREFIX, "/home/.feynman/npm-global");
 		assert.equal(env.NPM_CONFIG_PREFIX, "/home/.feynman/npm-global");
@@ -190,7 +204,7 @@ test("resolvePiPaths includes the Promise.withResolvers polyfill path", () => {
 
 test("resolvePiPaths falls back to the vendored runtime workspace in packed installs", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-packed-runtime-"));
-	const piDist = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "dist");
+	const piDist = join(appRoot, ".feynman", "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist");
 	mkdirSync(piDist, { recursive: true });
 	writeFileSync(join(piDist, "cli.js"), "", "utf8");
 	writeFileSync(join(piDist, "main.js"), "", "utf8");
@@ -204,7 +218,7 @@ test("resolvePiPaths falls back to the vendored runtime workspace in packed inst
 
 	const paths = resolvePiPaths(appRoot);
 
-	assert.equal(paths.piPackageRoot, join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent"));
+	assert.equal(paths.piPackageRoot, join(appRoot, ".feynman", "npm", "node_modules", "@earendil-works", "pi-coding-agent"));
 	assert.equal(paths.piCliPath, join(piDist, "cli.js"));
 	assert.deepEqual(validatePiInstallation(appRoot), []);
 });

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { patchAlphaHubSearchSource } from "../scripts/lib/alpha-hub-search-patch.mjs";
+import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../scripts/lib/alpha-hub-search-patch.mjs";
 
 const SOURCE = `
 function getErrorMessage(err) {
@@ -65,4 +65,50 @@ test("patchAlphaHubSearchSource upgrades the discover_papers-only fallback", () 
 	assert.match(upgraded, /return await fallbackSearch\(query, 'semantic', err\)/);
 	assert.match(upgraded, /return await fallbackSearch\(query, 'keyword', err\)/);
 	assert.match(upgraded, /return await fallbackSearch\(query, 'agentic', err\)/);
+});
+
+test("patchAlphaHubSearchResultsSource parses structured JSON search payloads", async () => {
+	const input = [
+		"function cleanSearchField(value) {",
+		"  return typeof value === 'string' && value.trim() ? value.trim() : null;",
+		"}",
+		"",
+		"export function parsePaperSearchResults(text, options = {}) {",
+		"  const includeRaw = options.includeRaw === true;",
+		"  if (typeof text !== 'string') {",
+		"    return { results: [] };",
+		"  }",
+		"  return includeRaw ? { raw: text, results: [] } : { results: [] };",
+		"}",
+		"",
+	].join("\n");
+
+	const patched = patchAlphaHubSearchResultsSource(input);
+
+	assert.match(patched, /function parseStructuredSearchResults\(/);
+	assert.match(patched, /parseStructuredSearchResults\(text, includeRaw\) \?\? \{ results: \[\] \}/);
+
+	const moduleUrl = `data:text/javascript;base64,${Buffer.from(patched).toString("base64")}`;
+	const { parsePaperSearchResults } = await import(moduleUrl);
+
+	const structured = parsePaperSearchResults([
+		{ link: "/abs/1706.03762", paperId: "1706.03762", title: "Attention Is All You Need", snippet: "We propose the Transformer." },
+		{ link: "/abs/2502.19214", title: "A Hybrid Transformer Architecture", snippet: "Quantized self-attention." },
+	]);
+	assert.equal(structured.results.length, 2);
+	assert.equal(structured.results[0].arxivId, "1706.03762");
+	assert.equal(structured.results[0].arxivUrl, "https://arxiv.org/abs/1706.03762");
+	assert.equal(structured.results[0].alphaXivUrl, "https://www.alphaxiv.org/overview/1706.03762");
+	assert.equal(structured.results[0].abstract, "We propose the Transformer.");
+	assert.equal(structured.results[1].arxivId, "2502.19214");
+
+	const wrapped = parsePaperSearchResults({ results: [{ paperId: "2401.00001", title: "Wrapped", snippet: "s" }] });
+	assert.equal(wrapped.results.length, 1);
+	assert.equal(wrapped.results[0].arxivId, "2401.00001");
+
+	assert.deepEqual(parsePaperSearchResults({ unexpected: true }), { results: [] });
+	assert.deepEqual(parsePaperSearchResults(null), { results: [] });
+
+	const twice = patchAlphaHubSearchResultsSource(patched);
+	assert.equal(twice, patched);
 });

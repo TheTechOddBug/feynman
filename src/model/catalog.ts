@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { getEnvApiKey } from "@mariozechner/pi-ai";
+import { getEnvApiKey } from "@earendil-works/pi-ai";
 
 import { createModelRegistry } from "./registry.js";
 
@@ -57,6 +57,10 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 const RESEARCH_MODEL_PREFERENCES = [
 	{
+		spec: "anthropic/claude-opus-4-7",
+		reason: "strong long-context reasoning for source-heavy research work",
+	},
+	{
 		spec: "anthropic/claude-opus-4-6",
 		reason: "strong long-context reasoning for source-heavy research work",
 	},
@@ -93,6 +97,62 @@ const RESEARCH_MODEL_PREFERENCES = [
 		reason: "strong research + coding balance when Pi exposes Codex directly",
 	},
 	{
+		spec: "opencode/claude-opus-4-8",
+		reason: "strong OpenCode Zen research fallback when direct Anthropic access is unavailable",
+	},
+	{
+		spec: "opencode/claude-opus-4-7",
+		reason: "strong OpenCode Zen research fallback when direct Anthropic access is unavailable",
+	},
+	{
+		spec: "opencode/claude-opus-4-6",
+		reason: "strong OpenCode Zen research fallback when direct Anthropic access is unavailable",
+	},
+	{
+		spec: "opencode/gpt-5.5",
+		reason: "strong OpenCode Zen fallback when direct OpenAI access is unavailable",
+	},
+	{
+		spec: "opencode/gpt-5.4",
+		reason: "strong OpenCode Zen fallback when direct OpenAI access is unavailable",
+	},
+	{
+		spec: "opencode/gemini-3.1-pro",
+		reason: "good OpenCode Zen fallback for broad web-and-doc research work",
+	},
+	{
+		spec: "opencode/kimi-k2.6",
+		reason: "good OpenCode Zen fallback for coding and research work",
+	},
+	{
+		spec: "opencode/minimax-m2.7",
+		reason: "good OpenCode Zen fallback for source-heavy research work",
+	},
+	{
+		spec: "opencode-go/kimi-k2.6",
+		reason: "recommended OpenCode Go model for coding and research work",
+	},
+	{
+		spec: "opencode-go/minimax-m3",
+		reason: "good OpenCode Go fallback for source-heavy research work",
+	},
+	{
+		spec: "opencode-go/qwen3.7-max",
+		reason: "good OpenCode Go fallback for source-heavy research work",
+	},
+	{
+		spec: "opencode-go/glm-5.1",
+		reason: "good OpenCode Go fallback for GLM-backed research work",
+	},
+	{
+		spec: "opencode-go/minimax-m2.7",
+		reason: "good OpenCode Go fallback for MiniMax-backed research work",
+	},
+	{
+		spec: "opencode-go/deepseek-v4-pro",
+		reason: "good OpenCode Go fallback for DeepSeek-backed research work",
+	},
+	{
 		spec: "google/gemini-3-pro-preview",
 		reason: "good fallback for broad web-and-doc research work",
 	},
@@ -107,6 +167,10 @@ const RESEARCH_MODEL_PREFERENCES = [
 	{
 		spec: "zai/glm-5",
 		reason: "good fallback when GLM is the available research model",
+	},
+	{
+		spec: "minimax/MiniMax-M3",
+		reason: "good fallback when MiniMax is the available research model",
 	},
 	{
 		spec: "minimax/MiniMax-M2.7",
@@ -134,6 +198,8 @@ const PROVIDER_SORT_ORDER = [
 	"anthropic",
 	"openai",
 	"openai-codex",
+	"opencode",
+	"opencode-go",
 	"google",
 	"openrouter",
 	"zai",
@@ -150,6 +216,10 @@ function formatProviderLabel(provider: string): string {
 
 function modelSpec(model: ModelRecord): string {
 	return `${model.provider}/${model.id}`;
+}
+
+export function choosePreferredModelRecord<T extends ModelRecord>(available: T[]): T | undefined {
+	return available.slice().sort(compareByResearchPreference)[0];
 }
 
 function compareByResearchPreference(left: ModelRecord, right: ModelRecord): number {
@@ -226,18 +296,18 @@ function readExpiredOAuthProviders(authPath: string): Set<string> {
 }
 
 export function chooseRecommendedModel(authPath: string): { spec: string; reason: string } | undefined {
-	const available = getAvailableModelRecords(authPath).sort(compareByResearchPreference);
-	if (available.length === 0) {
+	const preferred = choosePreferredModelRecord(getAvailableModelRecords(authPath));
+	if (!preferred) {
 		return undefined;
 	}
 
-	const matchedPreference = RESEARCH_MODEL_PREFERENCES.find((entry) => entry.spec === modelSpec(available[0]!));
+	const matchedPreference = RESEARCH_MODEL_PREFERENCES.find((entry) => entry.spec === modelSpec(preferred));
 	if (matchedPreference) {
 		return matchedPreference;
 	}
 
 	return {
-		spec: modelSpec(available[0]!),
+		spec: modelSpec(preferred),
 		reason: "best currently authenticated fallback for research work",
 	};
 }
@@ -251,9 +321,9 @@ export function buildModelStatusSnapshotFromRecords(
 		.slice()
 		.sort(compareByResearchPreference)
 		.map((model) => modelSpec(model));
-	const recommended = available.length > 0
+	const preferred = choosePreferredModelRecord(available);
+	const recommended = preferred
 		? (() => {
-			const preferred = available.slice().sort(compareByResearchPreference)[0]!;
 			const matched = RESEARCH_MODEL_PREFERENCES.find((entry) => entry.spec === modelSpec(preferred));
 			return {
 				spec: modelSpec(preferred),

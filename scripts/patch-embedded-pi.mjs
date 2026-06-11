@@ -6,7 +6,7 @@ import { delimiter, dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FEYNMAN_LOGO_HTML } from "../logo.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
-import { patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
+import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiPackageManagerSource } from "./lib/pi-package-manager-patch.mjs";
@@ -52,10 +52,14 @@ function findPackageRoot(packageName) {
 	return null;
 }
 
-const piPackageRoot = findPackageRoot("@mariozechner/pi-coding-agent");
-const piAgentCoreRoot = findPackageRoot("@mariozechner/pi-agent-core");
-const piTuiRoot = findPackageRoot("@mariozechner/pi-tui");
-const piAiRoot = findPackageRoot("@mariozechner/pi-ai");
+function findPiPackageRoot(packageName) {
+	return findPackageRoot(`@earendil-works/${packageName}`) ?? findPackageRoot(`@mariozechner/${packageName}`);
+}
+
+const piPackageRoot = findPiPackageRoot("pi-coding-agent");
+const piAgentCoreRoot = findPiPackageRoot("pi-agent-core");
+const piTuiRoot = findPiPackageRoot("pi-tui");
+const piAiRoot = findPiPackageRoot("pi-ai");
 
 if (!piPackageRoot) {
 	console.warn("[feynman] pi-coding-agent not found, skipping Pi patches");
@@ -73,31 +77,18 @@ const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
 const terminalPath = piTuiRoot ? resolve(piTuiRoot, "dist", "terminal.js") : null;
 const editorPath = piTuiRoot ? resolve(piTuiRoot, "dist", "components", "editor.js") : null;
 const workspaceRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
-const workspaceAgentLoopPath = resolve(
-	workspaceRoot,
-	"@mariozechner",
-	"pi-agent-core",
-	"dist",
-	"agent-loop.js",
-);
-const workspaceTuiPath = resolve(
-	workspaceRoot,
-	"@mariozechner",
-	"pi-tui",
-	"dist",
-	"tui.js",
-);
-const workspaceEditorPath = resolve(
-	workspaceRoot,
-	"@mariozechner",
-	"pi-tui",
-	"dist",
-	"components",
-	"editor.js",
-);
-const workspaceInteractiveThemePath = resolve(
-	workspaceRoot,
-	"@mariozechner",
+function resolveWorkspacePiFile(packageName, ...segments) {
+	const candidates = [
+		resolve(workspaceRoot, "@earendil-works", packageName, ...segments),
+		resolve(workspaceRoot, "@mariozechner", packageName, ...segments),
+	];
+	return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
+const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
+const workspaceTuiPath = resolveWorkspacePiFile("pi-tui", "dist", "tui.js");
+const workspaceEditorPath = resolveWorkspacePiFile("pi-tui", "dist", "components", "editor.js");
+const workspaceInteractiveThemePath = resolveWorkspacePiFile(
 	"pi-coding-agent",
 	"dist",
 	"modes",
@@ -105,14 +96,18 @@ const workspaceInteractiveThemePath = resolve(
 	"theme",
 	"theme.js",
 );
-const workspaceExtensionLoaderPath = resolve(
-	workspaceRoot,
-	"@mariozechner",
+const workspaceExtensionLoaderPath = resolveWorkspacePiFile(
 	"pi-coding-agent",
 	"dist",
 	"core",
 	"extensions",
 	"loader.js",
+);
+const workspacePackageManagerPath = resolveWorkspacePiFile(
+	"pi-coding-agent",
+	"dist",
+	"core",
+	"package-manager.js",
 );
 const piSubagentsRoot = resolve(workspaceRoot, "pi-subagents");
 const sessionSearchIndexerPath = resolve(
@@ -721,11 +716,12 @@ for (const loaderPath of [extensionLoaderPath, workspaceExtensionLoaderPath].fil
 	}
 }
 
-if (packageManagerPath && existsSync(packageManagerPath)) {
-	const source = readFileSync(packageManagerPath, "utf8");
+for (const entryPath of [packageManagerPath, workspacePackageManagerPath].filter(Boolean)) {
+	if (!existsSync(entryPath)) continue;
+	const source = readFileSync(entryPath, "utf8");
 	const patched = patchPiPackageManagerSource(source);
 	if (patched !== source) {
-		writeFileSync(packageManagerPath, patched, "utf8");
+		writeFileSync(entryPath, patched, "utf8");
 	}
 }
 
@@ -821,6 +817,9 @@ const alphaHubAuthPath = findPackageRoot("@companion-ai/alpha-hub")
 const alphaHubSearchPath = findPackageRoot("@companion-ai/alpha-hub")
 	? resolve(findPackageRoot("@companion-ai/alpha-hub"), "src", "lib", "alphaxiv.js")
 	: null;
+const alphaHubIndexPath = findPackageRoot("@companion-ai/alpha-hub")
+	? resolve(findPackageRoot("@companion-ai/alpha-hub"), "src", "lib", "index.js")
+	: null;
 
 if (alphaHubAuthPath && existsSync(alphaHubAuthPath)) {
 	const source = readFileSync(alphaHubAuthPath, "utf8");
@@ -834,6 +833,13 @@ if (alphaHubSearchPath && existsSync(alphaHubSearchPath)) {
 	const patched = patchAlphaHubSearchSource(source);
 	if (patched !== source) {
 		writeFileSync(alphaHubSearchPath, patched, "utf8");
+	}
+}
+if (alphaHubIndexPath && existsSync(alphaHubIndexPath)) {
+	const source = readFileSync(alphaHubIndexPath, "utf8");
+	const patched = patchAlphaHubSearchResultsSource(source);
+	if (patched !== source) {
+		writeFileSync(alphaHubIndexPath, patched, "utf8");
 	}
 }
 

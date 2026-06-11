@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { ModelRegistry, type PackageSource } from "@mariozechner/pi-coding-agent";
+import { ModelRegistry, type PackageSource } from "@earendil-works/pi-coding-agent";
 
 import { CORE_PACKAGE_SOURCES, filterPackageSourcesForCurrentNode, shouldPruneLegacyDefaultPackages } from "./package-presets.js";
+import { choosePreferredModelRecord } from "../model/catalog.js";
 import { createModelRegistry } from "../model/registry.js";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -42,32 +43,6 @@ export function normalizeThinkingLevel(value: string | undefined): ThinkingLevel
 	}
 
 	return undefined;
-}
-
-function choosePreferredModel(
-	availableModels: Array<{ provider: string; id: string }>,
-): { provider: string; id: string } | undefined {
-	const preferences = [
-		{ provider: "anthropic", id: "claude-opus-4-6" },
-		{ provider: "anthropic", id: "claude-opus-4-5" },
-		{ provider: "anthropic", id: "claude-sonnet-4-5" },
-		{ provider: "openai", id: "gpt-5.5" },
-		{ provider: "openai", id: "gpt-5.4" },
-		{ provider: "openai", id: "gpt-5" },
-		{ provider: "openai-codex", id: "gpt-5.5" },
-		{ provider: "openai-codex", id: "gpt-5.4" },
-	];
-
-	for (const preferred of preferences) {
-		const match = availableModels.find(
-			(model) => model.provider === preferred.provider && model.id === preferred.id,
-		);
-		if (match) {
-			return match;
-		}
-	}
-
-	return availableModels[0];
 }
 
 function filterConfiguredPackagesForCurrentNode(packages: PackageSource[] | undefined): PackageSource[] {
@@ -151,7 +126,7 @@ export function normalizeFeynmanSettings(
 	}));
 
 	if ((!settings.defaultProvider || !settings.defaultModel) && availableModels.length > 0) {
-		const preferredModel = choosePreferredModel(availableModels);
+		const preferredModel = choosePreferredModelRecord(availableModels);
 		if (preferredModel) {
 			settings.defaultProvider = preferredModel.provider;
 			settings.defaultModel = preferredModel.id;

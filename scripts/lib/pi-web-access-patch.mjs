@@ -1,5 +1,6 @@
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
+	"curator-server.ts",
 	"exa.ts",
 	"gemini-api.ts",
 	"gemini-search.ts",
@@ -180,6 +181,102 @@ function patchGeminiWebConfigSource(source) {
 	return { source: patched, changed };
 }
 
+// Issue #169: parallel web_search toolCalls could hang the whole batch forever.
+// Three holes, all of which must be closed so execute() always yields a result:
+// 1. A parallel call that claims the curate slot while a sibling awaits its
+//    bootstrap silently overwrites `pendingCurate`; the loser's promise never
+//    resolves, and pi-agent-core's Promise.all then withholds every toolResult.
+// 2. No deadline bounds a single search() call, so one wedged provider/page
+//    fetch blocks all sibling queries in the batch.
+const SEARCH_DEADLINE_HELPER = [
+	"const SEARCH_CALL_TIMEOUT_MS = 90000;",
+	"",
+	"async function searchWithDeadline(query: string, options: Parameters<typeof search>[1]): ReturnType<typeof search> {",
+	"\tlet deadlineTimer: ReturnType<typeof setTimeout> | undefined;",
+	"\tconst deadline = new Promise<never>((_, reject) => {",
+	"\t\tdeadlineTimer = setTimeout(",
+	"\t\t\t() => reject(new Error(`web_search timed out after ${SEARCH_CALL_TIMEOUT_MS / 1000}s: \"${query}\"`)),",
+	"\t\t\tSEARCH_CALL_TIMEOUT_MS,",
+	"\t\t);",
+	"\t\tdeadlineTimer.unref?.();",
+	"\t});",
+	"\ttry {",
+	"\t\treturn await Promise.race([search(query, options), deadline]);",
+	"\t} finally {",
+	"\t\tclearTimeout(deadlineTimer);",
+	"\t}",
+	"}",
+].join("\n");
+
+function patchWebSearchHangSource(source) {
+	let patched = source;
+	let changed = false;
+
+	const assignOriginal = ["\t\t\t\tconst onAbort = () => closeCurator();", "\t\t\t\tpendingCurate = pc;"].join("\n");
+	const assignPatched = [
+		"\t\t\t\tconst onAbort = () => closeCurator();",
+		"\t\t\t\tcancelPendingCurate();",
+		"\t\t\t\tpendingCurate = pc;",
+	].join("\n");
+	if (patched.includes(assignOriginal)) {
+		patched = patched.replace(assignOriginal, assignPatched);
+		changed = true;
+	}
+
+	const helperAnchor = "const MAX_INLINE_CONTENT = 30000; // Content returned directly to agent";
+	if (!patched.includes("function searchWithDeadline(") && patched.includes(helperAnchor)) {
+		patched = patched.replace(helperAnchor, `${SEARCH_DEADLINE_HELPER}\n\n${helperAnchor}`);
+		changed = true;
+	}
+
+	for (const callOriginal of [
+		"const { answer, results, inlineContent, provider } = await search(queryList[qi], {",
+		"const { answer, results, inlineContent, provider } = await search(query, {",
+	]) {
+		const callPatched = callOriginal.replace("await search(", "await searchWithDeadline(");
+		if (patched.includes(callOriginal)) {
+			patched = patched.split(callOriginal).join(callPatched);
+			changed = true;
+		}
+	}
+
+	return { source: patched, changed };
+}
+
+// Issue #169 (hole 3): the curator watchdog skips sessions whose browser never
+// connected, so a curate session whose page never opens (headless/tmux/SSH, or
+// a clobbered parallel session) waits forever. Enforce a connect deadline.
+function patchCuratorWatchdogSource(source) {
+	let patched = source;
+	let changed = false;
+
+	const constAnchor = "const WATCHDOG_INTERVAL_MS = 5000;";
+	if (!patched.includes("BROWSER_CONNECT_TIMEOUT_MS") && patched.includes(constAnchor)) {
+		patched = patched.replace(constAnchor, `${constAnchor}\nconst BROWSER_CONNECT_TIMEOUT_MS = 120000;`);
+		changed = true;
+	}
+
+	const watchdogOriginal = [
+		"\t\t\twatchdog = setInterval(() => {",
+		"\t\t\t\tif (completed || !browserConnected) return;",
+		"\t\t\t\tif (Date.now() - lastHeartbeatAt <= STALE_THRESHOLD_MS) return;",
+	].join("\n");
+	const watchdogPatched = [
+		"\t\t\tconst serverStartedAt = Date.now();",
+		"\t\t\twatchdog = setInterval(() => {",
+		"\t\t\t\tif (completed) return;",
+		"\t\t\t\tif (!browserConnected) {",
+		"\t\t\t\t\tif (Date.now() - serverStartedAt <= BROWSER_CONNECT_TIMEOUT_MS) return;",
+		"\t\t\t\t} else if (Date.now() - lastHeartbeatAt <= STALE_THRESHOLD_MS) return;",
+	].join("\n");
+	if (patched.includes(watchdogOriginal)) {
+		patched = patched.replace(watchdogOriginal, watchdogPatched);
+		changed = true;
+	}
+
+	return { source: patched, changed };
+}
+
 export function patchPiWebAccessSource(relativePath, source) {
 	let patched = source;
 	let changed = false;
@@ -234,6 +331,18 @@ export function patchPiWebAccessSource(relativePath, source) {
 	if (relativePath === "index.ts" && patched.includes('pi.registerCommand("search",')) {
 		patched = patched.replace('pi.registerCommand("search",', 'pi.registerCommand("web-results",');
 		changed = true;
+	}
+
+	if (relativePath === "index.ts") {
+		const searchHangPatch = patchWebSearchHangSource(patched);
+		patched = searchHangPatch.source;
+		changed = changed || searchHangPatch.changed;
+	}
+
+	if (relativePath === "curator-server.ts") {
+		const watchdogPatch = patchCuratorWatchdogSource(patched);
+		patched = watchdogPatch.source;
+		changed = changed || watchdogPatch.changed;
 	}
 
 	if (relativePath === "gemini-web.ts") {

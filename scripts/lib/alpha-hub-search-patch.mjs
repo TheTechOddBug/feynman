@@ -181,3 +181,70 @@ export function patchAlphaHubSearchSource(source) {
 		.replace(AGENTIC_SEARCH, PATCHED_AGENTIC_SEARCH);
 	return patched;
 }
+
+// Issue #167: alphaXiv search tools now return structured JSON (an array of
+// { link, paperId, title, snippet } entries) instead of the old numbered
+// markdown text. parsePaperSearchResults only parsed the text format and
+// silently returned `results: []` for every structured payload.
+const STRUCTURED_RESULTS_HELPER = [
+	"function normalizeStructuredSearchResult(entry, index, includeRaw) {",
+	"  const linkId = typeof entry.link === 'string' ? entry.link.replace(/^\\/abs\\//, '').trim() : '';",
+	"  const paperId = typeof entry.paperId === 'string' && entry.paperId.trim() ? entry.paperId.trim() : (linkId || null);",
+	"  const snippet = typeof entry.snippet === 'string' ? entry.snippet : (typeof entry.abstract === 'string' ? entry.abstract : null);",
+	"  return {",
+	"    rank: index + 1,",
+	"    title: cleanSearchField(typeof entry.title === 'string' ? entry.title : null),",
+	"    visits: null,",
+	"    likes: null,",
+	"    publishedAt: null,",
+	"    organizations: null,",
+	"    authors: cleanSearchField(typeof entry.authors === 'string' ? entry.authors : null),",
+	"    abstract: cleanSearchField(snippet),",
+	"    arxivId: cleanSearchField(paperId),",
+	"    arxivUrl: paperId ? `https://arxiv.org/abs/${paperId}` : null,",
+	"    alphaXivUrl: paperId ? `https://www.alphaxiv.org/overview/${paperId}` : null,",
+	"    ...(includeRaw ? { raw: JSON.stringify(entry) } : {}),",
+	"  };",
+	"}",
+	"",
+	"function parseStructuredSearchResults(payload, includeRaw) {",
+	"  const entries = Array.isArray(payload)",
+	"    ? payload",
+	"    : ['results', 'papers', 'data'].map((key) => payload?.[key]).find((value) => Array.isArray(value));",
+	"  if (!Array.isArray(entries)) {",
+	"    return null;",
+	"  }",
+	"  const results = entries",
+	"    .filter((entry) => entry && typeof entry === 'object')",
+	"    .map((entry, index) => normalizeStructuredSearchResult(entry, index, includeRaw));",
+	"  return includeRaw ? { raw: JSON.stringify(payload), results } : { results };",
+	"}",
+].join("\n");
+
+const PARSE_GUARD_ORIGINAL = [
+	"  const includeRaw = options.includeRaw === true;",
+	"  if (typeof text !== 'string') {",
+	"    return { results: [] };",
+	"  }",
+].join("\n");
+
+const PARSE_GUARD_PATCHED = [
+	"  const includeRaw = options.includeRaw === true;",
+	"  if (typeof text !== 'string') {",
+	"    return parseStructuredSearchResults(text, includeRaw) ?? { results: [] };",
+	"  }",
+].join("\n");
+
+export function patchAlphaHubSearchResultsSource(source) {
+	if (source.includes("function parseStructuredSearchResults(")) {
+		return source;
+	}
+	if (!source.includes(PARSE_GUARD_ORIGINAL)) {
+		return source;
+	}
+
+	const anchor = "export function parsePaperSearchResults(";
+	let patched = source.replace(PARSE_GUARD_ORIGINAL, PARSE_GUARD_PATCHED);
+	patched = patched.replace(anchor, `${STRUCTURED_RESULTS_HELPER}\n\n${anchor}`);
+	return patched;
+}

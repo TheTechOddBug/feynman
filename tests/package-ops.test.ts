@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import {
 	getMissingConfiguredPackages,
 	installPackageSources,
+	resolveAdjacentNpmCommand,
 	seedBundledWorkspacePackages,
 	updateConfiguredPackages,
 } from "../src/pi/package-ops.js";
@@ -47,6 +48,35 @@ function writeFakeNpmScript(root: string, body: string): string {
 	writeFileSync(scriptPath, body, "utf8");
 	return scriptPath;
 }
+
+test("resolveAdjacentNpmCommand uses npm-cli.js on Windows when it is bundled beside Node", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-windows-npm-"));
+	const nodePath = resolve(root, "node.exe");
+	const npmCliPath = resolve(root, "node_modules", "npm", "bin", "npm-cli.js");
+	mkdirSync(resolve(root, "node_modules", "npm", "bin"), { recursive: true });
+	writeFileSync(nodePath, "", "utf8");
+	writeFileSync(npmCliPath, "", "utf8");
+	writeFileSync(resolve(root, "npm.cmd"), "", "utf8");
+
+	assert.deepEqual(resolveAdjacentNpmCommand(nodePath, "win32"), {
+		command: nodePath,
+		args: [npmCliPath],
+	});
+});
+
+test("resolveAdjacentNpmCommand falls back to npm.cmd with a shell on Windows", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-windows-npm-cmd-"));
+	const nodePath = resolve(root, "node.exe");
+	const npmCmdPath = resolve(root, "npm.cmd");
+	writeFileSync(nodePath, "", "utf8");
+	writeFileSync(npmCmdPath, "", "utf8");
+
+	assert.deepEqual(resolveAdjacentNpmCommand(nodePath, "win32"), {
+		command: npmCmdPath,
+		args: [],
+		shell: true,
+	});
+});
 
 test("seedBundledWorkspacePackages links bundled packages into the Feynman npm prefix", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-bundle-"));

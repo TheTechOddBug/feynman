@@ -7,7 +7,7 @@ import {
 	readPaperCode,
 	searchPapers,
 } from "@companion-ai/alpha-hub/lib";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
 import { extractPaperSections } from "./alpha-sections.js";

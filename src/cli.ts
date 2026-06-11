@@ -11,7 +11,7 @@ import {
 	login as loginAlpha,
 	logout as logoutAlpha,
 } from "@companion-ai/alpha-hub/lib";
-import { SettingsManager } from "@mariozechner/pi-coding-agent";
+import { SettingsManager } from "@earendil-works/pi-coding-agent";
 
 import { syncBundledAssets } from "./bootstrap/sync.js";
 import { ensureFeynmanHome, getDefaultSessionDir, getFeynmanAgentDir, getFeynmanHome } from "./config/paths.js";
@@ -42,6 +42,7 @@ import {
 import { buildModelStatusSnapshotFromRecords, getAvailableModelRecords, getSupportedModelRecords } from "./model/catalog.js";
 import { clearSearchConfig, printSearchStatus, setSearchProvider } from "./search/commands.js";
 import type { PiWebSearchProvider } from "./pi/web-access.js";
+import { fetchLatestFeynmanVersion, getFeynmanUpgradeLines, isNewerVersion } from "./system/self-update.js";
 import { runDoctor, runStatus } from "./setup/doctor.js";
 import { setupPreviewDependencies } from "./setup/preview.js";
 import { runSetup } from "./setup/setup.js";
@@ -191,7 +192,14 @@ async function handleModelCommand(subcommand: string | undefined, args: string[]
 	throw new Error(`Unknown model command: ${subcommand}`);
 }
 
-async function handleUpdateCommand(workingDir: string, feynmanAgentDir: string, source?: string): Promise<void> {
+async function handleUpdateCommand(
+	workingDir: string,
+	feynmanAgentDir: string,
+	appRoot: string,
+	feynmanVersion: string | undefined,
+	source?: string,
+): Promise<void> {
+	const latestFeynmanVersionPromise = fetchLatestFeynmanVersion();
 	try {
 		const updateSources = source ? resolvePackageUpdateSources(source) : [undefined];
 		const results = [];
@@ -231,6 +239,18 @@ async function handleUpdateCommand(workingDir: string, feynmanAgentDir: string, 
 		}
 
 		throw error;
+	} finally {
+		// `feynman update` covers Pi packages only; tell the user when the CLI
+		// itself is behind so they are not left assuming everything is current
+		// (issue #177).
+		const latestVersion = await latestFeynmanVersionPromise;
+		if (feynmanVersion && latestVersion && isNewerVersion(latestVersion, feynmanVersion)) {
+			const standaloneBundle =
+				!existsSync(resolve(appRoot, ".feynman", "runtime-workspace.tgz")) && existsSync(resolve(appRoot, ".feynman", "npm"));
+			for (const line of getFeynmanUpgradeLines(latestVersion, feynmanVersion, { standaloneBundle })) {
+				console.log(line);
+			}
+		}
 	}
 }
 
@@ -627,7 +647,7 @@ export async function main(): Promise<void> {
 	}
 
 	if (command === "update") {
-		await handleUpdateCommand(workingDir, feynmanAgentDir, rest[0]);
+		await handleUpdateCommand(workingDir, feynmanAgentDir, appRoot, feynmanVersion, rest[0]);
 		return;
 	}
 
@@ -681,6 +701,12 @@ export async function main(): Promise<void> {
 	const workflowCommandNames = new Set(readPromptSpecs(appRoot).filter((s) => s.topLevelCli).map((s) => s.name));
 	const workflowRest = appendWorkflowFlagPositionals(command, rest, values);
 	const promptOptions = resolvePiPromptOptions(command, workflowRest, values.prompt, workflowCommandNames);
+	const resumeRecentSession =
+		!values["new-session"] &&
+		mode !== "rpc" &&
+		mode !== "json" &&
+		!promptOptions.oneShotPrompt &&
+		!promptOptions.initialPrompt;
 	let preLaunchNotice: string | undefined;
 	if (command && workflowCommandNames.has(command) && mode !== "rpc" && mode !== "json" && process.stdout.isTTY) {
 		const effectiveSpec = explicitModelSpec ?? getCurrentModelSpec(feynmanSettingsPath);
@@ -699,6 +725,7 @@ export async function main(): Promise<void> {
 		mode,
 		thinkingLevel: launchThinkingLevel,
 		explicitModelSpec,
+		resumeRecentSession,
 		preLaunchNotice,
 		...promptOptions,
 	});

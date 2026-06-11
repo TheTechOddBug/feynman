@@ -22,6 +22,36 @@ function createAuthPath(contents: Record<string, unknown>): string {
 	return authPath;
 }
 
+const MODEL_ENV_KEYS = [
+	"ANTHROPIC_API_KEY",
+	"OPENAI_API_KEY",
+	"GOOGLE_API_KEY",
+	"GEMINI_API_KEY",
+	"OPENROUTER_API_KEY",
+	"OPENCODE_API_KEY",
+	"OPENCODE_ZEN_API_KEY",
+	"MINIMAX_API_KEY",
+	"KIMI_API_KEY",
+];
+
+function withoutModelEnv<T>(callback: () => T): T {
+	const savedEnv = Object.fromEntries(MODEL_ENV_KEYS.map((key) => [key, process.env[key]]));
+	for (const key of MODEL_ENV_KEYS) {
+		delete process.env[key];
+	}
+	try {
+		return callback();
+	} finally {
+		for (const [key, value] of Object.entries(savedEnv)) {
+			if (value === undefined) {
+				delete process.env[key];
+			} else {
+				process.env[key] = value;
+			}
+		}
+	}
+}
+
 test("chooseRecommendedModel prefers the strongest authenticated research model", () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
@@ -30,7 +60,7 @@ test("chooseRecommendedModel prefers the strongest authenticated research model"
 
 	const recommendation = chooseRecommendedModel(authPath);
 
-	assert.equal(recommendation?.spec, "anthropic/claude-opus-4-6");
+	assert.equal(recommendation?.spec, "anthropic/claude-opus-4-7");
 });
 
 test("chooseRecommendedModel prefers OpenAI gpt-5.5 over older OpenAI models", () => {
@@ -41,6 +71,30 @@ test("chooseRecommendedModel prefers OpenAI gpt-5.5 over older OpenAI models", (
 	const recommendation = chooseRecommendedModel(authPath);
 
 	assert.equal(recommendation?.spec, "openai/gpt-5.5");
+});
+
+test("chooseRecommendedModel prefers OpenCode Zen Claude when OpenCode is the authenticated provider", () => {
+	withoutModelEnv(() => {
+		const authPath = createAuthPath({
+			opencode: { type: "api_key", key: "opencode-test-key" },
+		});
+
+		const recommendation = chooseRecommendedModel(authPath);
+
+		assert.equal(recommendation?.spec, "opencode/claude-opus-4-7");
+	});
+});
+
+test("chooseRecommendedModel prefers OpenCode Go Kimi when OpenCode Go is the authenticated provider", () => {
+	withoutModelEnv(() => {
+		const authPath = createAuthPath({
+			"opencode-go": { type: "api_key", key: "opencode-test-key" },
+		});
+
+		const recommendation = chooseRecommendedModel(authPath);
+
+		assert.equal(recommendation?.spec, "opencode-go/kimi-k2.6");
+	});
 });
 
 test("getAvailableModelRecords excludes expired OAuth credentials without an env fallback", () => {
@@ -173,14 +227,7 @@ test("buildModelStatusSnapshotFromRecords flags an invalid current model and sug
 });
 
 test("chooseRecommendedModel prefers MiniMax M2.7 over highspeed when that is the authenticated provider", () => {
-	const envKeys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"];
-	const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
-
-	for (const key of envKeys) {
-		delete process.env[key];
-	}
-
-	try {
+	withoutModelEnv(() => {
 		const authPath = createAuthPath({
 			minimax: { type: "api_key", key: "minimax-test-key" },
 		});
@@ -188,26 +235,11 @@ test("chooseRecommendedModel prefers MiniMax M2.7 over highspeed when that is th
 		const recommendation = chooseRecommendedModel(authPath);
 
 		assert.equal(recommendation?.spec, "minimax/MiniMax-M2.7");
-	} finally {
-		for (const [key, value] of Object.entries(savedEnv)) {
-			if (value === undefined) {
-				delete process.env[key];
-			} else {
-				process.env[key] = value;
-			}
-		}
-	}
+	});
 });
 
 test("chooseRecommendedModel prefers kimi-for-coding when Kimi Coding is the authenticated provider", () => {
-	const envKeys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY"];
-	const savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
-
-	for (const key of envKeys) {
-		delete process.env[key];
-	}
-
-	try {
+	withoutModelEnv(() => {
 		const authPath = createAuthPath({
 			"kimi-coding": { type: "api_key", key: "kimi-test-key" },
 		});
@@ -215,15 +247,7 @@ test("chooseRecommendedModel prefers kimi-for-coding when Kimi Coding is the aut
 		const recommendation = chooseRecommendedModel(authPath);
 
 		assert.equal(recommendation?.spec, "kimi-coding/kimi-for-coding");
-	} finally {
-		for (const [key, value] of Object.entries(savedEnv)) {
-			if (value === undefined) {
-				delete process.env[key];
-			} else {
-				process.env[key] = value;
-			}
-		}
-	}
+	});
 });
 
 test("resolveInitialPrompt maps top-level research commands to Pi slash workflows", () => {

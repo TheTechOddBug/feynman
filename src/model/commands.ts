@@ -1,4 +1,4 @@
-import { AuthStorage } from "@mariozechner/pi-coding-agent";
+import { AuthStorage } from "@earendil-works/pi-coding-agent";
 import { readFileSync, writeFileSync } from "node:fs";
 import { exec as execCallback } from "node:child_process";
 import { promisify } from "node:util";

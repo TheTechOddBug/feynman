@@ -8,6 +8,15 @@ export const PI_SUBAGENTS_PATCH_TARGETS = [
 	"pi-spawn.ts",
 	"subagent-executor.ts",
 	"schemas.ts",
+	"src/extension/index.ts",
+	"src/agents/agents.ts",
+	"src/shared/artifacts.ts",
+	"src/runs/shared/run-history.ts",
+	"src/agents/skills.ts",
+	"src/runs/foreground/chain-clarify.ts",
+	"src/runs/shared/pi-spawn.ts",
+	"src/runs/foreground/subagent-executor.ts",
+	"src/extension/schemas.ts",
 ];
 
 const RESOLVE_PI_AGENT_DIR_HELPER = [
@@ -88,9 +97,10 @@ export function stripPiSubagentBuiltinModelSource(source) {
 }
 
 export function patchPiSubagentsSource(relativePath, source) {
+	const target = relativePath.split("/").pop();
 	let patched = source;
 
-	switch (relativePath) {
+	switch (target) {
 		case "index.ts":
 			patched = replaceAll(
 				patched,
