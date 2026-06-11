@@ -4,6 +4,20 @@ This file is the public release history for Feynman. Keep entries user-facing: w
 
 GitHub release notes are generated from the matching `## vX.Y.Z` section in this file.
 
+## v0.2.61 - 2026-06-11
+
+### Windows
+
+- Fixed bundled-package setup failing on every launch (#177, #170). Two root causes found by running the published package on real Windows runners: GNU tar (Git for Windows) treats the workspace archive's absolute `C:\...` path as a remote host spec ("Cannot connect ... resolve failed"), and the npm fallback spawned bare `npm` without a shell, which Windows rejects with EINVAL. The archive now extracts with relative paths, and npm is invoked through `npm-cli.js` with the running Node executable.
+
+### Runtime Reliability
+
+- The bundled workspace's alpha-hub copy now receives the same launch-time patches as the package-local copy, so the #167 search fix applies regardless of which copy resolves.
+
+### Validation
+
+- The multi-OS end-to-end workflow now verifies install, update, patch application, and live model + subagent smokes on Windows, Linux, and macOS at Node 24 and 25.
+
 ## v0.2.60 - 2026-06-11
 
 ### Node Support

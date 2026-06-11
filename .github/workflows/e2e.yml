@@ -77,13 +77,11 @@ jobs:
               join(pkg, ".feynman", "npm", "node_modules", "pi-subagents", "src", "runs", "shared", "pi-spawn.ts"),
               join(pkg, ".feynman", "npm", "node_modules", "pi-subagents", "pi-spawn.ts"),
             ];
-            const found = candidates.find((p) => existsSync(p));
-            if (!found) throw new Error("pi-spawn source not found under " + pkg);
-            const source = readFileSync(found, "utf8");
-            if (!source.includes("FEYNMAN_PI_CLI_PATH")) {
-              throw new Error("pi-spawn patch NOT applied: " + found);
-            }
-            console.log("pi-spawn patch applied:", found);
+            const found = candidates.filter((p) => existsSync(p));
+            if (found.length === 0) throw new Error("pi-spawn source not found under " + pkg);
+            const patched = found.filter((p) => readFileSync(p, "utf8").includes("FEYNMAN_PI_CLI_PATH"));
+            if (patched.length === 0) throw new Error("pi-spawn patch NOT applied to any of: " + found.join(", "));
+            console.log("pi-spawn patch applied:", patched.join(", "));
           '
 
       - name: Assert alpha-hub structured search parser applied (issue 167)
@@ -94,12 +92,17 @@ jobs:
             const { join } = require("node:path");
             const root = execSync("npm root -g").toString().trim();
             const pkg = join(root, "@companion-ai", "feynman");
-            const indexPath = join(pkg, ".feynman", "npm", "node_modules", "@companion-ai", "alpha-hub", "src", "lib", "index.js");
-            if (!existsSync(indexPath)) throw new Error("alpha-hub index.js not found: " + indexPath);
-            if (!readFileSync(indexPath, "utf8").includes("parseStructuredSearchResults")) {
-              throw new Error("structured search parser patch NOT applied");
+            const candidates = [
+              join(pkg, "node_modules", "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
+              join(pkg, ".feynman", "npm", "node_modules", "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
+            ];
+            const found = candidates.filter((p) => existsSync(p));
+            if (found.length === 0) throw new Error("alpha-hub index.js not found under " + pkg);
+            const patched = found.filter((p) => readFileSync(p, "utf8").includes("parseStructuredSearchResults"));
+            if (patched.length !== found.length) {
+              throw new Error("structured search parser patch missing on: " + found.filter((p) => !patched.includes(p)).join(", "));
             }
-            console.log("alpha-hub structured parser applied");
+            console.log("alpha-hub structured parser applied:", patched.join(", "));
           '
 
       - name: Configure model auth for live smokes

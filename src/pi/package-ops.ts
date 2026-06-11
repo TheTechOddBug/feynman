@@ -5,7 +5,10 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 
+import { resolveAdjacentNpmCommand } from "../../scripts/lib/npm-command.mjs";
 import { NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
+
+export { resolveAdjacentNpmCommand };
 import { applyFeynmanPackageManagerEnv, getFeynmanNpmPrefixPath } from "./runtime.js";
 import { getPathWithCurrentNode, resolveExecutable } from "../system/executables.js";
 
@@ -223,23 +226,6 @@ function ensureProjectInstallRoot(workingDir: string): string {
 	return installRoot;
 }
 
-export function resolveAdjacentNpmCommand(
-	nodeExecutablePath = process.execPath,
-	platform = process.platform,
-): PackageManagerCommand | undefined {
-	const executableDir = dirname(nodeExecutablePath);
-	if (platform === "win32") {
-		const npmCliPath = resolve(executableDir, "node_modules", "npm", "bin", "npm-cli.js");
-		if (existsSync(npmCliPath)) {
-			return { command: nodeExecutablePath, args: [npmCliPath] };
-		}
-		const npmCmdPath = resolve(executableDir, "npm.cmd");
-		return existsSync(npmCmdPath) ? { command: npmCmdPath, args: [], shell: true } : undefined;
-	}
-
-	const candidate = resolve(executableDir, "npm");
-	return existsSync(candidate) ? { command: candidate, args: [] } : undefined;
-}
 
 function resolvePackageManagerCommand(settingsManager: SettingsManager): PackageManagerCommand | undefined {
 	const configured = settingsManager.getNpmCommand();

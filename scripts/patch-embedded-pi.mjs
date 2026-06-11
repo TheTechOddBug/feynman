@@ -9,6 +9,7 @@ import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
+import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiPackageManagerSource } from "./lib/pi-package-manager-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
@@ -192,6 +193,18 @@ function resolvePackageManager() {
 	return null;
 }
 
+function resolvePackageManagerInvocation(packageManager) {
+	if (packageManager === "npm") {
+		const adjacent = resolveAdjacentNpmCommand();
+		if (adjacent) return adjacent;
+	}
+	const resolved = resolveExecutable(packageManager);
+	if (!resolved) return null;
+	// Windows cannot spawn .cmd/.bat shims without a shell (EINVAL).
+	const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved);
+	return { command: resolved, args: [], shell: needsShell };
+}
+
 function installWorkspacePackages(packageSpecs) {
 	const packageManager = resolvePackageManager();
 	if (!packageManager) {
@@ -201,8 +214,14 @@ function installWorkspacePackages(packageSpecs) {
 		return false;
 	}
 
-	const result = spawnSync(packageManager, createInstallCommand(packageManager, packageSpecs), {
+	const invocation = resolvePackageManagerInvocation(packageManager);
+	if (!invocation) {
+		process.stderr.write(`[feynman] could not resolve ${packageManager} executable for bundled package setup.\n`);
+		return false;
+	}
+	const result = spawnSync(invocation.command, [...invocation.args, ...createInstallCommand(packageManager, packageSpecs)], {
 		cwd: workspaceDir,
+		shell: invocation.shell,
 		stdio: ["ignore", "pipe", "pipe"],
 		timeout: 300000,
 		env: {
@@ -419,7 +438,11 @@ function restorePackagedWorkspace(packageSpecs) {
 	rmSync(workspaceDir, { recursive: true, force: true });
 	mkdirSync(resolve(appRoot, ".feynman"), { recursive: true });
 
-	const result = spawnSync("tar", ["-xzf", workspaceArchivePath, "-C", resolve(appRoot, ".feynman")], {
+	// Run tar from .feynman with relative paths: GNU tar (Git for Windows)
+	// treats absolute paths with a drive-letter colon ("C:\...") as remote
+	// host specs and fails with "Cannot connect ... resolve failed".
+	const result = spawnSync("tar", ["-xzf", "runtime-workspace.tgz", "-C", "."], {
+		cwd: resolve(appRoot, ".feynman"),
 		stdio: ["ignore", "ignore", "pipe"],
 		timeout: 300000,
 	});
@@ -852,6 +875,23 @@ if (alphaHubIndexPath && existsSync(alphaHubIndexPath)) {
 	const patched = patchAlphaHubSearchResultsSource(source);
 	if (patched !== source) {
 		writeFileSync(alphaHubIndexPath, patched, "utf8");
+	}
+}
+
+// The bundled workspace carries its own alpha-hub copy; patch it the same way
+// so search fixes apply regardless of which copy resolves at runtime.
+const workspaceAlphaHubLib = resolve(workspaceRoot, "@companion-ai", "alpha-hub", "src", "lib");
+for (const [fileName, patchFn] of [
+	["auth.js", patchAlphaHubAuthSource],
+	["alphaxiv.js", patchAlphaHubSearchSource],
+	["index.js", patchAlphaHubSearchResultsSource],
+]) {
+	const filePath = resolve(workspaceAlphaHubLib, fileName);
+	if (!existsSync(filePath)) continue;
+	const source = readFileSync(filePath, "utf8");
+	const patched = patchFn(source);
+	if (patched !== source) {
+		writeFileSync(filePath, patched, "utf8");
 	}
 }
 
