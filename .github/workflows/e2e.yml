@@ -189,6 +189,9 @@ jobs:
         if: env.FEYNMAN_HOME != ''
         run: |
           feynman --mode json --prompt 'Use the subagent tool to run the "researcher" agent with the task: Reply with the single word PONG and stop. After the subagent returns, reply with exactly RESULT=<the single word the subagent returned> and nothing else.' > subagent.log 2>&1 || { tail -80 subagent.log; exit 1; }
+          echo "--- pi-spawn runtime evidence ---"
+          grep -o "pi-spawn-diag[^\\\"]*" subagent.log | head -6 || echo "NO DIAG LINES: instrumented pi-spawn never executed"
+          echo "---------------------------------"
           for marker in "Cannot find module" "is not defined"; do
             if grep -q "$marker" subagent.log; then
               echo "subagent regression detected (matched: $marker):" >&2
@@ -198,6 +201,5 @@ jobs:
           done
           # RESULT=PONG can only appear if the child actually ran and returned
           # its reply; a failed tool call makes the parent relay an error word.
-          grep -o "\[pi-spawn-diag[^\\]*" subagent.log | head -5 || true
           grep -q "RESULT=PONG" subagent.log || { echo "child output not relayed:" >&2; grep -o "RESULT=[A-Za-z_]*" subagent.log >&2; tail -30 subagent.log >&2; exit 1; }
           echo "subagent smoke ok"
