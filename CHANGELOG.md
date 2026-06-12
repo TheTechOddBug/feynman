@@ -13,6 +13,24 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Blockers: Need publish confirmation, e2e green on all six jobs, diagnostics cleanup, and a final green e2e run.
 - Next: Push `0.3.3`, verify npm latest, and dispatch e2e.
 
+### 2026-06-12 06:22 PDT — daily-issue-sweep
+
+- Objective: Sweep live GitHub issues/PRs, dependency/audit freshness, CI/release state, and repo-local validation for safe actionable fixes.
+- Changed: No repo code changes; recorded that there are still no open GitHub issues, PR `#173`'s Windows `explorer` hardening is already present in `src/system/open-url.ts` plus `tests/open-url.test.ts`, and PR `#175`'s MiniMax M3 preference is already present in `src/model/catalog.ts`.
+- Verified: `gh issue list --json ...` returned `[]`; `gh pr list` still shows only `#173`, `#175`, and `#176`; `gh run list --limit 12` shows the latest `Publish and Release` and `End-to-End Install Tests` runs succeeded on 2026-06-12; `gh release list --limit 10` shows `v0.3.3` as latest; root `npm outdated --json` returned `{}`; root and website `npm audit --omit=dev` both found `0` vulnerabilities; `npm test` passed `198/198`; `npm run typecheck`; `npm run build`; `npm pack --dry-run`; `node bin/feynman.js --version`; and `cd website && npm run build` all passed.
+- Failed / learned: PR `#176` is still the only open change not reflected in `main`, but its diff only adds README sponsorship copy plus `atlascloud` labels/setup-list entries. It still lacks repo-local runtime proof that Atlas Cloud is a validated Feynman provider contract rather than an OpenAI-compatible custom-provider marketing claim.
+- Blockers: Need actual Atlas runtime evidence for `#176` such as a docs-backed API contract plus a real `models.json` or setup-path verification before it is safe to merge or port.
+- Next: Keep `#173` and `#175` treated as stale/superseded by `main`; require concrete provider integration evidence before touching `#176`.
+
+### 2026-06-11 23:18 PDT — daily-issue-sweep
+
+- Objective: Sweep live GitHub issues/PRs plus local dependency, CI, release, and validation health for actionable safe fixes.
+- Changed: No repo code changes; recorded that `main` already contains the Windows `open-url` hardening and the MiniMax M3 research preference that open PRs `#173` and `#175` propose.
+- Verified: `gh issue list` showed no open issues; `gh pr list` showed only `#173`, `#175`, and `#176`; `gh run list` showed the latest `Publish and Release` and `End-to-End Install Tests` runs green for `v0.3.3`; `gh release list` shows `v0.3.3` as latest; `npm audit --omit=dev` returned zero vulns; `npm outdated --json` returned `{}`; `npm test` passed `198/198`; `npm run typecheck`; `npm run build`; `npm pack --dry-run`; and `node bin/feynman.js --version` returned `0.3.3`.
+- Failed / learned: PR `#176` is the only still-open change not already present in `main`, but the current PR evidence only shows label/sort-order/API-key-list docs wiring; it does not show a verified Atlas Cloud runtime path or model-catalog proof beyond README marketing copy.
+- Blockers: Need actual provider integration evidence for `#176` before treating it as safe to merge or port.
+- Next: Either close `#173` and `#175` as stale/superseded, or comment with `main` evidence; ask `#176` for a real runtime repro or docs-backed provider contract before merging.
+
 ## Entry template
 
 ### YYYY-MM-DD HH:MM TZ — [slug or objective]
