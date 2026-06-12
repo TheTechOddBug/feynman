@@ -138,14 +138,45 @@ jobs:
           grep -q "CI_TEXT_OK" smoke-text.log
           echo "text mode smoke ok"
 
+      - name: Subagent spawn diagnostics
+        if: env.FEYNMAN_HOME != ''
+        run: |
+          node -e '
+            const { execSync } = require("node:child_process");
+            const { existsSync, readFileSync } = require("node:fs");
+            const { join } = require("node:path");
+            const root = execSync("npm root -g").toString().trim();
+            const pkg = join(root, "@companion-ai", "feynman");
+            const spawnPath = join(pkg, ".feynman", "npm", "node_modules", "pi-subagents", "src", "runs", "shared", "pi-spawn.ts");
+            const src = existsSync(spawnPath) ? readFileSync(spawnPath, "utf8") : "";
+            console.log("pi-spawn exists:", existsSync(spawnPath));
+            console.log("has FEYNMAN_PI_CLI_PATH:", src.includes("FEYNMAN_PI_CLI_PATH"));
+            console.log("has wrapperPiCliPath recovery:", src.includes("wrapperPiCliPath"));
+            console.log("has argv2 dep:", src.includes("argv2?: string;"));
+            for (const candidate of [
+              join(pkg, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js"),
+              join(pkg, ".feynman", "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js"),
+              join(pkg, "dist", "pi", "pi-cli-wrapper.js"),
+            ]) console.log("exists:", existsSync(candidate), candidate);
+            const agentsPath = join(pkg, ".feynman", "npm", "node_modules", "pi-subagents", "src", "agents", "agents.ts");
+            const agents = existsSync(agentsPath) ? readFileSync(agentsPath, "utf8") : "";
+            const used = (agents.match(/loadAgentsFromDir\(userDir, "user"\)/g) ?? []).length;
+            const declared = (agents.match(/const userDir = /g) ?? []).length;
+            console.log("agents.ts userDir used:", used, "declared:", declared);
+          '
+
       - name: Live subagent smoke (issue 172 end-to-end)
         if: env.FEYNMAN_HOME != ''
         run: |
-          feynman --mode json --prompt 'Use the subagent tool to run the "researcher" agent with the task: Reply with the single word PONG and stop. After the subagent returns, reply with exactly SUBAGENT_DONE.' > subagent.log 2>&1 || { tail -80 subagent.log; exit 1; }
-          if grep -q "Cannot find module" subagent.log; then
-            echo "subagent spawn regression detected:" >&2
-            grep -n "Cannot find module" subagent.log >&2
-            exit 1
-          fi
-          grep -q "SUBAGENT_DONE" subagent.log
+          feynman --mode json --prompt 'Use the subagent tool to run the "researcher" agent with the task: Reply with the single word PONG and stop. After the subagent returns, reply with exactly RESULT=<the single word the subagent returned> and nothing else.' > subagent.log 2>&1 || { tail -80 subagent.log; exit 1; }
+          for marker in "Cannot find module" "is not defined"; do
+            if grep -q "$marker" subagent.log; then
+              echo "subagent regression detected (matched: $marker):" >&2
+              grep -n "$marker" subagent.log | head -3 >&2
+              exit 1
+            fi
+          done
+          # RESULT=PONG can only appear if the child actually ran and returned
+          # its reply; a failed tool call makes the parent relay an error word.
+          grep -q "RESULT=PONG" subagent.log || { echo "child output not relayed:" >&2; grep -o "RESULT=[A-Za-z_]*" subagent.log >&2; tail -30 subagent.log >&2; exit 1; }
           echo "subagent smoke ok"
