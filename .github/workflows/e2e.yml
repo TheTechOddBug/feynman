@@ -165,50 +165,10 @@ jobs:
             console.log("agents.ts userDir used:", used, "declared:", declared);
           '
 
-      - name: Instrument pi-spawn for runtime evidence
-        if: env.FEYNMAN_HOME != ''
-        run: |
-          node -e '
-            const { execSync } = require("node:child_process");
-            const { readFileSync, writeFileSync, existsSync } = require("node:fs");
-            const { join } = require("node:path");
-            const os = require("node:os");
-            const root = execSync("npm root -g").toString().trim();
-            const pkg = join(root, "@companion-ai", "feynman");
-            const feynmanHome = process.env.FEYNMAN_HOME ? join(process.env.FEYNMAN_HOME, ".feynman") : join(os.homedir(), ".feynman");
-            const candidates = [
-              join(pkg, ".feynman", "npm", "node_modules", "pi-subagents"),
-              join(pkg, "node_modules", "pi-subagents"),
-              join(feynmanHome, "npm-global", "lib", "node_modules", "pi-subagents"),
-              join(feynmanHome, "agent", "npm", "node_modules", "pi-subagents"),
-              join(os.homedir(), ".feynman", "npm-global", "lib", "node_modules", "pi-subagents"),
-              join(os.homedir(), ".feynman", "agent", "npm", "node_modules", "pi-subagents"),
-            ];
-            const seen = new Set();
-            for (const dir of candidates) {
-              const spawnPath = join(dir, "src", "runs", "shared", "pi-spawn.ts");
-              const exists = existsSync(spawnPath);
-              console.log(exists ? "COPY:" : "absent:", dir);
-              if (!exists || seen.has(spawnPath)) continue;
-              seen.add(spawnPath);
-              let src = readFileSync(spawnPath, "utf8");
-              console.log("  patched(wrapperPiCliPath):", src.includes("wrapperPiCliPath"));
-              const anchor = "export function getPiSpawnCommand(args: string[], deps: PiSpawnDeps = {}): PiSpawnCommand {";
-              if (src.includes(anchor) && !src.includes("pi-spawn-diag")) {
-                src = src.replace(anchor, anchor + "\n\tconsole.error(\"[pi-spawn-diag]\", JSON.stringify({ from: import.meta.url, env: process.env.FEYNMAN_PI_CLI_PATH ?? null, argv1: process.argv[1] ?? null, argv2: process.argv[2] ?? null }));");
-                writeFileSync(spawnPath, src);
-                console.log("  instrumented");
-              }
-            }
-          '
-
       - name: Live subagent smoke (issue 172 end-to-end)
         if: env.FEYNMAN_HOME != ''
         run: |
           feynman --mode json --prompt 'Use the subagent tool to run the "researcher" agent with the task: Reply with the single word PONG and stop. After the subagent returns, reply with exactly RESULT=<the single word the subagent returned> and nothing else.' > subagent.log 2>&1 || { tail -80 subagent.log; exit 1; }
-          echo "--- pi-spawn runtime evidence ---"
-          grep -o "pi-spawn-diag[^\\\"]*" subagent.log | head -6 || echo "NO DIAG LINES: instrumented pi-spawn never executed"
-          echo "---------------------------------"
           for marker in "Cannot find module" "is not defined"; do
             if grep -q "$marker" subagent.log; then
               echo "subagent regression detected (matched: $marker):" >&2
@@ -219,4 +179,5 @@ jobs:
           # RESULT=PONG can only appear if the child actually ran and returned
           # its reply; a failed tool call makes the parent relay an error word.
           grep -q "RESULT=PONG" subagent.log || { echo "child output not relayed:" >&2; grep -o "RESULT=[A-Za-z_]*" subagent.log >&2; tail -30 subagent.log >&2; exit 1; }
+          grep -o "RESULT=PONG" subagent.log | head -1
           echo "subagent smoke ok"
