@@ -233,7 +233,7 @@ test("installPackageSources installs Pi runtime peers beside Pi packages", async
 	assert.ok(invocation.includes(`@mariozechner/pi-tui@npm:@earendil-works/pi-tui@${piRuntimeVersion}`));
 });
 
-test("installPackageSources emits npm alias specs for legacy Pi runtime peers found in node_modules", async () => {
+test("installPackageSources derives legacy Pi aliases from current runtime peers", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const workingDir = resolve(root, "project");
 	const agentDir = resolve(root, "agent");
@@ -276,10 +276,11 @@ test("installPackageSources emits npm alias specs for legacy Pi runtime peers fo
 
 		assert.deepEqual(result.installed, ["npm:pi-btw"]);
 		const invocation = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[])[0] ?? [];
-		assert.ok(invocation.includes("@mariozechner/pi-agent-core@npm:@earendil-works/pi-agent-core@0.79.1"));
-		assert.ok(invocation.includes("@mariozechner/pi-coding-agent@npm:@earendil-works/pi-coding-agent@0.79.1"));
-		assert.ok(invocation.includes("@mariozechner/pi-ai@npm:@earendil-works/pi-ai@0.79.1"));
-		assert.ok(invocation.includes("@mariozechner/pi-tui@npm:@earendil-works/pi-tui@0.79.1"));
+		const piRuntimeVersion = getRootPiRuntimeVersion();
+		assert.ok(invocation.includes(`@mariozechner/pi-agent-core@npm:@earendil-works/pi-agent-core@${piRuntimeVersion}`));
+		assert.ok(invocation.includes(`@mariozechner/pi-coding-agent@npm:@earendil-works/pi-coding-agent@${piRuntimeVersion}`));
+		assert.ok(invocation.includes(`@mariozechner/pi-ai@npm:@earendil-works/pi-ai@${piRuntimeVersion}`));
+		assert.ok(invocation.includes(`@mariozechner/pi-tui@npm:@earendil-works/pi-tui@${piRuntimeVersion}`));
 	} finally {
 		for (const packageRoot of createdPaths) {
 			rmSync(packageRoot, { recursive: true, force: true });

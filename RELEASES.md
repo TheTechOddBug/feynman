@@ -4,6 +4,19 @@ This file is the public release history for Feynman. Keep entries user-facing: w
 
 GitHub release notes are generated from the matching `## vX.Y.Z` section in this file.
 
+## v0.3.5 - 2026-06-28
+
+### Pi Runtime
+
+- Refreshed the bundled Pi runtime from `0.79.10` to `0.80.2` across all four packages (`pi-coding-agent`, `pi-agent-core`, `pi-ai`, `pi-tui`). This restores the `@earendil-works/pi-ai/compat` entrypoint and loader aliases used by optional packages such as `pi-web-access`, fixing the extension-load failure reported in #183.
+- Feynman's package installer now derives legacy `@mariozechner/*` alias versions from the current canonical `@earendil-works/*` runtime packages first, so stale legacy package roots cannot seed old Pi peer versions during `feynman update`.
+- Updated the Pi TUI patcher for the current upstream overflow-check layout so overwide rendered lines are clipped instead of crashing the session renderer.
+
+### Validation
+
+- Added regression coverage for the current Pi TUI overflow block, the `@earendil-works/pi-ai/compat` release-note boundary, and legacy Pi alias derivation from current runtime metadata.
+- Rebuilt and inspected the vendored runtime workspace so the packaged archive includes Pi `0.80.2`, `@earendil-works/pi-ai/dist/compat.js`, and the current/legacy `/compat` extension-loader aliases.
+
 ## v0.3.4 - 2026-06-12
 
 ### Research

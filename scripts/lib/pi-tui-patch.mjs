@@ -35,6 +35,81 @@ const OVERFLOW_TRUNCATE_BLOCK = `            let line = newLines[i];
             }
             buffer += line;`;
 
+const OVERFLOW_THROW_BLOCK_AFTER_CLEAR = `            const line = newLines[i];
+            const isImage = isImageLine(line);
+            const imageReservedRows = isImage ? this.getKittyImageReservedRows(newLines, i, renderEnd) : 1;
+            if (imageReservedRows > 1) {
+                const imageStartScreenRow = i - viewportTop;
+                if (imageStartScreenRow < 0 || imageStartScreenRow + imageReservedRows > height) {
+                    logRedraw(\`kitty image pre-clear would scroll (\${imageStartScreenRow} + \${imageReservedRows} > \${height})\`);
+                    fullRender(true);
+                    return;
+                }
+                buffer += "\\x1b[2K";
+                for (let row = 1; row < imageReservedRows; row++) {
+                    buffer += "\\r\\n\\x1b[2K";
+                }
+                buffer += \`\\x1b[\${imageReservedRows - 1}A\`;
+                buffer += line;
+                buffer += \`\\x1b[\${imageReservedRows - 1}B\`;
+                i += imageReservedRows - 1;
+                continue;
+            }
+            buffer += "\\x1b[2K"; // Clear current line
+            if (!isImage && visibleWidth(line) > width) {
+                // Log all lines to crash file for debugging
+                const crashLogPath = path.join(os.homedir(), ".pi", "agent", "pi-crash.log");
+                const crashData = [
+                    \`Crash at \${new Date().toISOString()}\`,
+                    \`Terminal width: \${width}\`,
+                    \`Line \${i} visible width: \${visibleWidth(line)}\`,
+                    "",
+                    "=== All rendered lines ===",
+                    ...newLines.map((l, idx) => \`[\${idx}] (w=\${visibleWidth(l)}) \${l}\`),
+                    "",
+                ].join("\\n");
+                fs.mkdirSync(path.dirname(crashLogPath), { recursive: true });
+                fs.writeFileSync(crashLogPath, crashData);
+                // Clean up terminal state before throwing
+                this.stop();
+                const errorMsg = [
+                    \`Rendered line \${i} exceeds terminal width (\${visibleWidth(line)} > \${width}).\`,
+                    "",
+                    "This is likely caused by a custom TUI component not truncating its output.",
+                    "Use visibleWidth() to measure and truncateToWidth() to truncate lines.",
+                    "",
+                    \`Debug log written to: \${crashLogPath}\`,
+                ].join("\\n");
+                throw new Error(errorMsg);
+            }
+            buffer += line;`;
+
+const OVERFLOW_TRUNCATE_BLOCK_AFTER_CLEAR = `            let line = newLines[i];
+            const isImage = isImageLine(line);
+            const imageReservedRows = isImage ? this.getKittyImageReservedRows(newLines, i, renderEnd) : 1;
+            if (imageReservedRows > 1) {
+                const imageStartScreenRow = i - viewportTop;
+                if (imageStartScreenRow < 0 || imageStartScreenRow + imageReservedRows > height) {
+                    logRedraw(\`kitty image pre-clear would scroll (\${imageStartScreenRow} + \${imageReservedRows} > \${height})\`);
+                    fullRender(true);
+                    return;
+                }
+                buffer += "\\x1b[2K";
+                for (let row = 1; row < imageReservedRows; row++) {
+                    buffer += "\\r\\n\\x1b[2K";
+                }
+                buffer += \`\\x1b[\${imageReservedRows - 1}A\`;
+                buffer += line;
+                buffer += \`\\x1b[\${imageReservedRows - 1}B\`;
+                i += imageReservedRows - 1;
+                continue;
+            }
+            buffer += "\\x1b[2K"; // Clear current line
+            if (!isImage && visibleWidth(line) > width) {
+                line = sliceByColumn(line, 0, width, true);
+            }
+            buffer += line;`;
+
 // Two known upstream layouts: pi-tui <=0.75 and the 0.76+ Unicode
 // word-navigation rework. Both need applyBackgroundToLine added for the
 // background-fill render below.
@@ -200,10 +275,13 @@ export function patchPiTuiSource(source) {
 	if (source.includes("line = sliceByColumn(line, 0, width, true);")) {
 		return source;
 	}
-	if (!source.includes(OVERFLOW_THROW_BLOCK)) {
-		return source;
+	if (source.includes(OVERFLOW_THROW_BLOCK)) {
+		return source.replace(OVERFLOW_THROW_BLOCK, OVERFLOW_TRUNCATE_BLOCK);
 	}
-	return source.replace(OVERFLOW_THROW_BLOCK, OVERFLOW_TRUNCATE_BLOCK);
+	if (source.includes(OVERFLOW_THROW_BLOCK_AFTER_CLEAR)) {
+		return source.replace(OVERFLOW_THROW_BLOCK_AFTER_CLEAR, OVERFLOW_TRUNCATE_BLOCK_AFTER_CLEAR);
+	}
+	return source;
 }
 
 export function patchPiEditorSource(source) {

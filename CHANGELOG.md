@@ -4,6 +4,77 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-06-28 18:28 PDT — issue-183-ship-0-3-5
+
+- Objective: Ship the local Pi runtime candidate that fixes #183 instead of leaving it as an unpublished `0.3.4` working tree.
+- Changed: Bumped Feynman to `0.3.5`, added `v0.3.5` release notes, kept the Pi runtime line at `0.80.2`, preserved published `v0.3.4` release history, derived legacy `@mariozechner/*` peer aliases from current `@earendil-works/*` runtime metadata, and updated the Pi TUI patcher for the current overflow-check block.
+- Checked: Live GitHub has open issues #182 and #183 and zero open PRs. #183 is fixed by the `0.3.5` candidate: packaged/runtime Pi `0.80.2` includes `@earendil-works/pi-ai` `./compat`, `dist/compat.js`, current and legacy extension-loader `/compat` aliases, and the bundled `pi-web-access` package imports successfully through Jiti. #182 still points at the alphaXiv/Clerk OAuth redirect before Feynman/alpha-hub receives a callback; no Feynman-owned callback fix was proven in this pass.
+- Verified: `npm test` passed 326/326; `npm run typecheck`, `npm run build`, `npm run architecture:check`, root `npm audit --omit=dev`, website lint/typecheck/build/audit, rendered website internal-link check, `git diff --check`, release-note extraction for `0.3.5`, `npm pack --dry-run --json`, and real installed-tarball version/help/runtime/`pi-web-access` import/search-status smokes passed. One installed-tarball smoke attempt failed from local `/tmp` ENOSPC while extracting the runtime archive; after removing stale Feynman temp smoke directories, the rerun passed.
+- Next: Commit, push `main`, watch the release workflow publish `v0.3.5`, then update #183 once the published package is live.
+
+### 2026-06-27 23:09 PDT — issue-sweep-open-queue-covered
+
+- Objective: Re-run the recurring Feynman intake sweep from the actual dirty local release-candidate tree, preserving unrelated local changes and making no GitHub writes.
+- Checked: Live GitHub still has open issues #182 and #183, zero open PRs, latest `main` workflow `Publish and Release` run `28082220040` green at `852a2f1`, latest GitHub release `v0.3.4`, and npm `@companion-ai/feynman@0.3.4`. Contributor branch surfaces remain non-open PRs: `origin/fix/deepresearch-local-model-warning`, `pr4fork/main`, and fetched stale fork branches.
+- Decisions: No new product code was needed. #183 is actionable against published `v0.3.4` reports but already covered by the local candidate: Pi runtime `0.80.2` exports `./compat`, packaged `runtime-workspace.tgz` contains `pi-ai/dist/compat.js`, and the extension loader aliases both `@earendil-works/pi-ai/compat` and `@mariozechner/pi-ai/compat`. #182 remains deferred because the current evidence still points at alphaXiv/Clerk OAuth redirect behavior before Feynman/alpha-hub receives a callback; local Feynman code delegates auth to `@companion-ai/alpha-hub@0.1.3` and prints the auth URL.
+- Package freshness: Feynman and Pi runtime packages are current; alpha-hub is current. Root non-security drift remains `@clack/prompts`, `posthog-node`, `fast-xml-parser`, and `@types/node`; website non-security drift remains Astro/ESLint/UI-tooling packages. No dependency drift was tied to an open research-loop defect.
+- Verified: `npm test` passed 326/326; `npm run typecheck`, `npm run build`, `npm run architecture:check`, website `lint`, website `typecheck`, website `build`, root and website `npm audit --omit=dev`, `git diff --check`, `npm pack --dry-run --json`, and installed-tarball version/help/runtime-archive smoke passed. One temporary installed-tarball smoke attempt failed only because the `npm pack --json` parser consumed prepack log text before the final JSON array; the corrected rerun passed.
+- Next: Keep the local release candidate unpushed until explicit commit/push/release authorization; continue watching #182 for a current callback trace and #183 for published-release follow-up after the local candidate is shipped.
+
+### 2026-06-27 16:08 PDT — issue-sweep-current-queue-clean
+
+- Objective: Re-run the recurring Feynman intake sweep against the current dirty release-candidate tree without pushing, merging, closing, or commenting on GitHub.
+- Checked: Open GitHub issues are still #182 and #183; open PRs are zero; recent `main` workflow state still ends with green `Publish and Release` run `28082220040` at `852a2f1`; latest GitHub release and npm package are still `v0.3.4` / `0.3.4`; current local package metadata is `@companion-ai/feynman@0.3.4`; Pi runtime packages remain current at `0.80.2`; alpha-hub remains current at `0.1.3`; `origin/fix/deepresearch-local-model-warning` and `pr4fork/main` are stale/non-open branch surfaces, not live PRs.
+- Decisions: No new product code was needed. #183 remains covered by the local Pi `0.80.2` candidate because installed and packaged runtime copies include `@earendil-works/pi-ai` `./compat`, `dist/compat.js`, and extension-loader aliases for both current and legacy `/compat` paths. #182 remains deferred because current local code delegates the OAuth callback loop to `@companion-ai/alpha-hub` on `127.0.0.1:9876`, the bundled auth patch exposes the full auth URL, and no current-version callback trace proves a Feynman-owned defect. Outdated ordinary dependencies (`@clack/prompts`, `posthog-node`, `fast-xml-parser`, `@types/node`) were not upgraded because no open issue or validation failure tied them to the research loop.
+- Verified: Root `npm test` passed 326/326; `npm run typecheck`, `npm run build`, `npm run architecture:check`, root and website production audits, website lint/typecheck/build, `git diff --check`, `npm pack --dry-run`, and installed-tarball version/help/runtime inspection smoke passed. Installed tarball smoke returned version `0.3.4` and confirmed packaged Pi `0.80.2` compat export/file, current and legacy loader aliases, and alpha auth URL logging.
+- Next: Keep the release candidate local-only until explicit commit/push/release authorization; continue watching #182 for a current-version callback trace and #183 for regressions against Pi `/compat`.
+
+### 2026-06-27 09:15 PDT — issue-sweep-no-new-port
+
+- Objective: Re-run the recurring Feynman intake sweep against the current dirty release-candidate tree without disturbing existing local package/runtime work.
+- Checked: Open GitHub issues are #182 and #183; open PRs are zero; recent `main` workflows still end with green `Publish and Release` run `28082220040` at `852a2f1`; latest GitHub release and npm package are `v0.3.4` / `0.3.4`; published Pi runtime packages are current at `0.80.2`; refreshed remote branch list has no new contributor PR branch beyond the existing stale branches.
+- Decisions: No new product code was needed. #183 remains covered by the local Pi `0.80.2` candidate because installed `@earendil-works/pi-ai` exports `./compat`, `dist/compat.js` exists, and the installed extension loader aliases both current and legacy `/compat` paths. #182 remains deferred because the current local code delegates alpha login to `@companion-ai/alpha-hub` on `127.0.0.1:9876`, and no fresh trace proves a Feynman-owned callback defect.
+- Verified: Root `npm test` passed 326/326; `npm run typecheck`, `npm run build`, `npm run architecture:check`, website lint/typecheck/build, root and website production audits, `git diff --check`, `npm pack --dry-run`, and installed-tarball help/packages/PaperRank/paper-access smokes passed. Installed tarball smoke returned version `0.3.4`, ranked 4 fixture papers with 2/2 full text and 2 critiques, and resolved fixture paper access as full text available.
+- Next: Keep the release candidate local-only until explicit commit/push/release authorization; continue watching #182 for a current-version failing callback trace.
+
+### 2026-06-26 19:13 PDT — issue-sweep-current-queue-clean
+
+- Objective: Re-run the recurring Feynman intake sweep against the current dirty release-candidate tree.
+- Checked: Open GitHub issues are #182 and #183; open PRs are zero; latest `main` workflow is `Publish and Release` run `28082220040` at `852a2f1` and succeeded; latest GitHub release and npm package are still `v0.3.4` / `0.3.4`; the only non-main origin branch is `fix/deepresearch-local-model-warning`.
+- Decisions: #183 remains covered by the local Pi `0.80.2` candidate because installed, vendored, and packaged runtime loaders include both `@earendil-works/pi-ai/compat` and legacy `@mariozechner/pi-ai/compat` aliases and `@earendil-works/pi-ai` exports `./compat`. #182 is current-version user-reported but still points at the upstream alphaXiv/Clerk OAuth redirect flow before Feynman/alpha-hub receives a callback; no local fix was ported. The local-model warning branch stays deferred because it is workflow-copy behavior without a current issue-backed research-loop defect.
+- Verified: Focused touched-surface tests passed 88/88; `npm run typecheck`, `npm run build`, full `npm test` (326/326), website lint/typecheck/build, root and website `npm audit --omit=dev`, `git diff --check`, `npm pack --dry-run --json`, and installed-tarball help/alpha-help/runtime-archive smoke passed. One installed-tarball smoke attempt failed only in the pack JSON parser because npm prepack logs preceded the JSON payload; the rerun extracted the JSON array deliberately and passed.
+- Next: Keep the release candidate local-only until explicit commit/push/release authorization; keep watching #182 for provider-side OAuth changes or a reproducible local callback defect.
+
+### 2026-06-26 09:32 PDT — pi-peer-alias-stability
+
+- Objective: Fix the red package-op gate found after the intake sweep: full `npm test` could fail at `installPackageSources installs Pi runtime peers beside Pi packages`.
+- Root cause: `resolveRuntimePeerSpec()` trusted legacy `@mariozechner/*` package roots before resolving the canonical `@earendil-works/*` runtime package. A stale or concurrently-created legacy root in `.feynman/npm/node_modules` could make generated legacy peer aliases use stale runtime metadata instead of the current bundled Pi runtime.
+- Changed: Legacy Pi runtime package names now derive their npm alias version from the current canonical `@earendil-works/*` package first, falling back only when canonical metadata is unavailable. The package-op regression now plants stale legacy roots and asserts aliases still follow the current root runtime version.
+- Verified: Focused `tests/package-ops.test.ts` passed 10/10. `npm run typecheck`, `npm run build`, full `npm test` (326/326), `git diff --check`, `npm pack --dry-run`, and installed-tarball help smoke passed.
+- Next: The package candidate is local-only; commit/push/release still need explicit user authorization.
+
+### 2026-06-25 22:05 PDT — issue-sweep-no-new-port
+
+- Objective: Re-run the Feynman GitHub/release/package/local validation sweep against the current dirty package state.
+- Checked: Open GitHub issues remain #182 and #183; open PRs remain zero; latest `main` workflow `Publish and Release` run `28082220040` succeeded; latest GitHub release and npm package remain `v0.3.4` / `0.3.4`; Pi runtime packages remain current at `0.80.2`; contributor branch `origin/fix/deepresearch-local-model-warning` is still unmerged and not an open PR.
+- Decision: No new product code was needed. #183 is still covered by the local Pi `0.80.2` runtime/compat changes. #182 stays deferred because the report is on old CLI `0.2.17` and no current-version auth repro was available. The local-model warning branch stays deferred because it is launch-copy behavior without a current issue-backed defect.
+- Verified: `npm run typecheck`, `npm run build`, isolated package-op tests, full `npm test` (326/326), root/website production audits, website typecheck/lint/build, `git diff --check`, `npm pack --dry-run`, and installed-tarball help smoke passed. One initial combined focused test command failed a package-op assertion while other validation commands were running; isolated package-op and full-suite reruns passed.
+- Next: Commit/push/release only after explicit user authorization; continue watching #182 for a current-version login repro.
+
+### 2026-06-25 20:47 PDT — pi-tui-terminal-overflow
+
+- Objective: Fix Feynman startup/runtime failures when Pi renders a line wider than the current terminal width.
+- Changed: Updated the Pi TUI patcher to recognize the current Pi `0.80.2` overflow-check block, where the line clear happens before the width guard. The patch now removes Pi's hard `Rendered line ... exceeds terminal width` throw and truncates the overwide line instead. Rebuilt the vendored runtime workspace so installed and packaged Pi TUI copies carry the fix.
+- Verified: The real `node_modules`, vendored workspace, and `runtime-workspace.tgz` Pi TUI files no longer contain `throw new Error(errorMsg)` and do contain `line = sliceByColumn(line, 0, width, true)`. A direct fake-terminal TUI smoke hit the overwide differential-render path without throwing. Focused Pi TUI/runtime patch tests, `npm run typecheck`, `npm run build`, full `npm test` (326/326), `git diff --check`, `npm pack --dry-run`, and installed-tarball help/runtime inspection passed.
+- Next: Commit/push/release only after explicit user authorization.
+
+### 2026-06-24 18:05 PDT — pi-0-80-2-compat-runtime
+
+- Objective: Sweep live GitHub intake and fix only core AI-researcher reliability defects.
+- Changed: Upgraded the bundled Pi runtime package line from `0.79.10` to `0.80.2`, aligned Feynman's fallback/runtime seeding constants, migrated the remaining `getEnvApiKey` import to `@earendil-works/pi-ai/compat`, rebuilt the vendored runtime workspace, and updated release docs/tests to record the `/compat` migration. This addresses the open `pi-web-access` `/compat` loader failure without adding a local shim.
+- Verified: GitHub issue/PR sweep found open issues #182 and #183, zero open PRs, and the latest `main` workflow green. The packaged runtime archive now contains `@earendil-works/pi-ai@0.80.2` with `./compat` and loader aliases for both `@earendil-works/pi-ai/compat` and `@mariozechner/pi-ai/compat`. Focused tests passed 52/52 and 72/72; full `npm test` passed 325/325; `npm run typecheck`, `npm run build`, root/website production audits, website typecheck/lint/build, `npm pack --dry-run`, `git diff --check`, and installed-tarball help/runtime smokes passed.
+- Next: Commit/push/release only after explicit user authorization; keep #182 deferred until there is a current-version alpha login repro.
+
 ### 2026-06-22 15:46 PDT — release-candidate-cleanup
 
 - Objective: Clean the staged AI-researcher release candidate without expanding scope after the Yo-Yo PR intake.

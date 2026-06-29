@@ -24,7 +24,7 @@ const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
 const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.79.10";
+const PI_RUNTIME_FALLBACK_VERSION = "0.80.2";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@opentelemetry/core": "2.8.0",

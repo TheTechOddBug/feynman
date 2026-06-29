@@ -58,7 +58,7 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^run `npm fund` for details$/i,
 ];
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PI_RUNTIME_FALLBACK_VERSION = "0.79.10";
+const PI_RUNTIME_FALLBACK_VERSION = "0.80.2";
 const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
 	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
 	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
@@ -170,6 +170,13 @@ function isPiRuntimePackageName(packageName: string): boolean {
 }
 
 function resolveRuntimePeerSpec(packageName: string): string | undefined {
+	const aliasTarget = LEGACY_PI_RUNTIME_PACKAGE_ALIASES[packageName as keyof typeof LEGACY_PI_RUNTIME_PACKAGE_ALIASES];
+	if (aliasTarget) {
+		const targetSpec = resolveRuntimePeerSpec(aliasTarget);
+		const targetVersion = targetSpec?.match(/@(\d+\.\d+\.\d+)$/)?.[1] ?? PI_RUNTIME_FALLBACK_VERSION;
+		return `${packageName}@npm:${aliasTarget}@${targetVersion}`;
+	}
+
 	for (const packageRoot of [
 		resolve(APP_ROOT, "node_modules", packageName),
 		resolve(APP_ROOT, ".feynman", "npm", "node_modules", packageName),
@@ -189,13 +196,6 @@ function resolveRuntimePeerSpec(packageName: string): string | undefined {
 		} catch {
 			continue;
 		}
-	}
-
-	const aliasTarget = LEGACY_PI_RUNTIME_PACKAGE_ALIASES[packageName as keyof typeof LEGACY_PI_RUNTIME_PACKAGE_ALIASES];
-	if (aliasTarget) {
-		const targetSpec = resolveRuntimePeerSpec(aliasTarget);
-		const targetVersion = targetSpec?.match(/@(\d+\.\d+\.\d+)$/)?.[1] ?? PI_RUNTIME_FALLBACK_VERSION;
-		return `${packageName}@npm:${aliasTarget}@${targetVersion}`;
 	}
 
 	return FALLBACK_RUNTIME_PEER_SPECS[packageName as (typeof PI_RUNTIME_PEER_PACKAGE_NAMES)[number]];

@@ -391,7 +391,8 @@ test("current release notes reflect runtime and optional-package boundaries", ()
 	const currentWebsiteRelease = websiteReleases.split("## v0.2.58")[0] ?? "";
 	const combined = `${currentRelease}\n${currentWebsiteRelease}`;
 
-	assert.match(combined, /0\.79\.10/);
+	assert.match(combined, /0\.80\.2/);
+	assert.match(combined, /@earendil-works\/pi-ai\/compat/);
 	assert.match(combined, /Removed the old `generative-ui`, `ui`, and `all-extras` optional package\/update targets/);
 	assert.doesNotMatch(combined, /0\.79\.8|long-term memory|all-extras expansion/i);
 });

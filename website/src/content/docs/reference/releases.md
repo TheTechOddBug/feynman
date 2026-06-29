@@ -7,6 +7,18 @@ order: 4
 
 This page summarizes what changed in recent Feynman releases. GitHub releases use the same version-specific notes from the repository `RELEASES.md` file.
 
+## v0.3.5 - 2026-06-28
+
+### Pi Runtime
+
+- Refreshed the bundled Pi runtime packages to `0.80.2`, restoring the `@earendil-works/pi-ai/compat` entrypoint and extension-loader aliases used by optional packages such as `pi-web-access` (#183).
+- Feynman's package installer now derives legacy `@mariozechner/*` alias versions from the current canonical `@earendil-works/*` runtime packages first, so stale legacy package roots cannot seed old Pi peer versions during `feynman update`.
+- Updated the Pi TUI patcher for the current upstream overflow-check layout so overwide rendered lines are clipped instead of crashing the session renderer.
+
+### Validation
+
+- Added regressions for the current Pi TUI overflow block, release-note compat coverage, and legacy Pi alias derivation from current runtime metadata.
+
 ## v0.3.4 - 2026-06-12
 
 ### Research
