@@ -52,6 +52,17 @@ function runOwnsArtifact(run: WorkbenchRun | undefined, artifact: WorkbenchArtif
 	return Boolean(run && (artifact.slug === run.slug || run.artifactPaths?.includes(artifact.path)));
 }
 
+export function primaryArtifactPathForRun(run: WorkbenchRun | undefined): string | null {
+	return run?.primaryArtifact?.path ?? run?.artifactPaths?.[0] ?? null;
+}
+
+export function defaultArtifactPathForRun(state: WorkbenchState, run: WorkbenchRun | undefined): string | null {
+	const availablePaths = new Set(state.artifacts.map((artifact) => artifact.path));
+	const preferredPath = primaryArtifactPathForRun(run);
+	if (preferredPath && availablePaths.has(preferredPath)) return preferredPath;
+	return run?.artifactPaths?.find((path) => availablePaths.has(path)) ?? null;
+}
+
 export function artifactsForFileScope(
 	state: WorkbenchState,
 	project: WorkbenchProject | undefined,

@@ -28,8 +28,10 @@ import {
 import {
 	artifactCategoryCounts,
 	artifactsForFileScope,
+	defaultArtifactPathForRun,
 	fileScopeCounts,
 	filterArtifactsForBrowser,
+	primaryArtifactPathForRun,
 } from "../workbench-web/src/files.js";
 import {
 	parseStreamChunk,
@@ -753,6 +755,43 @@ test("React shell file browser helpers scope, count, and filter artifacts", () =
 		filterArtifactsForBrowser(artifactsForFileScope(state, project, run, "workspace"), "table", "data").map((artifact) => artifact.path),
 		["outputs/project-table.csv"],
 	);
+});
+
+test("React shell file helpers choose the run artifact for the right panel default", () => {
+	const fallbackArtifact = artifactFixture("outputs/fallback.md", "run-a", "output", 1);
+	const primaryArtifact = artifactFixture("outputs/primary.md", "run-a", "output", 2);
+	const missingArtifact = artifactFixture("outputs/missing.md", "run-a", "output", 3);
+	const primaryRun = {
+		slug: "run-a",
+		title: "Run A",
+		taskSummary: "",
+		status: "chat",
+		source: "chat",
+		projectId: "project-a",
+		updatedAt: "2026-07-02T00:00:00.000Z",
+		updatedAtMs: 1,
+		artifactCount: 2,
+		artifactPaths: ["outputs/fallback.md", "outputs/primary.md"],
+		primaryArtifact,
+		notebookCellCount: 0,
+		categories: [],
+		lastArtifactNames: [],
+		hasPlan: false,
+		hasProvenance: false,
+		hasVerification: false,
+	} satisfies WorkbenchRun;
+	const stalePrimaryRun = {
+		...primaryRun,
+		primaryArtifact: missingArtifact,
+	} satisfies WorkbenchRun;
+	const state = {
+		artifacts: [fallbackArtifact, primaryArtifact],
+	} as unknown as WorkbenchState;
+
+	assert.equal(primaryArtifactPathForRun(primaryRun), "outputs/primary.md");
+	assert.equal(defaultArtifactPathForRun(state, primaryRun), "outputs/primary.md");
+	assert.equal(defaultArtifactPathForRun(state, stalePrimaryRun), "outputs/fallback.md");
+	assert.equal(defaultArtifactPathForRun(state, undefined), null);
 });
 
 test("React shell upload helpers mirror attachment download and filtering contracts", () => {

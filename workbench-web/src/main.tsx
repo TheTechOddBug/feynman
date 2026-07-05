@@ -142,6 +142,7 @@ import {
 import {
 	artifactCategoryCounts,
 	artifactsForFileScope,
+	defaultArtifactPathForRun,
 	fileScopeCounts,
 	fileScopeLabel,
 	filterArtifactsForBrowser,
@@ -973,9 +974,12 @@ function App() {
 				? linkedArtifact
 				: null;
 			const nextRoute = data && parsed ? resolveWorkbenchRoute(data, parsed) : parsed;
+			const nextRun = data && nextRoute ? data.runs.find((item) => item.slug === nextRoute.runSlug) : undefined;
+			const defaultArtifactPath = data ? defaultArtifactPathForRun(data, nextRun) : null;
+			const nextArtifactPath = validLinkedArtifact ?? defaultArtifactPath;
 			setRoute(nextRoute);
-			setSelectedArtifactPath(validLinkedArtifact);
-			if (validLinkedArtifact) setSidePanel("files");
+			setSelectedArtifactPath(nextArtifactPath);
+			if (nextArtifactPath) setSidePanel("files");
 			if (parsed && nextRoute && (!workbenchRoutesEqual(parsed, nextRoute) || Boolean(linkedArtifact && !validLinkedArtifact))) {
 				window.history.replaceState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug, validLinkedArtifact));
 			}
@@ -1010,10 +1014,13 @@ function App() {
 				const validLinkedArtifact = linkedArtifact && state.artifacts.some((artifact) => artifact.path === linkedArtifact)
 					? linkedArtifact
 					: null;
+				const nextRun = state.runs.find((item) => item.slug === nextRoute.runSlug);
+				const defaultArtifactPath = defaultArtifactPathForRun(state, nextRun);
+				const nextArtifactPath = validLinkedArtifact ?? defaultArtifactPath;
 				setData(state);
 				setRoute(nextRoute);
-				if (validLinkedArtifact) {
-					setSelectedArtifactPath(validLinkedArtifact);
+				if (nextArtifactPath) {
+					setSelectedArtifactPath(nextArtifactPath);
 					setSidePanel("files");
 				}
 				if (parsed && (!workbenchRoutesEqual(parsed, nextRoute) || Boolean(linkedArtifact && !validLinkedArtifact))) {
@@ -1215,9 +1222,10 @@ function App() {
 	function selectRun(nextRun: WorkbenchRun) {
 		if (!project) return;
 		const nextRoute = { projectId: project.id, runSlug: nextRun.slug };
+		const defaultArtifactPath = data ? defaultArtifactPathForRun(data, nextRun) : null;
 		setRoute(nextRoute);
 		setMode("workbench");
-		setSelectedArtifactPath(null);
+		setSelectedArtifactPath(defaultArtifactPath);
 		setSelectedUploadId(null);
 		setFilePreview(null);
 		setArtifactTab("preview");
@@ -1227,15 +1235,19 @@ function App() {
 		setMediaAnnotationDraft(null);
 		setVersionDiffs({});
 		setVersionStatuses({});
+		if (defaultArtifactPath) setSidePanel("files");
 		window.history.pushState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug));
 	}
 
 	function openProjectRun(nextProject: WorkbenchProject, nextRun?: WorkbenchRun, artifactPath?: string) {
 		const runSlug = nextRun?.slug ?? nextProject.primaryRunSlug ?? nextProject.runSlugs[0] ?? "workspace";
 		const nextRoute = { projectId: nextProject.id, runSlug };
+		const resolvedRun = nextRun ?? data?.runs.find((item) => item.slug === runSlug);
+		const defaultArtifactPath = data ? defaultArtifactPathForRun(data, resolvedRun) : null;
+		const selectedPath = artifactPath ?? defaultArtifactPath;
 		setRoute(nextRoute);
 		setMode("workbench");
-		setSelectedArtifactPath(artifactPath ?? null);
+		setSelectedArtifactPath(selectedPath);
 		setSelectedUploadId(null);
 		setFilePreview(null);
 		setArtifactEdit(null);
@@ -1246,7 +1258,7 @@ function App() {
 		setVersionDiffs({});
 		setVersionStatuses({});
 		setFilesOverlayOpen(false);
-		if (artifactPath) setSidePanel("files");
+		if (selectedPath) setSidePanel("files");
 		window.history.pushState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug, artifactPath));
 	}
 
