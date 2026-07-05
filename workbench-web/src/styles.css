@@ -1059,12 +1059,13 @@ button {
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr) auto;
 	align-items: end;
+	align-self: end;
 	gap: 10px;
 	margin: 0 24px 18px;
-	padding: 8px;
+	padding: 7px;
 	border: 1px solid #3a4237;
 	border-radius: 8px;
-	background: #fbfcf8;
+	background: #181d17;
 }
 
 .composer-tools {
@@ -1133,15 +1134,48 @@ button {
 
 .composer textarea {
 	width: 100%;
-	min-height: 34px;
+	min-height: 32px;
 	max-height: 136px;
-	padding: 8px 4px;
+	padding: 7px 2px;
 	border: 0;
 	resize: none;
 	outline: none;
 	font-size: 14px;
 	line-height: 1.35;
-	color: #1f2b1b;
+	color: #eef4e8;
+	background: transparent;
+}
+
+.composer textarea::placeholder {
+	color: #8f9a88;
+}
+
+.composer .composer-tools button {
+	width: 32px;
+	height: 32px;
+	color: #dce8d4;
+	background: #252d23;
+}
+
+.composer .composer-tools button:hover {
+	color: #f8fbf2;
+	background: #303a2d;
+}
+
+.composer .send-button {
+	width: 32px;
+	height: 32px;
+	color: #f8fbf2;
+	background: #2f6a3d;
+}
+
+.composer .send-button:hover:not(:disabled) {
+	background: #347546;
+}
+
+.composer .send-button:disabled {
+	color: #8f9a88;
+	background: #252d23;
 }
 
 .composer-suggestions {

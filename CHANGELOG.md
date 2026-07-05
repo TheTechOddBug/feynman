@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-05 21:18 EDT — workbench-compact-composer-parity
+
+- Objective: Fix the live Claude Science parity mismatch where Feynman's frame composer stretched into a tall pale input slab with chunky light controls.
+- Changed: The React workbench composer now opts out of grid stretching, renders as a compact dark input strip, uses a transparent textarea with light text, and keeps the composer action/send buttons at compact 32px dark/green sizes.
+- Verified: Focused React/file-surface tests passed (`17/17`); root/workbench typecheck passed; `npm run build:workbench-web` passed with existing RDKit/3Dmol/patristic bundle warnings; headless browser verification on `session-20260705210923-1cb3e7` measured composer height `52.9px` instead of `304px`, 32px controls, transparent textarea background, and no side panel; full `npm test` passed (`585/585`).
+- Next: Continue the 1:1 workbench parity goal with the next live rendered mismatch.
+
 ### 2026-07-05 13:35 EDT — workbench-dark-main-surface-parity
 
 - Objective: Continue the Claude Science 1:1 workbench parity goal by moving the frame conversation surface from a light card-heavy canvas toward the reference dark project workspace.

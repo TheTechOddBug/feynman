@@ -240,6 +240,10 @@ test("React workbench source owns chat activity, notebook, compute, and connecto
 	assert.match(reactShellStyles, /\.topbar-menu-panel/);
 	assert.match(reactShellStyles, /\.topbar-menu-grid/);
 	assert.match(reactShellStyles, /\.composer-menu/);
+	assert.match(reactShellStyles, /\.composer\s*\{[\s\S]*?align-self: end;/);
+	assert.match(reactShellStyles, /\.composer\s*\{[\s\S]*?background: #181d17;/);
+	assert.match(reactShellStyles, /\.composer textarea\s*\{[\s\S]*?background: transparent;/);
+	assert.match(reactShellStyles, /\.composer \.composer-tools button\s*\{[\s\S]*?background: #252d23;/);
 	assert.match(reactShellStyles, /\.launcher-queue/);
 	assert.match(reactShellStyles, /\.launcher-queue-card/);
 	assert.match(reactShellStyles, /\.command-palette-backdrop/);
