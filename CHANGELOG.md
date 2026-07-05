@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-05 12:52 EDT — workbench-empty-frame-layout-parity
+
+- Objective: Continue the Claude Science 1:1 workbench parity goal by fixing the blank/new-frame layout mismatch found in the live Feynman route.
+- Changed: The React workbench shell no longer opens Files by default for empty runs. The shell now uses two columns unless a side panel is present, grows to a third column only for active side panels on wide screens, and preserves full conversation width behind the fixed overlay side panel at narrower viewports. Artifact-bearing runs still auto-open the selected primary artifact.
+- Verified: Live in-app browser checks on `session-20260705160452-ae55be` showed no side panel, no selected artifact, rail `224px`, conversation `710px`, and body width `934px`. Live checks on `session-20260705035324-621b20` still showed the side panel open with `End-to-End Workbench Proof` selected while the conversation stayed `710px` instead of being squeezed to `278px`. Focused React/file-surface tests passed (`17/17`); workbench web typecheck passed; `npm run build:workbench-web` passed with existing science-viewer bundle warnings; root typecheck passed; architecture check passed with existing split-debt warnings; `git diff --check` passed; and full `npm test` passed (`585/585`).
+- Next: Continue with the next live rendered parity mismatch.
+
 ### 2026-07-05 04:18 EDT — html-annotation-overlay-parity
 
 - Objective: Close the reference `HtmlAnnotationOverlay` chunk with a Feynman-owned iframe annotation bridge.

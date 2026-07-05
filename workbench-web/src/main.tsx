@@ -598,7 +598,7 @@ function createClientJobId(prefix: string): string {
 }
 
 function defaultSidePanel(): SidePanel {
-	return window.matchMedia("(max-width: 720px)").matches ? null : "files";
+	return null;
 }
 
 function toggleListValue(items: string[], value: string): string[] {
@@ -979,7 +979,7 @@ function App() {
 			const nextArtifactPath = validLinkedArtifact ?? defaultArtifactPath;
 			setRoute(nextRoute);
 			setSelectedArtifactPath(nextArtifactPath);
-			if (nextArtifactPath) setSidePanel("files");
+			setSidePanel((current) => nextArtifactPath ? "files" : current === "files" ? null : current);
 			if (parsed && nextRoute && (!workbenchRoutesEqual(parsed, nextRoute) || Boolean(linkedArtifact && !validLinkedArtifact))) {
 				window.history.replaceState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug, validLinkedArtifact));
 			}
@@ -1022,6 +1022,9 @@ function App() {
 				if (nextArtifactPath) {
 					setSelectedArtifactPath(nextArtifactPath);
 					setSidePanel("files");
+				} else {
+					setSelectedArtifactPath(null);
+					setSidePanel((current) => current === "files" ? null : current);
 				}
 				if (parsed && (!workbenchRoutesEqual(parsed, nextRoute) || Boolean(linkedArtifact && !validLinkedArtifact))) {
 					window.history.replaceState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug, validLinkedArtifact));
@@ -1235,7 +1238,7 @@ function App() {
 		setMediaAnnotationDraft(null);
 		setVersionDiffs({});
 		setVersionStatuses({});
-		if (defaultArtifactPath) setSidePanel("files");
+		setSidePanel((current) => defaultArtifactPath ? "files" : current === "files" ? null : current);
 		window.history.pushState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug));
 	}
 
@@ -1258,7 +1261,7 @@ function App() {
 		setVersionDiffs({});
 		setVersionStatuses({});
 		setFilesOverlayOpen(false);
-		if (selectedPath) setSidePanel("files");
+		setSidePanel((current) => selectedPath ? "files" : current === "files" ? null : current);
 		window.history.pushState(null, "", projectPath(nextRoute.projectId, nextRoute.runSlug, artifactPath));
 	}
 
@@ -2757,7 +2760,7 @@ function App() {
 	const selectedModel = sessionConfig?.model ?? "";
 
 	return (
-		<div className={cx("app-shell", scienceArtifactPanelOpen && "science-artifact-open")}>
+		<div className={cx("app-shell", sidePanel && "has-side-panel", scienceArtifactPanelOpen && "science-artifact-open")}>
 			<GlobalCommandPalette
 				open={commandPaletteOpen}
 				state={data}
