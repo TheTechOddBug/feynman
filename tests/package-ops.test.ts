@@ -208,13 +208,13 @@ test("installPackageSources installs Pi runtime peers beside Pi packages", async
 		npmCommand: [process.execPath, scriptPath],
 	});
 
-	const result = await installPackageSources(workingDir, agentDir, ["npm:pi-btw"]);
+	const result = await installPackageSources(workingDir, agentDir, ["npm:@luxusai/pi-hindsight"]);
 
-	assert.deepEqual(result.installed, ["npm:pi-btw"]);
+	assert.deepEqual(result.installed, ["npm:@luxusai/pi-hindsight"]);
 	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
 	assert.equal(invocations.length, 1);
 	const invocation = invocations[0] ?? [];
-	assert.ok(invocation.includes("pi-btw"));
+	assert.ok(invocation.includes("@luxusai/pi-hindsight"));
 	assert.ok(invocation.some((entry) => /^@mariozechner\/pi-coding-agent@/.test(entry)));
 	assert.ok(invocation.some((entry) => /^@mariozechner\/pi-ai@/.test(entry)));
 	assert.ok(invocation.some((entry) => /^@mariozechner\/pi-tui@/.test(entry)));
@@ -272,9 +272,9 @@ test("installPackageSources derives legacy Pi aliases from current runtime peers
 			);
 		}
 
-		const result = await installPackageSources(workingDir, agentDir, ["npm:pi-btw"]);
+		const result = await installPackageSources(workingDir, agentDir, ["npm:@luxusai/pi-hindsight"]);
 
-		assert.deepEqual(result.installed, ["npm:pi-btw"]);
+		assert.deepEqual(result.installed, ["npm:@luxusai/pi-hindsight"]);
 		const invocation = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[])[0] ?? [];
 		const piRuntimeVersion = getRootPiRuntimeVersion();
 		assert.ok(invocation.includes(`@mariozechner/pi-agent-core@npm:@earendil-works/pi-agent-core@${piRuntimeVersion}`));

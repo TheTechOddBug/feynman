@@ -34,6 +34,7 @@ These are the primary commands you use during research runs. Workflow prompts ca
 | `/feynman-model` | Open the non-Pro model picker for the main default model and per-subagent overrides |
 | `/init` | Bootstrap `AGENTS.md` and session-log folders for a new research project |
 | `/outputs` | Browse all research artifacts (papers, outputs, experiments, notes) |
+| `/btw <question>` | Ask a side question while the main research agent is busy and hand the result back when needed |
 | `/search` | Search prior research-session transcripts for past research and findings |
 
 Session management commands help you organize ongoing work. The `/log` command is particularly useful at the end of a research session to capture what was accomplished and what remains.

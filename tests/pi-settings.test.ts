@@ -262,7 +262,6 @@ test("normalizeFeynmanSettings prunes legacy package defaults to the lean resear
 			{
 				packages: [
 					...CORE_PACKAGE_SOURCES,
-					"npm:pi-btw",
 					"npm:pi-markdown-preview",
 					"npm:@walterra/pi-charts",
 					"npm:pi-mermaid",
@@ -292,6 +291,7 @@ test("normalizeFeynmanSettings prunes legacy package defaults to the lean resear
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: string[] };
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
+	assert.equal((settings.packages as string[] | undefined)?.includes("npm:pi-btw"), true);
 	for (const source of NATIVE_PACKAGE_SOURCES) {
 		assert.equal((settings.packages as string[] | undefined)?.includes(source), false);
 	}

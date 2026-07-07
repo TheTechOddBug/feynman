@@ -3,6 +3,7 @@ import type { PackageSource } from "@earendil-works/pi-coding-agent";
 export const CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub",
 	"npm:pi-subagents",
+	"npm:pi-btw",
 	"npm:pi-docparser",
 	"npm:pi-web-access",
 	"npm:pi-otel",

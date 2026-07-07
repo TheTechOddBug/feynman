@@ -110,7 +110,7 @@ to confirm the local model is available and make it the default.
 
 ## Stage 3: Optional packages
 
-Feynman's core ships with the research essentials: alphaXiv access, web access, document parsing, and subagents. On platforms with supported optional presets, the wizard can offer extras:
+Feynman's core ships with the research essentials: alphaXiv access, web access, document parsing, subagents, and `/btw` side conversations while the main research agent is busy. On platforms with supported optional presets, the wizard can offer extras:
 
 - **memory** -- Preference and correction memory for research-session continuity
 - **hindsight** -- Hindsight-backed research-continuity memory; requires a Hindsight server or Hindsight Cloud account

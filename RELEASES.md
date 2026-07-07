@@ -6,6 +6,10 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+### Package Stack
+
+- Added `pi-btw` to Feynman's default Pi package stack so `/btw` side conversations are available during long-running research turns without requiring a separate package install.
+
 ### Science Workbench
 
 - Expanded `feynman serve` into a standalone open-science workbench surface with Feynman-owned project/session/frame state, project metadata, Pi chat, frame message rows, frame backfill health records, Feynman Bio Tools, notebooks, compute inventory, artifacts, lineage, provenance, settings, memory categories, onboarding intent context, and redacted credential availability ledgers.
