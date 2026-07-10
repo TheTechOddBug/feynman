@@ -234,3 +234,18 @@ test("patchPiWebAccessSource enforces a curator browser-connect deadline in cura
 	const twice = patchPiWebAccessSource("curator-server.ts", patched);
 	assert.equal(twice, patched);
 });
+
+test("patchPiWebAccessSource keeps fetched PDF scratch files inside the project", () => {
+	const source = [
+		'import { join, basename } from "node:path";',
+		'import { homedir } from "node:os";',
+		'const DEFAULT_OUTPUT_DIR = join(homedir(), "Downloads");',
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("pdf-extract.ts", source);
+
+	assert.match(patched, /FEYNMAN_FETCH_CACHE_DIR/);
+	assert.match(patched, /process\.cwd\(\).*\.feynman.*cache.*fetch-content/);
+	assert.doesNotMatch(patched, /homedir|Downloads/);
+	assert.equal(patchPiWebAccessSource("pdf-extract.ts", patched), patched);
+});

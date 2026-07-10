@@ -127,6 +127,7 @@ Feynman respects the following environment variables, which take precedence over
 | `FEYNMAN_MODEL` | Override the default model with a non-Pro model |
 | `FEYNMAN_HOME` | Override the parent directory used to create `.feynman` (default parent: `~`) |
 | `FEYNMAN_WORKBENCH_HOME` | Override the workbench app-data root; otherwise Feynman uses `~/.feynman/orgs/<org_uuid>/workbench` |
+| `FEYNMAN_FETCH_CACHE_DIR` | Override the project-local directory used for `fetch_content` PDF scratch Markdown |
 | `FEYNMAN_THINKING` | Override the thinking level |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |

@@ -151,6 +151,25 @@ test("feynman alpha reaches Alpha Hub help when cwd is supplied before alpha", (
 	assert.doesNotMatch(result.stdout, /Research-first agent shell built on Pi/);
 });
 
+test("unknown CLI flags point users to Feynman help", () => {
+	const workingDir = mkdtempSync(join(tmpdir(), "feynman-unknown-option-cwd-"));
+	const homeDir = mkdtempSync(join(tmpdir(), "feynman-unknown-option-home-"));
+	const result = spawnSync(process.execPath, ["--import", "tsx", "src/index.ts", "--cwd", workingDir, "update", "--extensions"], {
+		cwd: process.cwd(),
+		encoding: "utf8",
+		env: {
+			...process.env,
+			FEYNMAN_HOME: homeDir,
+			FEYNMAN_TELEMETRY: "0",
+		},
+		maxBuffer: 1024 * 1024,
+	});
+
+	assert.equal(result.status, 1);
+	assert.match(`${result.stdout}\n${result.stderr}`, /Unknown option '--extensions'/);
+	assert.match(`${result.stdout}\n${result.stderr}`, /Run `feynman help` to see available commands and flags/);
+});
+
 test("packages CLI hides removed UI and bulk extras", () => {
 	const workingDir = mkdtempSync(join(tmpdir(), "feynman-packages-cwd-"));
 	const homeDir = mkdtempSync(join(tmpdir(), "feynman-packages-home-"));

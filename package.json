@@ -1,6 +1,6 @@
 {
   "name": "@companion-ai/feynman",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Research-first CLI agent built on Pi and alphaXiv",
   "license": "MIT",
   "type": "module",
@@ -15,6 +15,7 @@
     "dist/",
     "metadata/",
     ".feynman/agents/",
+    ".feynman/config/",
     ".feynman/runtime-workspace.tgz",
     ".feynman/settings.json",
     ".feynman/SYSTEM.md",

@@ -9,9 +9,21 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.6 - 2026-07-10
+
+### Reliability
+
+- Fixed alphaXiv login after its OAuth migration by shipping the current OAuth2 endpoints and validating the loopback callback state before exchanging authorization codes.
+- Fixed Windows one-line installs by extracting release archives into temporary staging before replacing the installed bundle.
+- Fixed workbench state switching between newly minted local organizations when concurrent processes read `active-org.json` during a rewrite. Valid manifests are no longer rewritten, and required writes are atomic.
+- Option+Enter now inserts a newline in Feynman's REPL input. The bundled binding preserves Shift+Enter and Ctrl+J, and existing user-modified keybindings remain untouched.
+- `fetch_content` now writes extracted PDF scratch Markdown under the active project's `.feynman/cache/fetch-content` instead of `~/Downloads`. Set `FEYNMAN_FETCH_CACHE_DIR` to override the location.
+- Unknown CLI flags now point to `feynman help`, and `feynman update` help clarifies that extensions update with their packages rather than through a separate `--extensions` flag.
+
 ### Package Stack
 
 - Added `pi-btw` to Feynman's default Pi package stack so `/btw` side conversations are available during long-running research turns without requiring a separate package install.
+- Refreshed the bundled Pi runtime packages from `0.80.3` to `0.80.6` and kept the runtime fallback pins aligned with the installed package set.
 
 ### Science Workbench
 

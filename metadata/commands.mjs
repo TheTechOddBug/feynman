@@ -149,7 +149,7 @@ export const cliCommandSections = [
 			{ usage: "feynman search status", description: "Show Pi web-access status and config path." },
 			{ usage: "feynman search set <provider> [api-key]", description: "Set the web search provider and optionally save its API key." },
 			{ usage: "feynman search clear", description: "Reset web search provider to auto while preserving API keys." },
-			{ usage: "feynman update [package]", description: "Update installed packages, or a specific package." },
+			{ usage: "feynman update [package]", description: "Update installed packages, or one package. Extensions update with their packages; there is no separate --extensions flag." },
 		],
 	},
 ];

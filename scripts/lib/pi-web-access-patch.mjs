@@ -8,6 +8,7 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"gemini-web.ts",
 	"github-extract.ts",
 	"perplexity.ts",
+	"pdf-extract.ts",
 	"video-extract.ts",
 	"youtube-extract.ts",
 ];
@@ -15,6 +16,11 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 const LEGACY_CONFIG_EXPR = 'join(homedir(), ".pi", "web-search.json")';
 const PATCHED_CONFIG_EXPR =
 	'process.env.FEYNMAN_WEB_SEARCH_CONFIG ?? process.env.PI_WEB_SEARCH_CONFIG ?? join(homedir(), ".pi", "web-search.json")';
+const LEGACY_PDF_OUTPUT_DIR = 'const DEFAULT_OUTPUT_DIR = join(homedir(), "Downloads");';
+const PATCHED_PDF_OUTPUT_DIR = [
+	"const DEFAULT_OUTPUT_DIR =",
+	'  process.env.FEYNMAN_FETCH_CACHE_DIR?.trim() || join(process.cwd(), ".feynman", "cache", "fetch-content");',
+].join("\n");
 
 function patchGeminiWebSource(source) {
 	let patched = source;
@@ -377,6 +383,17 @@ export function patchPiWebAccessSource(relativePath, source) {
 				/setting "geminiBrowser": true in web-search\.json/g,
 				'setting \\"geminiBrowser\\": true in web-search.json',
 			);
+			changed = true;
+		}
+	}
+
+	if (relativePath === "pdf-extract.ts") {
+		if (patched.includes(LEGACY_PDF_OUTPUT_DIR)) {
+			patched = patched.replace(LEGACY_PDF_OUTPUT_DIR, PATCHED_PDF_OUTPUT_DIR);
+			changed = true;
+		}
+		if (patched.includes('import { homedir } from "node:os";') && patched.includes(PATCHED_PDF_OUTPUT_DIR)) {
+			patched = patched.replace('import { homedir } from "node:os";\n', "");
 			changed = true;
 		}
 	}

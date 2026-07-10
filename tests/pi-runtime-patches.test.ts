@@ -165,6 +165,12 @@ async function execute(params, configWorkflow, ctx) {
 pi.registerCommand("search", { description: "Browse stored web search results" });
 `;
 
+const WEB_ACCESS_PDF_SOURCE = `
+import { join, basename } from "node:path";
+import { homedir } from "node:os";
+const DEFAULT_OUTPUT_DIR = join(homedir(), "Downloads");
+`;
+
 const SUBAGENT_PI_SPAWN_SOURCE = `
 export interface PiSpawnDeps {
 	execPath?: string;
@@ -241,6 +247,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	const themePath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
 	const packageJsonPath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "package.json");
 	const webAccessPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access", "index.ts");
+	const webAccessPdfPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access", "pdf-extract.ts");
 	const subagentSpawnPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-subagents", "src", "runs", "shared", "pi-spawn.ts");
 	const piOtelConfigPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-otel", "dist", "config.js");
 	const sessionSearchPath = join(appRoot, ".feynman", "npm", "node_modules", "@kaiserlich-dev", "pi-session-search", "extensions", "indexer.ts");
@@ -250,6 +257,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	await mkdir(dirname(themePath), { recursive: true });
 	await mkdir(dirname(packageJsonPath), { recursive: true });
 	await mkdir(dirname(webAccessPath), { recursive: true });
+	await mkdir(dirname(webAccessPdfPath), { recursive: true });
 	await mkdir(dirname(subagentSpawnPath), { recursive: true });
 	await mkdir(dirname(piOtelConfigPath), { recursive: true });
 	await mkdir(dirname(sessionSearchPath), { recursive: true });
@@ -263,6 +271,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 		"utf8",
 	);
 	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
+	writeFileSync(webAccessPdfPath, WEB_ACCESS_PDF_SOURCE, "utf8");
 	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(piOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
@@ -278,6 +287,9 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.equal(patchedPackageJson.piConfig?.configDir, ".feynman");
 	assert.match(readFileSync(webAccessPath, "utf8"), /params\.workflow \?\? configWorkflow \?\? "none"/);
 	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.match(readFileSync(webAccessPdfPath, "utf8"), /FEYNMAN_FETCH_CACHE_DIR/);
+	assert.match(readFileSync(webAccessPdfPath, "utf8"), /\.feynman.*cache.*fetch-content/);
+	assert.doesNotMatch(readFileSync(webAccessPdfPath, "utf8"), /Downloads|homedir/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /process\.env\.FEYNMAN_PI_CLI_PATH/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /\targv2\?: string;/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /path\.basename\(argvPath\) !== "pi-cli-wrapper\.js"/);
