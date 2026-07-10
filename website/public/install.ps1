@@ -96,6 +96,8 @@ New-Item -ItemType Directory -Path $tmpDir | Out-Null
 
 try {
   $archivePath = Join-Path $tmpDir $archiveName
+  $extractRoot = Join-Path $tmpDir "extract"
+  $extractedBundleDir = Join-Path $extractRoot $bundleName
   Write-Host "==> Downloading $archiveName"
   try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
@@ -114,13 +116,18 @@ Workarounds:
 "@
   }
 
+  Write-Host "==> Extracting $archiveName"
+  New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+  Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
+  if (-not (Test-Path $extractedBundleDir)) {
+    throw "Downloaded archive did not contain the expected $bundleName directory."
+  }
+
   New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
   if (Test-Path $bundleDir) {
     Remove-Item -Recurse -Force $bundleDir
   }
-
-  Write-Host "==> Extracting $archiveName"
-  Expand-Archive -LiteralPath $archivePath -DestinationPath $installRoot -Force
+  Move-Item -LiteralPath $extractedBundleDir -Destination $bundleDir
 
   New-Item -ItemType Directory -Path $installBinDir -Force | Out-Null
 

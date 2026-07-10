@@ -10,6 +10,7 @@ import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-we
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
+import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 
 const appRoot = resolve(import.meta.dirname, "..");
@@ -24,7 +25,7 @@ const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
 const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.80.3";
+const PI_RUNTIME_FALLBACK_VERSION = "0.80.6";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@opentelemetry/core": "2.8.0",
@@ -139,6 +140,7 @@ function getRuntimeInputHash() {
 		resolve(appRoot, "scripts", "lib", "pi-subagents-patch.mjs"),
 		resolve(appRoot, "scripts", "lib", "pi-otel-patch.mjs"),
 		resolve(appRoot, "scripts", "lib", "pi-session-search-patch.mjs"),
+		resolve(appRoot, "scripts", "lib", "alpha-hub-auth-patch.mjs"),
 		resolve(appRoot, "scripts", "lib", "alpha-hub-search-patch.mjs"),
 	]) {
 		hash.update(path);
@@ -439,18 +441,30 @@ function patchBundledPiSessionSearch() {
 }
 
 function patchBundledAlphaHub() {
+	const authPath = resolve(workspaceNodeModulesDir, "@companion-ai", "alpha-hub", "src", "lib", "auth.js");
 	const alphaxivPath = resolve(workspaceNodeModulesDir, "@companion-ai", "alpha-hub", "src", "lib", "alphaxiv.js");
-	if (!existsSync(alphaxivPath)) {
+	if (!existsSync(authPath) && !existsSync(alphaxivPath)) {
 		return false;
 	}
 
-	const source = readFileSync(alphaxivPath, "utf8");
-	const patched = patchAlphaHubSearchSource(source);
-	if (patched === source) {
-		return false;
+	let changed = false;
+	if (existsSync(authPath)) {
+		const source = readFileSync(authPath, "utf8");
+		const patched = patchAlphaHubAuthSource(source);
+		if (patched !== source) {
+			writeFileSync(authPath, patched, "utf8");
+			changed = true;
+		}
 	}
-	writeFileSync(alphaxivPath, patched, "utf8");
-	return true;
+	if (existsSync(alphaxivPath)) {
+		const source = readFileSync(alphaxivPath, "utf8");
+		const patched = patchAlphaHubSearchSource(source);
+		if (patched !== source) {
+			writeFileSync(alphaxivPath, patched, "utf8");
+			changed = true;
+		}
+	}
+	return changed;
 }
 
 function patchBundledRuntime() {

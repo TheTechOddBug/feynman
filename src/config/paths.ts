@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
@@ -68,8 +68,34 @@ function normalizeActiveOrg(home: string, value: unknown): FeynmanActiveOrg | un
 	};
 }
 
-function writeActiveOrg(path: string, org: FeynmanActiveOrg): void {
-	writeFileSync(path, `${JSON.stringify(org, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+function activeOrgJson(org: FeynmanActiveOrg): string {
+	return `${JSON.stringify(org, null, 2)}\n`;
+}
+
+function writeActiveOrgAtomic(path: string, org: FeynmanActiveOrg): void {
+	const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(temporaryPath, activeOrgJson(org), { encoding: "utf8", mode: 0o600, flag: "wx" });
+		renameSync(temporaryPath, path);
+	} finally {
+		rmSync(temporaryPath, { force: true });
+	}
+}
+
+function createActiveOrg(path: string, org: FeynmanActiveOrg): boolean {
+	const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(temporaryPath, activeOrgJson(org), { encoding: "utf8", mode: 0o600, flag: "wx" });
+		try {
+			linkSync(temporaryPath, path);
+			return true;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+			throw error;
+		}
+	} finally {
+		rmSync(temporaryPath, { force: true });
+	}
 }
 
 export function ensureFeynmanActiveOrg(home = getFeynmanHome()): FeynmanActiveOrg {
@@ -78,9 +104,12 @@ export function ensureFeynmanActiveOrg(home = getFeynmanHome()): FeynmanActiveOr
 	const path = getFeynmanActiveOrgPath(home);
 	if (existsSync(path)) {
 		try {
-			const normalized = normalizeActiveOrg(home, JSON.parse(readFileSync(path, "utf8")));
+			const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+			const normalized = normalizeActiveOrg(home, parsed);
 			if (normalized) {
-				writeActiveOrg(path, normalized);
+				if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+					writeActiveOrgAtomic(path, normalized);
+				}
 				mkdirSync(resolve(getFeynmanOrgsDir(home), normalized.org_uuid), { recursive: true });
 				return normalized;
 			}
@@ -95,7 +124,18 @@ export function ensureFeynmanActiveOrg(home = getFeynmanHome()): FeynmanActiveOr
 		account_uuid: randomUUID(),
 		login_owner_data_dir: home,
 	};
-	writeActiveOrg(path, org);
+	if (!createActiveOrg(path, org)) {
+		try {
+			const existing = normalizeActiveOrg(home, JSON.parse(readFileSync(path, "utf8")));
+			if (existing) {
+				mkdirSync(resolve(getFeynmanOrgsDir(home), existing.org_uuid), { recursive: true });
+				return existing;
+			}
+		} catch {
+			// An existing invalid manifest is replaced atomically below.
+		}
+		writeActiveOrgAtomic(path, org);
+	}
 	mkdirSync(resolve(getFeynmanOrgsDir(home), org.org_uuid), { recursive: true });
 	return org;
 }

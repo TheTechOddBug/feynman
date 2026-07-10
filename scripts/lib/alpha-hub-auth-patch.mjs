@@ -43,9 +43,64 @@ const FIXED_WIN_OPEN = "else if (plat === 'win32') execSync(`cmd /c start \"\" \
 const OPEN_BROWSER_LOG = "process.stderr.write('Opening browser for alphaXiv login...\\n');";
 const OPEN_BROWSER_LOG_WITH_URL = "process.stderr.write(`Opening browser for alphaXiv login...\\nAuth URL: ${authUrl.toString()}\\n`);";
 
+const LEGACY_CALLBACK_DECLARATION = "function waitForCallback(server) {";
+const VALIDATING_CALLBACK_DECLARATION = "function waitForCallback(server, expectedState) {";
+
+const LEGACY_CALLBACK_PARAMS = [
+	"      const code = url.searchParams.get('code');",
+	"      const error = url.searchParams.get('error');",
+	"",
+	"      if (error) {",
+].join("\n");
+
+const VALIDATING_CALLBACK_PARAMS = [
+	"      const code = url.searchParams.get('code');",
+	"      const error = url.searchParams.get('error');",
+	"      const returnedState = url.searchParams.get('state');",
+	"",
+	"      if (!returnedState || returnedState !== expectedState) {",
+	"        res.writeHead(400, { 'Content-Type': 'text/html' });",
+	"        res.end(ERROR_HTML);",
+	"        clearTimeout(timeout);",
+	"        server.close();",
+	"        reject(new Error('OAuth state mismatch'));",
+	"        return;",
+	"      }",
+	"",
+	"      if (error) {",
+].join("\n");
+
+const LEGACY_CALLBACK_CALL = "  const code = await waitForCallback(server);";
+const VALIDATING_CALLBACK_CALL = "  const code = await waitForCallback(server, state);";
+
+const LEGACY_AUTH_ENDPOINTS = [
+	"const CLERK_ISSUER = 'https://clerk.alphaxiv.org';",
+	"const AUTH_ENDPOINT = `${CLERK_ISSUER}/oauth/authorize`;",
+	"const TOKEN_ENDPOINT = `${CLERK_ISSUER}/oauth/token`;",
+	"const REGISTER_ENDPOINT = `${CLERK_ISSUER}/oauth/register`;",
+	"const CALLBACK_PORT = 9876;",
+	"const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`;",
+	"const USERINFO_ENDPOINT = `${CLERK_ISSUER}/oauth/userinfo`;",
+	"const SCOPES = 'profile email offline_access';",
+].join("\n");
+
+const CURRENT_AUTH_ENDPOINTS = [
+	"const ALPHAXIV_AUTH_ISSUER = 'https://api.alphaxiv.org/auth';",
+	"const AUTH_ENDPOINT = `${ALPHAXIV_AUTH_ISSUER}/oauth2/authorize`;",
+	"const TOKEN_ENDPOINT = `${ALPHAXIV_AUTH_ISSUER}/oauth2/token`;",
+	"const REGISTER_ENDPOINT = `${ALPHAXIV_AUTH_ISSUER}/oauth2/register`;",
+	"const CALLBACK_PORT = 9876;",
+	"const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`;",
+	"const USERINFO_ENDPOINT = `${ALPHAXIV_AUTH_ISSUER}/oauth2/userinfo`;",
+	"const SCOPES = 'openid profile email offline_access';",
+].join("\n");
+
 export function patchAlphaHubAuthSource(source) {
 	let patched = source;
 
+	if (patched.includes(LEGACY_AUTH_ENDPOINTS)) {
+		patched = patched.replace(LEGACY_AUTH_ENDPOINTS, CURRENT_AUTH_ENDPOINTS);
+	}
 	if (patched.includes(LEGACY_SUCCESS_HTML)) {
 		patched = patched.replace(LEGACY_SUCCESS_HTML, FEYNMAN_SUCCESS_HTML);
 	}
@@ -60,6 +115,15 @@ export function patchAlphaHubAuthSource(source) {
 	}
 	if (patched.includes(OPEN_BROWSER_LOG)) {
 		patched = patched.replace(OPEN_BROWSER_LOG, OPEN_BROWSER_LOG_WITH_URL);
+	}
+	if (patched.includes(LEGACY_CALLBACK_DECLARATION)) {
+		patched = patched.replace(LEGACY_CALLBACK_DECLARATION, VALIDATING_CALLBACK_DECLARATION);
+	}
+	if (patched.includes(LEGACY_CALLBACK_PARAMS)) {
+		patched = patched.replace(LEGACY_CALLBACK_PARAMS, VALIDATING_CALLBACK_PARAMS);
+	}
+	if (patched.includes(LEGACY_CALLBACK_CALL)) {
+		patched = patched.replace(LEGACY_CALLBACK_CALL, VALIDATING_CALLBACK_CALL);
 	}
 
 	return patched;
