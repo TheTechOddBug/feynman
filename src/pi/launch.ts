@@ -6,6 +6,7 @@ import {
 	buildPiArgs,
 	buildPiEnv,
 	ensureFeynmanCommandShim,
+	ensureFeynmanWorkspaceScaffold,
 	type PiRuntimeOptions,
 	resolvePiPaths,
 	toNodeImportSpecifier,
@@ -66,6 +67,7 @@ export async function launchPiChat(options: PiRuntimeOptions): Promise<void> {
 		: ["--import", toNodeImportSpecifier(promisePolyfillPath)];
 	const executables = await resolveAllExecutables();
 	ensureFeynmanCommandShim(options.appRoot, options.feynmanAgentDir);
+	ensureFeynmanWorkspaceScaffold(options.workingDir);
 
 	const child = spawn(process.execPath, [...importArgs, wrapperPath, piMainPath, ...buildPiArgs(options, paths)], {
 		cwd: options.workingDir,

@@ -9,6 +9,7 @@ try {
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -143,10 +144,19 @@ function printHelp(appRoot: string): void {
 }
 
 export function resolveBundledAlphaCliPath(appRoot: string): string {
+	let resolvedPackageAlpha: string | undefined;
+	try {
+		const requireFromApp = createRequire(resolve(appRoot, "package.json"));
+		const packageEntryPath = requireFromApp.resolve("@companion-ai/alpha-hub");
+		resolvedPackageAlpha = resolve(dirname(packageEntryPath), "..", "bin", "alpha");
+	} catch {
+		resolvedPackageAlpha = undefined;
+	}
 	const candidates = [
+		resolvedPackageAlpha,
 		resolve(appRoot, "node_modules", ...ALPHA_HUB_PACKAGE_PATH, "bin", "alpha"),
 		resolve(appRoot, ".feynman", "npm", "node_modules", ...ALPHA_HUB_PACKAGE_PATH, "bin", "alpha"),
-	];
+	].filter((candidate): candidate is string => Boolean(candidate));
 	const found = candidates.find((candidate) => existsSync(candidate));
 	if (!found) {
 		throw new Error(`Bundled alphaXiv CLI not found. Checked: ${candidates.join(", ")}`);

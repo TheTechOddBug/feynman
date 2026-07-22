@@ -64,6 +64,17 @@ export function ensureFeynmanCommandShim(appRoot: string, feynmanAgentDir: strin
 	return shimPath;
 }
 
+export function ensureFeynmanWorkspaceScaffold(workingDir: string): void {
+	for (const relPath of [
+		"outputs/.plans",
+		"outputs/.drafts",
+		"papers",
+		"notes",
+	]) {
+		mkdirSync(resolve(workingDir, relPath), { recursive: true });
+	}
+}
+
 export function applyFeynmanPackageManagerEnv(feynmanAgentDir: string): string {
 	const feynmanNpmPrefixPath = getFeynmanNpmPrefixPath(feynmanAgentDir);
 	process.env.FEYNMAN_NPM_PREFIX = feynmanNpmPrefixPath;
