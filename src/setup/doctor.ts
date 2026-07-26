@@ -63,14 +63,14 @@ export type FeynmanStatusSnapshot = {
 	missingPiBits: string[];
 };
 
-export function collectStatusSnapshot(options: DoctorOptions): FeynmanStatusSnapshot {
+export async function collectStatusSnapshot(options: DoctorOptions): Promise<FeynmanStatusSnapshot> {
 	const pandocPath = resolveExecutable("pandoc", PANDOC_FALLBACK_PATHS);
 	const browserPath = process.env.PUPPETEER_EXECUTABLE_PATH ?? resolveExecutable("google-chrome", BROWSER_FALLBACK_PATHS);
 	const missingPiBits = validatePiInstallation(options.appRoot);
 	const webStatus = getPiWebAccessStatus();
 	const modelStatus = buildModelStatusSnapshotFromRecords(
-		getSupportedModelRecords(options.authPath),
-		getAvailableModelRecords(options.authPath),
+		await getSupportedModelRecords(options.authPath),
+		await getAvailableModelRecords(options.authPath),
 		getCurrentModelSpec(options.settingsPath),
 	);
 
@@ -95,8 +95,8 @@ export function collectStatusSnapshot(options: DoctorOptions): FeynmanStatusSnap
 	};
 }
 
-export function runStatus(options: DoctorOptions): void {
-	const snapshot = collectStatusSnapshot(options);
+export async function runStatus(options: DoctorOptions): Promise<void> {
+	const snapshot = await collectStatusSnapshot(options);
 	printPanel("Feynman Status", [
 		"Current setup summary for the research shell.",
 	]);
@@ -131,11 +131,11 @@ export function runStatus(options: DoctorOptions): void {
 	}
 }
 
-export function runDoctor(options: DoctorOptions): void {
+export async function runDoctor(options: DoctorOptions): Promise<void> {
 	const settings = readJson(options.settingsPath);
-	const modelRegistry = createModelRegistry(options.authPath);
-	const supportedModels = getSupportedModelRecords(options.authPath);
-	const modelStatus = collectStatusSnapshot(options);
+	const modelRegistry = await createModelRegistry(options.authPath);
+	const supportedModels = await getSupportedModelRecords(options.authPath);
+	const modelStatus = await collectStatusSnapshot(options);
 	const pandocPath = resolveExecutable("pandoc", PANDOC_FALLBACK_PATHS);
 	const browserPath = process.env.PUPPETEER_EXECUTABLE_PATH ?? resolveExecutable("google-chrome", BROWSER_FALLBACK_PATHS);
 	const missingPiBits = validatePiInstallation(options.appRoot);

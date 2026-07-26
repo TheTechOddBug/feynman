@@ -81,11 +81,12 @@ const PLAN_STEP_STATUSES = new Set<WorkbenchPlanStepStatus>([
 	"running",
 ]);
 
-type BuildWorkbenchStateOptions = {
+export type BuildWorkbenchStateOptions = {
 	workingDir: string;
 	version?: string;
 	settingsPath?: string;
 	authPath?: string;
+	modelStatus?: ModelStatusSnapshot;
 	maxArtifacts?: number;
 	maxRuns?: number;
 };
@@ -111,11 +112,11 @@ function readCurrentModelSpec(settingsPath: string | undefined): string | undefi
 	return undefined;
 }
 
-function buildWorkbenchModelStatus(options: BuildWorkbenchStateOptions): ModelStatusSnapshot | undefined {
+export async function loadWorkbenchModelStatus(options: Pick<BuildWorkbenchStateOptions, "authPath" | "settingsPath">): Promise<ModelStatusSnapshot | undefined> {
 	if (!options.authPath) return undefined;
 	return buildModelStatusSnapshotFromRecords(
-		getSupportedModelRecords(options.authPath),
-		getAvailableModelRecords(options.authPath),
+		await getSupportedModelRecords(options.authPath),
+		await getAvailableModelRecords(options.authPath),
 		readCurrentModelSpec(options.settingsPath),
 	);
 }
@@ -1099,7 +1100,7 @@ export function buildWorkbenchState(options: BuildWorkbenchStateOptions): Workbe
 		workspaceName: basename(workingDir),
 		...(options.version ? { version: options.version } : {}),
 		generatedAt: new Date().toISOString(),
-		...(options.authPath ? { modelStatus: buildWorkbenchModelStatus(options) } : {}),
+		...(options.modelStatus ? { modelStatus: options.modelStatus } : {}),
 		summary: buildWorkbenchSummary(artifacts, projects.length, runs.length, memory.notes.length, claims.length, sessionActivity, transcriptAnnotations.length),
 		onboarding: readWorkbenchOnboardingProfile(workingDir),
 		projects,

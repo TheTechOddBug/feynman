@@ -135,7 +135,7 @@ These are equivalent to launching the REPL and typing the corresponding slash co
 | --- | --- |
 | `--prompt "<text>"` | Run one prompt and exit (one-shot mode) |
 | `--model <provider/model|provider:model>` | Force a specific non-Pro model for this session |
-| `--thinking <level>` | Set thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `--thinking <level>` | Set thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `--cwd <path>` | Set the working directory for all file operations |
 | `--session-dir <path>` | Set the session storage directory |
 | `--new-session` | Start a new persisted session |

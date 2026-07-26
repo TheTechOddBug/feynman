@@ -3,8 +3,10 @@ import { dirname, resolve } from "node:path";
 
 import { patchAlphaHubAuthSource } from "../../scripts/lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../../scripts/lib/alpha-hub-search-patch.mjs";
+import { patchMcpSdkPackageJsonSource } from "../../scripts/lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
+import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "../../scripts/lib/pi-session-search-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource } from "../../scripts/lib/pi-subagents-patch.mjs";
@@ -89,7 +91,9 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 		nodeModuleRoots.push(resolve(feynmanAgentDir, "npm", "node_modules"));
 	}
 	let changed = false;
+	const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
 	for (const nodeModulesPath of nodeModuleRoots) {
+		changed = patchPiBraceExpansionTree(nodeModulesPath, safeBraceExpansionPath) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
@@ -125,6 +129,20 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			"pi-coding-agent",
 			"dist/core/model-registry.js",
 			patchPiModelRegistrySource,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/core/model-runtime.js",
+			patchPiModelRegistrySource,
+		) || changed;
+		changed = patchFileIfPresent(
+			resolve(nodeModulesPath, "@modelcontextprotocol", "sdk", "package.json"),
+			patchMcpSdkPackageJsonSource,
+		) || changed;
+		changed = patchFileIfPresent(
+			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "node_modules", "@modelcontextprotocol", "sdk", "package.json"),
+			patchMcpSdkPackageJsonSource,
 		) || changed;
 		changed = patchFileIfPresent(
 			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "src", "lib", "auth.js"),

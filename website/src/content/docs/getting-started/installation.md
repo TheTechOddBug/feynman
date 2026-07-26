@@ -5,7 +5,7 @@ section: Getting Started
 order: 1
 ---
 
-Feynman can be installed either as a standalone runtime bundle or as an npm package. For most users, the standalone installer is the simplest path because it downloads a prebuilt native bundle with zero external runtime dependencies.
+Feynman can be installed either as a standalone runtime bundle or as an npm package. For most users, the standalone installer is the simplest path because it downloads a prebuilt native bundle with zero external runtime dependencies and verifies its published SHA-256 before replacing an existing installation.
 
 ## One-line installer (recommended)
 
@@ -25,7 +25,7 @@ On **Windows**, open PowerShell as Administrator and run:
 irm https://feynman.is/install.ps1 | iex
 ```
 
-This installs the Windows runtime bundle under `%LOCALAPPDATA%\Programs\feynman`, adds its launcher to your user `PATH`, and lets you re-run the installer at any time to update.
+This installs the Windows x64 runtime bundle under `%LOCALAPPDATA%\Programs\feynman`, adds its launcher to your user `PATH`, and lets you re-run the installer at any time to update. Windows 11 on Arm uses the same bundle through its x64 compatibility layer.
 
 ## Alternative: npm install
 

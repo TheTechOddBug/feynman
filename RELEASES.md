@@ -6,21 +6,28 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
-## v0.3.6 - 2026-07-10
+## v0.3.6 - 2026-07-26
 
 ### Reliability
 
 - Fixed alphaXiv login after its OAuth migration by shipping the current OAuth2 endpoints and validating the loopback callback state before exchanging authorization codes.
 - Fixed Windows one-line installs by extracting release archives into temporary staging before replacing the installed bundle.
 - Fixed workbench state switching between newly minted local organizations when concurrent processes read `active-org.json` during a rewrite. Valid manifests are no longer rewritten, and required writes are atomic.
-- Option+Enter now inserts a newline in Feynman's REPL input. The bundled binding preserves Shift+Enter and Ctrl+J, and existing user-modified keybindings remain untouched.
+- Option+Enter now inserts a newline in Feynman's REPL input. Shift+Enter preserves Pi's follow-up action in terminals that report modified Enter keys, Ctrl+J remains a portable newline alternative, and existing user-modified keybindings remain untouched.
+- Added `/thinking [level]` so reasoning effort is discoverable and directly adjustable inside the REPL while Shift+Tab remains available. The picker follows the active model's supported levels, including `max` where Pi exposes it.
 - `fetch_content` now writes extracted PDF scratch Markdown under the active project's `.feynman/cache/fetch-content` instead of `~/Downloads`. Set `FEYNMAN_FETCH_CACHE_DIR` to override the location.
 - Unknown CLI flags now point to `feynman help`, and `feynman update` help clarifies that extensions update with their packages rather than through a separate `--extensions` flag.
 
 ### Package Stack
 
 - Added `pi-btw` to Feynman's default Pi package stack so `/btw` side conversations are available during long-running research turns without requiring a separate package install.
-- Refreshed the bundled Pi runtime packages from `0.80.3` to `0.80.6` and kept the runtime fallback pins aligned with the installed package set.
+- Refreshed the bundled Pi runtime packages from `0.80.3` to `0.82.1`, migrated Feynman's model/auth integration to Pi's asynchronous `ModelRuntime`, and kept the runtime fallback pins aligned with the installed package set.
+- Repaired the current Pi and MCP production dependency advisories in the packaged runtime by replacing Pi's vulnerable nested `brace-expansion` copy with `5.0.8` and pinning MCP's compatible Hono server dependency to `2.0.12`. Both repairs fail closed and can be removed once upstream publishes fixed dependency ranges.
+- Pinned the bundled runtime's complete dependency graph in a committed lockfile, upgraded its coordinated OpenTelemetry train to `2.10.0`/`0.221.0`, and made pruning changes and archive digests invalidate stale runtime artifacts.
+- Runtime and standalone archives now bind relative build inputs and the complete patched tree, reject stale or transplanted manifests, normalize archive metadata, and omit macOS AppleDouble metadata that previously doubled package size.
+- Added pre-merge Linux package/consumer plus Windows PowerShell installer replacement gates. Release publication now promotes the exact verified tarball only after native bundles pass.
+- Added explicit release-package budgets of 125 MiB compressed, 360 MiB unpacked, and 42,000 files around the current bundled research runtime so accidental package growth fails before publication.
+- Pinned release executors and the bundled Node `24.18.0` archives, added Linux arm64 release builds, and made every standalone installer verify the published `SHA256SUMS` entry before replacing a working installation.
 
 ### Science Workbench
 

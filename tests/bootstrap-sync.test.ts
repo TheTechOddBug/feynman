@@ -89,8 +89,8 @@ test("syncBundledAssets installs Feynman's Option+Enter newline binding without 
 	const bundledConfigDir = join(appRoot, ".feynman", "config");
 	mkdirSync(bundledConfigDir, { recursive: true });
 	writeFileSync(join(bundledConfigDir, "keybindings.json"), JSON.stringify({
-		"tui.input.newLine": ["shift+enter", "ctrl+j", "alt+enter"],
-		"app.message.followUp": [],
+		"tui.input.newLine": ["ctrl+j", "alt+enter"],
+		"app.message.followUp": ["shift+enter"],
 	}, null, 2) + "\n");
 
 	const result = syncBundledAssets(appRoot, agentDir);
@@ -99,11 +99,12 @@ test("syncBundledAssets installs Feynman's Option+Enter newline binding without 
 	const keybindings = KeybindingsManager.create(agentDir);
 
 	assert.ok(result.copied.includes("keybindings.json"));
-	assert.deepEqual(keybindings.getKeys("tui.input.newLine"), ["shift+enter", "ctrl+j", "alt+enter"]);
-	assert.deepEqual(keybindings.getKeys("app.message.followUp"), []);
+	assert.deepEqual(keybindings.getKeys("tui.input.newLine"), ["ctrl+j", "alt+enter"]);
+	assert.deepEqual(keybindings.getKeys("app.message.followUp"), ["shift+enter"]);
 	assert.equal(keybindings.matches("\u001b\r", "tui.input.newLine"), true);
 	assert.equal(keybindings.matches("\u001b[13;3u", "tui.input.newLine"), true);
 	assert.equal(keybindings.matches("\u001b\r", "app.message.followUp"), false);
+	assert.equal(keybindings.matches("\u001b[13;2u", "app.message.followUp"), true);
 
 	writeFileSync(keybindingsPath, '{"tui.input.newLine":["ctrl+j"]}\n');
 	writeFileSync(join(bundledConfigDir, "keybindings.json"), '{"tui.input.newLine":["alt+enter"]}\n');

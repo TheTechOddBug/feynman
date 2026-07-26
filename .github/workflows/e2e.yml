@@ -1,6 +1,8 @@
 name: End-to-End Install Tests
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -13,6 +15,7 @@ env:
 
 jobs:
   install-e2e:
+    if: github.event_name == 'workflow_dispatch'
     name: e2e (${{ matrix.os }}, node ${{ matrix.node }})
     strategy:
       fail-fast: false
@@ -37,7 +40,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: ${{ matrix.node }}
 
@@ -181,3 +184,128 @@ jobs:
           grep -q "RESULT=PONG" subagent.log || { echo "child output not relayed:" >&2; grep -o "RESULT=[A-Za-z_]*" subagent.log >&2; tail -30 subagent.log >&2; exit 1; }
           grep -o "RESULT=PONG" subagent.log | head -1
           echo "subagent smoke ok"
+
+  release-candidate-pr:
+    if: github.event_name == 'pull_request'
+    name: Release candidate (PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validate source and website
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm ci
+          npm test
+          npm run typecheck
+          npm run build
+          npm run architecture:check
+          npm audit --omit=dev
+          (
+            cd website
+            npm ci
+            npm run lint
+            npm run typecheck
+            npm run build
+            npm audit --omit=dev
+          )
+          git diff --check
+
+      - name: Validate packed consumer and runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm pack --dry-run --json > "$RUNNER_TEMP/pack-dry-run.json"
+          npm pack --json --pack-destination "$RUNNER_TEMP" > "$RUNNER_TEMP/pack.json"
+          tarball="$RUNNER_TEMP/companion-ai-feynman-$(node -p "require('./package.json').version").tgz"
+          test -s "$tarball"
+          node scripts/verify-package-budget.mjs "$RUNNER_TEMP/pack.json" "$tarball"
+          npm audit --omit=dev --prefix .feynman/npm
+
+          consumer="$RUNNER_TEMP/feynman-consumer"
+          mkdir -p "$consumer"
+          (cd "$consumer" && npm init -y >/dev/null)
+          npm install --prefix "$consumer" --omit=dev --no-audit "$tarball"
+          npm audit --omit=dev --prefix "$consumer"
+
+          bin="$consumer/node_modules/.bin/feynman"
+          test "$("$bin" --version | tail -1)" = "$(node -p "require('./package.json').version")"
+          "$bin" --help >/dev/null
+          HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
+          HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
+            "$consumer/node_modules/@companion-ai/feynman"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+  windows-native-installer-pr:
+    if: github.event_name == 'pull_request'
+    name: Windows native installer (PR)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Build Windows native ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          npm ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed: $LASTEXITCODE" }
+
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw "npm run build failed: $LASTEXITCODE" }
+
+          npm run build:native-bundle
+          if ($LASTEXITCODE -ne 0) {
+            throw "npm run build:native-bundle failed: $LASTEXITCODE"
+          }
+
+          $version = node -p "require('./package.json').version"
+          if ($LASTEXITCODE -ne 0) { throw "Could not read package version" }
+
+          $archive = Join-Path $PWD "dist/release/feynman-$version-win32-x64.zip"
+          if (-not (Test-Path -LiteralPath $archive)) {
+            throw "Expected native archive was not produced: $archive"
+          }
+          if ((Get-Item -LiteralPath $archive).Length -eq 0) {
+            throw "Native archive is empty: $archive"
+          }
+
+      - name: Install candidate with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $version = node -p "require('./package.json').version"
+          if ($LASTEXITCODE -ne 0) { throw "Could not read package version" }
+
+          $archive = Join-Path $PWD "dist/release/feynman-$version-win32-x64.zip"
+          & ./scripts/verify-windows-installer.ps1 `
+            -ArchivePath $archive `
+            -Version $version
+
+      - name: Install candidate with PowerShell Core
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $version = node -p "require('./package.json').version"
+          if ($LASTEXITCODE -ne 0) { throw "Could not read package version" }
+
+          $archive = Join-Path $PWD "dist/release/feynman-$version-win32-x64.zip"
+          & ./scripts/verify-windows-installer.ps1 `
+            -ArchivePath $archive `
+            -Version $version

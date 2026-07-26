@@ -68,6 +68,7 @@ test("normalizeThinkingLevel accepts the latest Pi thinking levels", () => {
 	assert.equal(normalizeThinkingLevel("medium"), "medium");
 	assert.equal(normalizeThinkingLevel("high"), "high");
 	assert.equal(normalizeThinkingLevel("xhigh"), "xhigh");
+	assert.equal(normalizeThinkingLevel("max"), "max");
 });
 
 test("normalizeThinkingLevel rejects unknown values", () => {
@@ -75,7 +76,7 @@ test("normalizeThinkingLevel rejects unknown values", () => {
 	assert.equal(normalizeThinkingLevel(undefined), undefined);
 });
 
-test("normalizeFeynmanSettings seeds the fast core package set", () => {
+test("normalizeFeynmanSettings seeds the fast core package set", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -84,13 +85,13 @@ test("normalizeFeynmanSettings seeds the fast core package set", () => {
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, "{}\n", "utf8");
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: string[] };
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
 });
 
-test("normalizeFeynmanSettings prunes the legacy slow default package set", () => {
+test("normalizeFeynmanSettings prunes the legacy slow default package set", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -99,9 +100,14 @@ test("normalizeFeynmanSettings prunes the legacy slow default package set", () =
 	writeFileSync(
 		settingsPath,
 		JSON.stringify(
-			{
-				packages: [
-					...CORE_PACKAGE_SOURCES,
+				{
+					packages: [
+						"npm:@companion-ai/alpha-hub",
+						"npm:pi-subagents",
+						"npm:pi-btw",
+						"npm:pi-docparser",
+						"npm:pi-web-access",
+						"npm:pi-otel",
 					"npm:pi-generative-ui",
 				],
 			},
@@ -113,13 +119,13 @@ test("normalizeFeynmanSettings prunes the legacy slow default package set", () =
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, "{}\n", "utf8");
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: string[] };
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
 });
 
-test("normalizeFeynmanSettings prunes the legacy Devkade telemetry default package", () => {
+test("normalizeFeynmanSettings prunes the legacy Devkade telemetry default package", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -142,13 +148,13 @@ test("normalizeFeynmanSettings prunes the legacy Devkade telemetry default packa
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, "{}\n", "utf8");
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: string[] };
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
 });
 
-test("normalizeFeynmanSettings seeds the newest OpenAI GPT default exposed by Pi", () => {
+test("normalizeFeynmanSettings seeds the newest OpenAI GPT default exposed by Pi", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -156,9 +162,9 @@ test("normalizeFeynmanSettings seeds the newest OpenAI GPT default exposed by Pi
 
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "openai-test-key" } }) + "\n", "utf8");
-	const recommendation = chooseRecommendedModel(authPath);
+	const recommendation = await chooseRecommendedModel(authPath);
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
 		defaultProvider?: string;
@@ -167,7 +173,7 @@ test("normalizeFeynmanSettings seeds the newest OpenAI GPT default exposed by Pi
 	assert.equal(`${settings.defaultProvider}/${settings.defaultModel}`, recommendation?.spec);
 });
 
-test("normalizeFeynmanSettings replaces an unavailable stale default with the current default", () => {
+test("normalizeFeynmanSettings replaces an unavailable stale default with the current default", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -180,9 +186,9 @@ test("normalizeFeynmanSettings replaces an unavailable stale default with the cu
 	);
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "openai-test-key" } }) + "\n", "utf8");
-	const recommendation = chooseRecommendedModel(authPath);
+	const recommendation = await chooseRecommendedModel(authPath);
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
 		defaultProvider?: string;
@@ -191,7 +197,7 @@ test("normalizeFeynmanSettings replaces an unavailable stale default with the cu
 	assert.equal(`${settings.defaultProvider}/${settings.defaultModel}`, recommendation?.spec);
 });
 
-test("normalizeFeynmanSettings seeds OpenCode Go Kimi as the preferred OpenCode Go default", () => {
+test("normalizeFeynmanSettings seeds OpenCode Go Kimi as the preferred OpenCode Go default", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -200,7 +206,7 @@ test("normalizeFeynmanSettings seeds OpenCode Go Kimi as the preferred OpenCode 
 	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
 	writeFileSync(authPath, JSON.stringify({ "opencode-go": { type: "api_key", key: "opencode-test-key" } }) + "\n", "utf8");
 
-	normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
 		defaultProvider?: string;
@@ -250,7 +256,7 @@ test("supportsNativePackageSources disables sqlite-backed packages on Node 23+",
 	assert.equal(supportsNativePackageSources("24.8.0"), false);
 });
 
-test("normalizeFeynmanSettings prunes legacy package defaults to the lean research core", () => {
+test("normalizeFeynmanSettings prunes legacy package defaults to the lean research core", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
 	const bundledSettingsPath = join(root, "bundled-settings.json");
@@ -284,14 +290,14 @@ test("normalizeFeynmanSettings prunes legacy package defaults to the lean resear
 	const originalVersion = process.versions.node;
 	Object.defineProperty(process.versions, "node", { value: "24.0.0", configurable: true });
 	try {
-		normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+		await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
 	} finally {
 		Object.defineProperty(process.versions, "node", { value: originalVersion, configurable: true });
 	}
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: string[] };
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
-	assert.equal((settings.packages as string[] | undefined)?.includes("npm:pi-btw"), true);
+	assert.equal((settings.packages as string[] | undefined)?.some((source) => source.startsWith("npm:pi-btw@")), true);
 	for (const source of NATIVE_PACKAGE_SOURCES) {
 		assert.equal((settings.packages as string[] | undefined)?.includes(source), false);
 	}

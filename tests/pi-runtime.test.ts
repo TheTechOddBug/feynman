@@ -388,11 +388,20 @@ test("ensureFeynmanCommandShim creates a repo-local feynman launcher", () => {
 test("ensureFeynmanWorkspaceScaffold creates default artifact directories", () => {
 	const workingDir = mkdtempSync(join(tmpdir(), "feynman-workspace-scaffold-"));
 
-	ensureFeynmanWorkspaceScaffold(workingDir);
+	assert.equal(ensureFeynmanWorkspaceScaffold(workingDir), true);
 
 	for (const relPath of ["outputs/.plans", "outputs/.drafts", "papers", "notes"]) {
 		assert.equal(existsSync(join(workingDir, relPath)), true, relPath);
 	}
+});
+
+test("ensureFeynmanWorkspaceScaffold does not block read-only research sessions", () => {
+	const workingDir = mkdtempSync(join(tmpdir(), "feynman-workspace-readonly-"));
+	const permissionError = Object.assign(new Error("read-only filesystem"), { code: "EROFS" });
+
+	assert.equal(ensureFeynmanWorkspaceScaffold(workingDir, () => {
+		throw permissionError;
+	}), false);
 });
 
 test("buildPiEnv uses pre-resolved executable paths when provided", () => {
@@ -473,6 +482,20 @@ test("resolvePiPaths falls back to the vendored runtime workspace in packed inst
 	assert.equal(paths.piPackageRoot, join(appRoot, ".feynman", "npm", "node_modules", "@earendil-works", "pi-coding-agent"));
 	assert.equal(paths.piCliPath, join(piDist, "cli.js"));
 	assert.deepEqual(validatePiInstallation(appRoot), []);
+});
+
+test("package ships source modules required by source-loaded research extensions", () => {
+	const manifest = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { files?: string[] };
+	const packagedFiles = new Set(manifest.files ?? []);
+
+	for (const path of [
+		"src/config/paths.ts",
+		"src/workbench/data-root.ts",
+		"src/workbench/oauth-store.ts",
+		"src/workbench/settings-store.ts",
+	]) {
+		assert.equal(packagedFiles.has(path), true, `${path} must ship with the source-loaded research extension`);
+	}
 });
 
 test("resolveBundledAlphaCliPath resolves hoisted package installs before bundled fallbacks", () => {

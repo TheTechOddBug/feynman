@@ -280,13 +280,14 @@ export function initializePostHogTelemetry(options: {
 		loggerProvider = new LoggerProvider({
 			resource,
 			processors: [
-				new BatchLogRecordProcessor(
-					new OTLPLogExporter({
+				new BatchLogRecordProcessor({
+					exporter: new OTLPLogExporter({
 						url: `${config.host}/i/v1/logs`,
 						headers: { Authorization: `Bearer ${config.projectToken}` },
 					}),
-					{ scheduledDelayMillis: 250, exportTimeoutMillis: 3000 },
-				),
+					scheduledDelayMillis: 250,
+					exportTimeoutMillis: 3000,
+				}),
 			],
 		});
 		logs.setGlobalLoggerProvider(loggerProvider);

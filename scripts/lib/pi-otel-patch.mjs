@@ -17,11 +17,19 @@ export function patchPiOtelSource(relativePath, source) {
 	}
 
 	if (relativePath === "dist/otel/sdk.js") {
+		const compatibleResourceImport = `import * as otelResources from "@opentelemetry/resources";
+const createFeynmanResource = (attributes) => typeof otelResources.resourceFromAttributes === "function"
+    ? otelResources.resourceFromAttributes(attributes)
+    : new otelResources.Resource(attributes);`;
 		patched = patched
-			.replace('import { Resource } from "@opentelemetry/resources";', 'import { resourceFromAttributes } from "@opentelemetry/resources";')
+			// pi-otel can resolve its declared OpenTelemetry 1.x dependency in
+			// the agent workspace or Feynman's hoisted 2.x runtime dependency.
+			.replace('import { Resource } from "@opentelemetry/resources";', compatibleResourceImport)
+			.replace('import { resourceFromAttributes } from "@opentelemetry/resources";', compatibleResourceImport)
 			.replace('import { ATTR_PI_CWD } from "../attrs.js";\n', "")
 			.replace("\n        [ATTR_PI_CWD]: cfg.cwd,", "")
-			.replace("const resource = new Resource({", "const resource = resourceFromAttributes({")
+			.replace("const resource = new Resource({", "const resource = createFeynmanResource({")
+			.replace("const resource = resourceFromAttributes({", "const resource = createFeynmanResource({")
 			.replace(
 				"    // OTLP endpoints always carry an explicit port; refuse to fall back to\n    // 80/443, which could silently green-light an unrelated service.\n    if (!u.port)\n        return Promise.resolve(false);\n    return probeTcp(u.hostname || \"127.0.0.1\", Number(u.port), timeoutMs);",
 				"    const defaultPort = u.protocol === \"https:\" ? 443 : u.protocol === \"http:\" ? 80 : undefined;\n    const port = u.port ? Number(u.port) : defaultPort;\n    if (!port)\n        return Promise.resolve(false);\n    return probeTcp(u.hostname || \"127.0.0.1\", port, timeoutMs);",

@@ -1,10 +1,11 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
+import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
@@ -12,52 +13,69 @@ import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mj
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
+import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
+import { createDeterministicTarGz } from "./lib/deterministic-archive.mjs";
+import {
+	computeRuntimeInputHash,
+	computeRuntimeTreeHash,
+	filesMatch,
+	runtimeArchiveMatches,
+	workspacePackagesMatch,
+	writeFileSha256,
+} from "./lib/runtime-workspace-integrity.mjs";
 
 const appRoot = resolve(import.meta.dirname, "..");
 const settingsPath = resolve(appRoot, ".feynman", "settings.json");
 const packageJsonPath = resolve(appRoot, "package.json");
 const packageLockPath = resolve(appRoot, "package-lock.json");
 const feynmanDir = resolve(appRoot, ".feynman");
+const runtimePackageLockPath = resolve(feynmanDir, "runtime-package-lock.json");
 const workspaceDir = resolve(appRoot, ".feynman", "npm");
 const workspaceNodeModulesDir = resolve(workspaceDir, "node_modules");
 const manifestPath = resolve(workspaceDir, ".runtime-manifest.json");
 const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
 const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
+const workspaceArchiveDigestPath = resolve(feynmanDir, "runtime-workspace.sha256");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.80.6";
+const PI_RUNTIME_FALLBACK_VERSION = "0.82.1";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
-	"@opentelemetry/core": "2.8.0",
-	"@opentelemetry/exporter-logs-otlp-grpc": "0.219.0",
-	"@opentelemetry/exporter-logs-otlp-http": "0.219.0",
-	"@opentelemetry/exporter-logs-otlp-proto": "0.219.0",
-	"@opentelemetry/exporter-metrics-otlp-grpc": "0.219.0",
-	"@opentelemetry/exporter-metrics-otlp-http": "0.219.0",
-	"@opentelemetry/exporter-metrics-otlp-proto": "0.219.0",
-	"@opentelemetry/exporter-prometheus": "0.219.0",
-	"@opentelemetry/exporter-trace-otlp-grpc": "0.219.0",
-	"@opentelemetry/exporter-trace-otlp-http": "0.219.0",
-	"@opentelemetry/exporter-trace-otlp-proto": "0.219.0",
-	"@opentelemetry/exporter-zipkin": "2.8.0",
-	"@opentelemetry/instrumentation": "0.219.0",
-	"@opentelemetry/otlp-exporter-base": "0.219.0",
-	"@opentelemetry/otlp-grpc-exporter-base": "0.219.0",
-	"@opentelemetry/otlp-transformer": "0.219.0",
-	"@opentelemetry/propagator-b3": "2.8.0",
-	"@opentelemetry/propagator-jaeger": "2.8.0",
-	"@opentelemetry/resources": "2.8.0",
-	"@opentelemetry/sdk-logs": "0.219.0",
-	"@opentelemetry/sdk-metrics": "2.8.0",
-	"@opentelemetry/sdk-node": "0.219.0",
-	"@opentelemetry/sdk-trace-base": "2.8.0",
-	"@opentelemetry/sdk-trace-node": "2.8.0",
+	"@modelcontextprotocol/sdk": {
+		"@hono/node-server": "2.0.12",
+	},
+	"@opentelemetry/core": "2.10.0",
+	"@opentelemetry/exporter-logs-otlp-grpc": "0.221.0",
+	"@opentelemetry/exporter-logs-otlp-http": "0.221.0",
+	"@opentelemetry/exporter-logs-otlp-proto": "0.221.0",
+	"@opentelemetry/exporter-metrics-otlp-grpc": "0.221.0",
+	"@opentelemetry/exporter-metrics-otlp-http": "0.221.0",
+	"@opentelemetry/exporter-metrics-otlp-proto": "0.221.0",
+	"@opentelemetry/exporter-prometheus": "0.221.0",
+	"@opentelemetry/exporter-trace-otlp-grpc": "0.221.0",
+	"@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+	"@opentelemetry/exporter-trace-otlp-proto": "0.221.0",
+	"@opentelemetry/exporter-zipkin": "2.10.0",
+	"@opentelemetry/instrumentation": "0.221.0",
+	"@opentelemetry/otlp-exporter-base": "0.221.0",
+	"@opentelemetry/otlp-grpc-exporter-base": "0.221.0",
+	"@opentelemetry/otlp-transformer": "0.221.0",
+	"@opentelemetry/propagator-b3": "2.10.0",
+	"@opentelemetry/propagator-jaeger": "2.10.0",
+	"@opentelemetry/resources": "2.10.0",
+	"@opentelemetry/sdk-logs": "0.221.0",
+	"@opentelemetry/sdk-metrics": "2.10.0",
+	"@opentelemetry/sdk-node": "0.221.0",
+	"@opentelemetry/sdk-trace-base": "2.10.0",
+	"@opentelemetry/sdk-trace-node": "2.10.0",
+	"brace-expansion": "5.0.8",
 };
 const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
 	"@earendil-works/pi-tui",
+	"brace-expansion",
 	"typebox",
 ];
 const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
@@ -78,6 +96,17 @@ function supportsNativePackageSources(version = process.versions.node) {
 function parsePackageName(spec) {
 	const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@.+)?$/);
 	return match?.[1] ?? spec;
+}
+
+function runtimeDependencies(packageSpecs) {
+	return Object.fromEntries(packageSpecs.map((spec) => {
+		const name = parsePackageName(spec);
+		const version = spec.startsWith(`${name}@`) ? spec.slice(name.length + 1) : "";
+		if (!version) {
+			throw new Error(`Runtime package must use an exact spec: ${spec}`);
+		}
+		return [name, version];
+	}));
 }
 
 function filterUnsupportedPackageSpecs(packageSpecs) {
@@ -119,40 +148,15 @@ function arraysMatch(left, right) {
 	return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function hashFile(path) {
-	if (!existsSync(path)) {
-		return null;
-	}
-	return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
 function getRuntimeInputHash() {
-	const hash = createHash("sha256");
-	for (const path of [
-		resolve(appRoot, "scripts", "prepare-runtime-workspace.mjs"),
-		packageJsonPath,
-		packageLockPath,
-		settingsPath,
-		resolve(appRoot, "scripts", "lib", "pi-agent-core-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-extension-loader-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-tui-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-web-access-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-subagents-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-otel-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "pi-session-search-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "alpha-hub-auth-patch.mjs"),
-		resolve(appRoot, "scripts", "lib", "alpha-hub-search-patch.mjs"),
-	]) {
-		hash.update(path);
-		hash.update("\0");
-		hash.update(hashFile(path) ?? "missing");
-		hash.update("\0");
-	}
-	return hash.digest("hex");
+	return computeRuntimeInputHash(appRoot);
 }
 
 function workspaceIsCurrent(packageSpecs) {
 	if (!existsSync(manifestPath) || !existsSync(workspaceNodeModulesDir)) {
+		return false;
+	}
+	if (!filesMatch(resolve(workspaceDir, "package-lock.json"), runtimePackageLockPath)) {
 		return false;
 	}
 
@@ -165,6 +169,12 @@ function workspaceIsCurrent(packageSpecs) {
 			return false;
 		}
 		if (
+			typeof manifest.runtimeTreeHash !== "string" ||
+			computeRuntimeTreeHash(workspaceDir) !== manifest.runtimeTreeHash
+		) {
+			return false;
+		}
+		if (
 			manifest.nodeAbi !== process.versions.modules ||
 			manifest.platform !== process.platform ||
 			manifest.arch !== process.arch ||
@@ -173,13 +183,13 @@ function workspaceIsCurrent(packageSpecs) {
 			return false;
 		}
 
-		return packageSpecs.every((spec) => existsSync(resolve(workspaceNodeModulesDir, parsePackageName(spec))));
+		return workspacePackagesMatch(workspaceNodeModulesDir, packageSpecs);
 	} catch {
 		return false;
 	}
 }
 
-function writeWorkspacePackageJson() {
+function writeWorkspacePackageJson(packageSpecs) {
 	writeFileSync(
 		workspacePackageJsonPath,
 		JSON.stringify(
@@ -187,6 +197,7 @@ function writeWorkspacePackageJson() {
 				name: "feynman-runtime",
 				private: true,
 				overrides: RUNTIME_PACKAGE_OVERRIDES,
+				dependencies: runtimeDependencies(packageSpecs),
 			},
 			null,
 			2,
@@ -209,25 +220,63 @@ function childNpmInstallEnv() {
 	};
 }
 
-function prepareWorkspace(packageSpecs) {
-	rmSync(workspaceDir, { recursive: true, force: true });
-	mkdirSync(workspaceDir, { recursive: true });
-	writeWorkspacePackageJson();
-
-	if (packageSpecs.length === 0) {
-		return;
-	}
-
+function runWorkspaceNpm(args) {
 	const result = spawnSync(
 		process.env.npm_execpath ? process.execPath : "npm",
 		process.env.npm_execpath
-			? [process.env.npm_execpath, "install", "--prefer-online", "--no-audit", "--no-fund", "--no-dry-run", "--legacy-peer-deps", "--loglevel", "error", "--prefix", workspaceDir, ...packageSpecs]
-			: ["install", "--prefer-online", "--no-audit", "--no-fund", "--no-dry-run", "--legacy-peer-deps", "--loglevel", "error", "--prefix", workspaceDir, ...packageSpecs],
+			? [process.env.npm_execpath, ...args]
+			: args,
 		{ stdio: "inherit", env: childNpmInstallEnv() },
 	);
 	if (result.status !== 0) {
 		process.exit(result.status ?? 1);
 	}
+}
+
+function prepareWorkspace(packageSpecs, refreshRuntimeLock) {
+	rmSync(workspaceDir, { recursive: true, force: true });
+	mkdirSync(workspaceDir, { recursive: true });
+	writeWorkspacePackageJson(packageSpecs);
+
+	if (packageSpecs.length === 0) {
+		return;
+	}
+
+	if (refreshRuntimeLock) {
+		runWorkspaceNpm([
+			"install",
+			"--save-exact",
+			"--prefer-online",
+			"--no-audit",
+			"--no-fund",
+			"--no-dry-run",
+			"--legacy-peer-deps",
+			"--loglevel",
+			"error",
+			"--prefix",
+			workspaceDir,
+			...packageSpecs,
+		]);
+		return;
+	}
+
+	if (!existsSync(runtimePackageLockPath)) {
+		throw new Error(
+			"Missing .feynman/runtime-package-lock.json. Run npm run runtime:lock to create it.",
+		);
+	}
+	cpSync(runtimePackageLockPath, resolve(workspaceDir, "package-lock.json"));
+	runWorkspaceNpm([
+		"ci",
+		"--no-audit",
+		"--no-fund",
+		"--no-dry-run",
+		"--legacy-peer-deps",
+		"--loglevel",
+		"error",
+		"--prefix",
+		workspaceDir,
+	]);
 }
 
 function writeManifest(packageSpecs) {
@@ -237,7 +286,7 @@ function writeManifest(packageSpecs) {
 			{
 				packageSpecs,
 				runtimeInputHash: getRuntimeInputHash(),
-				generatedAt: new Date().toISOString(),
+				runtimeTreeHash: computeRuntimeTreeHash(workspaceDir),
 				nodeAbi: process.versions.modules,
 				nodeVersion: process.version,
 				platform: process.platform,
@@ -376,6 +425,13 @@ function patchBundledPiExtensionLoader() {
 	return patchScopedPiWorkspaceFile("pi-coding-agent", "dist/core/extensions/loader.js", patchPiExtensionLoaderSource);
 }
 
+function patchBundledPiModelRuntime() {
+	let changed = false;
+	changed = patchScopedPiWorkspaceFile("pi-coding-agent", "dist/core/model-registry.js", patchPiModelRegistrySource) || changed;
+	changed = patchScopedPiWorkspaceFile("pi-coding-agent", "dist/core/model-runtime.js", patchPiModelRegistrySource) || changed;
+	return changed;
+}
+
 function patchBundledPiInteractiveTheme() {
 	return patchScopedPiWorkspaceFile("pi-coding-agent", "dist/modes/interactive/theme/theme.js", patchPiInteractiveThemeSource);
 }
@@ -467,11 +523,30 @@ function patchBundledAlphaHub() {
 	return changed;
 }
 
+function patchMcpSdkManifest(nodeModulesDir) {
+	const manifestPath = resolve(nodeModulesDir, "@modelcontextprotocol", "sdk", "package.json");
+	if (!existsSync(manifestPath)) {
+		throw new Error(`Required @modelcontextprotocol/sdk manifest not found: ${manifestPath}`);
+	}
+	const source = readFileSync(manifestPath, "utf8");
+	const patched = patchMcpSdkPackageJsonSource(source);
+	if (patched === source) {
+		return false;
+	}
+	writeFileSync(manifestPath, patched, "utf8");
+	return true;
+}
+
 function patchBundledRuntime() {
 	let changed = false;
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
+	changed = patchBundledPiModelRuntime() || changed;
+	changed = patchPiBraceExpansionTree(
+		workspaceNodeModulesDir,
+		resolve(appRoot, "node_modules", "brace-expansion"),
+	) || changed;
 	changed = patchBundledPiInteractiveTheme() || changed;
 	changed = patchBundledPiTui() || changed;
 	changed = patchBundledPiWebAccess() || changed;
@@ -479,51 +554,61 @@ function patchBundledRuntime() {
 	changed = patchBundledPiOtel() || changed;
 	changed = patchBundledPiSessionSearch() || changed;
 	changed = patchBundledAlphaHub() || changed;
+	changed = patchMcpSdkManifest(workspaceNodeModulesDir) || changed;
 	return changed;
 }
 
-function archiveIsCurrent() {
-	if (!existsSync(workspaceArchivePath) || !existsSync(manifestPath)) {
-		return false;
-	}
-
-	return statSync(workspaceArchivePath).mtimeMs >= statSync(manifestPath).mtimeMs;
-}
-
-function createWorkspaceArchive() {
-	rmSync(workspaceArchivePath, { force: true });
-
-	const result = spawnSync("tar", ["-czf", workspaceArchivePath, "-C", feynmanDir, "npm"], {
-		stdio: "inherit",
+function archiveIsCurrent(packageSpecs) {
+	return runtimeArchiveMatches({
+		archivePath: workspaceArchivePath,
+		digestPath: workspaceArchiveDigestPath,
+		lockPath: runtimePackageLockPath,
+		manifestPath,
+		packageSpecs,
+		runtimeInputHash: getRuntimeInputHash(),
 	});
-	if (result.status !== 0) {
-		process.exit(result.status ?? 1);
-	}
 }
 
-const packageSpecs = readPackageSpecs();
+async function createWorkspaceArchive() {
+	rmSync(workspaceArchivePath, { force: true });
+	await createDeterministicTarGz(workspaceDir, workspaceArchivePath);
+	writeFileSha256(workspaceArchivePath, workspaceArchiveDigestPath);
+}
 
-if (workspaceIsCurrent(packageSpecs)) {
+patchMcpSdkManifest(resolve(appRoot, "node_modules"));
+patchPiBraceExpansionTree(
+	resolve(appRoot, "node_modules"),
+	resolve(appRoot, "node_modules", "brace-expansion"),
+);
+const packageSpecs = readPackageSpecs();
+const refreshRuntimeLock = process.argv.includes("--refresh-lock");
+const rebuildWorkspace = process.argv.includes("--rebuild");
+
+if (!refreshRuntimeLock && !rebuildWorkspace && workspaceIsCurrent(packageSpecs)) {
 	console.log("[feynman] vendored runtime workspace already up to date");
 	linkLegacyPiRuntimeAliases();
 	if (patchBundledRuntime()) {
 		writeManifest(packageSpecs);
 		console.log("[feynman] patched bundled Pi runtime");
 	}
-	if (archiveIsCurrent()) {
+	if (archiveIsCurrent(packageSpecs)) {
 		process.exit(0);
 	}
 	console.log("[feynman] refreshing runtime workspace archive...");
-	createWorkspaceArchive();
+	await createWorkspaceArchive();
 	console.log("[feynman] runtime workspace archive ready");
 	process.exit(0);
 }
 
-	console.log("[feynman] preparing vendored runtime workspace...");
-	prepareWorkspace(packageSpecs);
-	pruneWorkspace();
-	linkLegacyPiRuntimeAliases();
-	patchBundledRuntime();
-	writeManifest(packageSpecs);
-createWorkspaceArchive();
+console.log("[feynman] preparing vendored runtime workspace...");
+prepareWorkspace(packageSpecs, refreshRuntimeLock);
+pruneWorkspace();
+linkLegacyPiRuntimeAliases();
+patchBundledRuntime();
+if (refreshRuntimeLock) {
+	cpSync(resolve(workspaceDir, "package-lock.json"), runtimePackageLockPath);
+	console.log("[feynman] refreshed committed runtime lock");
+}
+writeManifest(packageSpecs);
+await createWorkspaceArchive();
 console.log("[feynman] vendored runtime workspace ready");

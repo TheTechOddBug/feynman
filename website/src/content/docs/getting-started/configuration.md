@@ -112,7 +112,7 @@ Per-subagent overrides are persisted in the synced agent files under `~/.feynman
 
 ## Thinking levels
 
-The `thinkingLevel` field controls how much reasoning the model does before responding. Available levels are `off`, `minimal`, `low`, `medium`, `high`, and `xhigh`. Higher levels produce more thorough analysis at the cost of latency and token usage. You can override per-session:
+The `thinkingLevel` field controls how much reasoning the model does before responding. Available levels are `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`, subject to the active model's capabilities. Higher levels produce more thorough analysis at the cost of latency and token usage. You can override per-session:
 
 ```bash
 feynman --thinking high

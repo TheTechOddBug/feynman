@@ -104,6 +104,18 @@ function packageLabel(source: string): string {
 		.replace(/@latest$/, "");
 }
 
+function packageSourceIdentity(source: string): string {
+	return source.startsWith("npm:") ? `npm:${packageNameFromSource(source)}` : source;
+}
+
+const CORE_PACKAGE_IDENTITIES = new Set(
+	(CORE_PACKAGE_SOURCES as readonly string[]).map(packageSourceIdentity),
+);
+
+function isCorePackageSource(source: string): boolean {
+	return CORE_PACKAGE_IDENTITIES.has(packageSourceIdentity(source));
+}
+
 function installedPackageRoot(workingDir: string, source: string): string | undefined {
 	if (!source.startsWith("npm:")) return undefined;
 	const packageName = packageNameFromSource(source);
@@ -158,7 +170,7 @@ function packageResourceCounts(summary: PackageManifestSummary | undefined): str
 
 function packageKindTags(source: string, optionalPresetName: string | undefined): string[] {
 	const tags = ["package"];
-	if ((CORE_PACKAGE_SOURCES as readonly string[]).includes(source)) tags.push("core");
+	if (isCorePackageSource(source)) tags.push("core");
 	if (optionalPresetName) tags.push("optional", optionalPresetName);
 	if (source.includes("web")) tags.push("web");
 	if (source.includes("doc")) tags.push("documents");
@@ -204,28 +216,29 @@ export function buildConnectorResources(workingDir: string): WorkbenchResource[]
 	const configuredEntries = Array.isArray(settings?.packages)
 		? settings.packages.map(packageSettingsEntry).filter((entry): entry is PackageSettingsEntry => Boolean(entry))
 		: [];
-	const configuredSources = new Set(configuredEntries.map((entry) => entry.source));
+	const configuredSources = new Set(configuredEntries.map((entry) => packageSourceIdentity(entry.source)));
 	const optionalPresets = listOptionalPackagePresets();
-	const optionalBySource = new Map(optionalPresets.flatMap((preset) => preset.sources.map((source) => [source, preset.name] as const)));
+	const optionalBySource = new Map(optionalPresets.flatMap((preset) => preset.sources.map((source) => [packageSourceIdentity(source), preset.name] as const)));
 	const packageEntries = [
 		...configuredEntries,
-		...filterPackageSourcesForCurrentNode(CORE_PACKAGE_SOURCES).filter((source) => !configuredSources.has(source)).map((source) => ({
+		...filterPackageSourcesForCurrentNode(CORE_PACKAGE_SOURCES).filter((source) => !configuredSources.has(packageSourceIdentity(source))).map((source) => ({
 			source,
 			filters: [],
 		})),
 		...optionalPresets.flatMap((preset) => preset.sources
-			.filter((source) => !configuredSources.has(source))
+			.filter((source) => !configuredSources.has(packageSourceIdentity(source)))
 			.map((source) => ({ source, filters: [] }))),
 	];
 	const seenPackageSources = new Set<string>();
 	const packages = packageEntries.flatMap((entry) => {
-		if (seenPackageSources.has(entry.source)) return [];
-		seenPackageSources.add(entry.source);
+		const sourceIdentity = packageSourceIdentity(entry.source);
+		if (seenPackageSources.has(sourceIdentity)) return [];
+		seenPackageSources.add(sourceIdentity);
 		const manifest = readPackageManifest(workingDir, entry.source);
 		const resourceCounts = packageResourceCounts(manifest);
-		const optionalPreset = optionalBySource.get(entry.source);
-		const configured = configuredSources.has(entry.source);
-		const core = (CORE_PACKAGE_SOURCES as readonly string[]).includes(entry.source);
+		const optionalPreset = optionalBySource.get(sourceIdentity);
+		const configured = configuredSources.has(sourceIdentity);
+		const core = isCorePackageSource(entry.source);
 		const installed = Boolean(manifest);
 		const details = [
 			entry.source,

@@ -27,7 +27,7 @@ irm https://feynman.is/install.ps1 | iex
 
 The one-line installer fetches the latest tagged release. To pin a version, pass it explicitly, for example `curl -fsSL https://feynman.is/install | bash -s -- 0.2.35`.
 
-The installer downloads a standalone native bundle with its own Node.js runtime.
+The installer downloads a standalone native bundle with its own pinned Node.js runtime and verifies the release SHA-256 before replacing an existing installation.
 
 To upgrade the standalone app later, rerun the installer. `feynman update` only refreshes installed Pi packages inside Feynman's environment; it does not replace the standalone runtime bundle itself.
 
@@ -169,6 +169,7 @@ Ask naturally or use slash commands as shortcuts.
 | `/autoresearch <idea>` | Bounded experiment loop with benchmark evidence |
 | `/watch <topic>` | Research watch baseline with optional scheduled follow-up |
 | `/btw <question>` | Side conversation while the main research agent is busy, with optional handoff back into the main thread |
+| `/thinking [level]` | View or set model reasoning effort (`off` through `max`, model permitting) without leaving the REPL |
 | `/outputs` | Browse all research artifacts |
 
 ---

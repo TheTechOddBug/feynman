@@ -13,7 +13,21 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.match(installer, /\$extractedBundleDir = Join-Path \$extractRoot \$bundleName/);
 	assert.match(installer, /Expand-Archive -LiteralPath \$archivePath -DestinationPath \$extractRoot -Force/);
 	assert.match(installer, /Downloaded archive did not contain the expected \$bundleName directory/);
+	assert.match(installer, /Get-FileHash -LiteralPath \$archivePath -Algorithm SHA256/);
+	assert.match(installer, /SHA-256 mismatch/);
+	assert.match(installer, /SHA256SUMS contains multiple checksum entries/);
+	assert.match(installer, /\$backupBundleDir = Join-Path \$tmpDir "previous-bundle"/);
+	assert.match(installer, /\$backupBinDir = Join-Path \$tmpDir "previous-bin"/);
+	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_BACKUP/);
+	assert.match(installer, /Move-Item -LiteralPath \$installBinDir -Destination \$backupBinDir/);
+	assert.match(installer, /Move-Item -LiteralPath \$stagedBinDir -Destination \$installBinDir/);
+	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP/);
 	assert.match(installer, /Move-Item -LiteralPath \$extractedBundleDir -Destination \$bundleDir/);
+	assert.match(installer, /\$candidatePs1 = Join-Path \$extractedBundleDir "feynman\.ps1"/);
+	assert.match(installer, /"ARM64" \{ return "x64" \}/);
+	assert.match(installer, /"Arm64" \{ return "x64" \}/);
+	assert.doesNotMatch(installer, /\$resolvedCommand\.Source -ne \$shimPath/);
+	assert.doesNotMatch(installer, /Move-Item -LiteralPath \$shimCandidate -Destination \$shimPath/);
 	assert.doesNotMatch(installer, /Expand-Archive -LiteralPath \$archivePath -DestinationPath \$installRoot -Force/);
 });
 

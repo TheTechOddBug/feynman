@@ -44,16 +44,66 @@ const RETURN_PATCHED = [
 ].join("\n");
 
 const HELPER_ANCHOR = "function formatValidationPath(error) {";
+const CURRENT_REGISTRY_HELPER_ANCHOR = "export class ModelRegistry {";
+const CURRENT_COMPATIBILITY_RETURN_ORIGINAL = "                return { ok: true, headers };";
+const CURRENT_COMPATIBILITY_RETURN_PATCHED = [
+	"                assertHeaderSafeRequestConfig(model.provider, undefined, headers);",
+	CURRENT_COMPATIBILITY_RETURN_ORIGINAL,
+].join("\n");
+const CURRENT_RESOLVED_RETURN_ORIGINAL =
+	"            return { ok: true, apiKey: resolution.auth.apiKey, headers, env: resolution.env };";
+const CURRENT_RESOLVED_RETURN_PATCHED = [
+	"            assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
+	CURRENT_RESOLVED_RETURN_ORIGINAL,
+].join("\n");
+const RUNTIME_HELPER_ANCHOR = "function mergeHeaders(base, override) {";
+const RUNTIME_REQUEST_AUTH = [
+	"        if (transformHeaders)",
+	"            headers = await transformHeaders(headers ?? {});",
+].join("\n");
+const RUNTIME_REQUEST_AUTH_PATCHED = [
+	RUNTIME_REQUEST_AUTH,
+	"        assertHeaderSafeRequestConfig(model.provider, providerOptions.apiKey ?? resolution.auth.apiKey, headers);",
+].join("\n");
 
 export function patchPiModelRegistrySource(source) {
 	if (source.includes("function assertHeaderSafeRequestConfig(")) {
 		return source;
 	}
-	if (!source.includes(RETURN_ORIGINAL) || !source.includes(HELPER_ANCHOR)) {
-		return source;
+	if (source.includes(RETURN_ORIGINAL) && source.includes(HELPER_ANCHOR)) {
+		let patched = source.replace(RETURN_ORIGINAL, RETURN_PATCHED);
+		patched = patched.replace(HELPER_ANCHOR, `${LATIN1_GUARD_HELPER}\n${HELPER_ANCHOR}`);
+		return patched;
 	}
-
-	let patched = source.replace(RETURN_ORIGINAL, RETURN_PATCHED);
-	patched = patched.replace(HELPER_ANCHOR, `${LATIN1_GUARD_HELPER}\n${HELPER_ANCHOR}`);
-	return patched;
+	if (
+		source.includes(CURRENT_COMPATIBILITY_RETURN_ORIGINAL) &&
+		source.includes(CURRENT_RESOLVED_RETURN_ORIGINAL) &&
+		source.includes(CURRENT_REGISTRY_HELPER_ANCHOR)
+	) {
+		let patched = source.replace(
+			CURRENT_COMPATIBILITY_RETURN_ORIGINAL,
+			CURRENT_COMPATIBILITY_RETURN_PATCHED,
+		);
+		patched = patched.replace(
+			CURRENT_RESOLVED_RETURN_ORIGINAL,
+			CURRENT_RESOLVED_RETURN_PATCHED,
+		);
+		patched = patched.replace(
+			CURRENT_REGISTRY_HELPER_ANCHOR,
+			`${LATIN1_GUARD_HELPER}\n${CURRENT_REGISTRY_HELPER_ANCHOR}`,
+		);
+		return patched;
+	}
+	if (source.includes(RUNTIME_REQUEST_AUTH) && source.includes(RUNTIME_HELPER_ANCHOR)) {
+		let patched = source.replace(RUNTIME_REQUEST_AUTH, RUNTIME_REQUEST_AUTH_PATCHED);
+		patched = patched.replace(RUNTIME_HELPER_ANCHOR, `${LATIN1_GUARD_HELPER}\n${RUNTIME_HELPER_ANCHOR}`);
+		return patched;
+	}
+	if (source.includes("class ModelRuntime")) {
+		throw new Error("Unsupported Pi ModelRuntime layout: required request-auth patch anchor was not found");
+	}
+	if (source.includes("class ModelRegistry")) {
+		throw new Error("Unsupported Pi ModelRegistry layout: required request-auth patch anchors were not found");
+	}
+	return source;
 }

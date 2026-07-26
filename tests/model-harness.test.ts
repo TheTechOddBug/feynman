@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
 	appendWorkflowFlagPositionals,
@@ -19,7 +19,9 @@ import {
 } from "../src/cli.js";
 import { buildModelStatusSnapshotFromRecords, chooseRecommendedModel, getAvailableModelRecords } from "../src/model/catalog.js";
 import { isLocalModelProvider, resolveModelProviderForCommand, setDefaultModelSpec } from "../src/model/commands.js";
+import { createModelRegistry } from "../src/model/registry.js";
 import { supportsNativePackageSources } from "../src/pi/package-presets.js";
+import { canonicalizeModelSpec, parseModelSpec } from "../src/pi/settings.js";
 
 function createAuthPath(contents: Record<string, unknown>): string {
 	const root = mkdtempSync(join(tmpdir(), "feynman-auth-"));
@@ -40,13 +42,13 @@ const MODEL_ENV_KEYS = [
 	"KIMI_API_KEY",
 ];
 
-function withoutModelEnv<T>(callback: () => T): T {
+async function withoutModelEnv<T>(callback: () => T | Promise<T>): Promise<T> {
 	const savedEnv = Object.fromEntries(MODEL_ENV_KEYS.map((key) => [key, process.env[key]]));
 	for (const key of MODEL_ENV_KEYS) {
 		delete process.env[key];
 	}
 	try {
-		return callback();
+		return await callback();
 	} finally {
 		for (const [key, value] of Object.entries(savedEnv)) {
 			if (value === undefined) {
@@ -58,8 +60,8 @@ function withoutModelEnv<T>(callback: () => T): T {
 	}
 }
 
-function getOpenAiGptModel(authPath: string): { provider: string; id: string } {
-	const recommendation = chooseRecommendedModel(authPath);
+async function getOpenAiGptModel(authPath: string): Promise<{ provider: string; id: string }> {
+	const recommendation = await chooseRecommendedModel(authPath);
 	assert.ok(recommendation);
 	const [provider, ...idParts] = recommendation.spec.split("/");
 	const id = idParts.join("/");
@@ -72,38 +74,67 @@ function asModelSpec(model: { provider: string; id: string }): string {
 	return `${model.provider}/${model.id}`;
 }
 
-test("chooseRecommendedModel prefers the strongest authenticated research model", () => {
+test("chooseRecommendedModel prefers the strongest authenticated research model", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 		anthropic: { type: "api_key", key: "anthropic-test-key" },
 	});
 
-	const recommendation = chooseRecommendedModel(authPath);
+	const recommendation = await chooseRecommendedModel(authPath);
 
-	assert.equal(recommendation?.spec, "anthropic/claude-opus-4-8");
+	assert.equal(recommendation?.spec, "anthropic/claude-opus-5");
 });
 
-test("chooseRecommendedModel prefers the newest OpenAI GPT exposed by Pi", () => {
+test("chooseRecommendedModel prefers the newest OpenAI GPT exposed by Pi", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
 
-	const recommendation = chooseRecommendedModel(authPath);
+	const recommendation = await chooseRecommendedModel(authPath);
 
 	assert.match(recommendation?.spec ?? "", /^openai\/gpt-\d/);
 	assert.match(recommendation?.reason ?? "", /newest authenticated OpenAI GPT model/);
 });
 
-test("resolveRankSynthesisModelSpec uses the recommended research model instead of a stale default", () => {
+test("resolveRankSynthesisModelSpec uses the recommended research model instead of a stale default", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
-	const recommendation = chooseRecommendedModel(authPath);
-	const explicitOpenAiModel = getOpenAiGptModel(authPath);
+	const recommendation = await chooseRecommendedModel(authPath);
+	const explicitOpenAiModel = await getOpenAiGptModel(authPath);
 	const explicitOpenAiSpec = asModelSpec(explicitOpenAiModel);
 
-	assert.equal(resolveRankSynthesisModelSpec(authPath, undefined), recommendation?.spec);
-	assert.equal(resolveRankSynthesisModelSpec(authPath, explicitOpenAiSpec), explicitOpenAiSpec);
+	assert.equal(await resolveRankSynthesisModelSpec(authPath, undefined), recommendation?.spec);
+	assert.equal(await resolveRankSynthesisModelSpec(authPath, explicitOpenAiSpec), explicitOpenAiSpec);
+});
+
+test("model specs preserve colon-bearing custom model ids and canonicalize Pi launch syntax", async () => {
+	const authPath = createAuthPath({
+		ollama: { type: "api_key", key: "ollama" },
+	});
+	const modelsPath = join(dirname(authPath), "models.json");
+	writeFileSync(
+		modelsPath,
+		JSON.stringify({
+			providers: {
+				ollama: {
+					baseUrl: "http://localhost:11434/v1",
+					api: "openai-completions",
+					apiKey: "ollama",
+					models: [{ id: "qwen3:0.6b" }],
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+	const registry = await createModelRegistry(authPath);
+
+	for (const spec of ["ollama/qwen3:0.6b", "ollama:qwen3:0.6b"]) {
+		const model = parseModelSpec(spec, registry);
+		assert.equal(model?.provider, "ollama");
+		assert.equal(model?.id, "qwen3:0.6b");
+		assert.equal(canonicalizeModelSpec(spec, registry), "ollama/qwen3:0.6b");
+	}
 });
 
 test("parsePositiveInteger rejects partial numeric strings", () => {
@@ -250,31 +281,31 @@ test("PaperRank synthesis CLI line labels explicit models as overrides", () => {
 	);
 });
 
-test("chooseRecommendedModel prefers OpenCode Zen Claude when OpenCode is the authenticated provider", () => {
-	withoutModelEnv(() => {
+test("chooseRecommendedModel prefers OpenCode Zen Claude when OpenCode is the authenticated provider", async () => {
+	await withoutModelEnv(async () => {
 		const authPath = createAuthPath({
 			opencode: { type: "api_key", key: "opencode-test-key" },
 		});
 
-		const recommendation = chooseRecommendedModel(authPath);
+		const recommendation = await chooseRecommendedModel(authPath);
 
-		assert.equal(recommendation?.spec, "opencode/claude-opus-4-8");
+		assert.equal(recommendation?.spec, "opencode/claude-opus-5");
 	});
 });
 
-test("chooseRecommendedModel prefers OpenCode Go Kimi when OpenCode Go is the authenticated provider", () => {
-	withoutModelEnv(() => {
+test("chooseRecommendedModel prefers OpenCode Go Kimi when OpenCode Go is the authenticated provider", async () => {
+	await withoutModelEnv(async () => {
 		const authPath = createAuthPath({
 			"opencode-go": { type: "api_key", key: "opencode-test-key" },
 		});
 
-		const recommendation = chooseRecommendedModel(authPath);
+		const recommendation = await chooseRecommendedModel(authPath);
 
 		assert.equal(recommendation?.spec, "opencode-go/kimi-k2.6");
 	});
 });
 
-test("getAvailableModelRecords excludes expired OAuth credentials without an env fallback", () => {
+test("getAvailableModelRecords excludes expired OAuth credentials without an env fallback", async () => {
 	const authPath = createAuthPath({
 		anthropic: {
 			type: "oauth",
@@ -284,12 +315,12 @@ test("getAvailableModelRecords excludes expired OAuth credentials without an env
 		},
 	});
 
-	const available = getAvailableModelRecords(authPath);
+	const available = await getAvailableModelRecords(authPath);
 
 	assert.equal(available.some((model) => model.provider === "anthropic"), false);
 });
 
-test("getAvailableModelRecords keeps unexpired OAuth credentials available", () => {
+test("getAvailableModelRecords keeps unexpired OAuth credentials available", async () => {
 	const authPath = createAuthPath({
 		anthropic: {
 			type: "oauth",
@@ -299,17 +330,17 @@ test("getAvailableModelRecords keeps unexpired OAuth credentials available", () 
 		},
 	});
 
-	const available = getAvailableModelRecords(authPath);
+	const available = await getAvailableModelRecords(authPath);
 
 	assert.equal(available.some((model) => model.provider === "anthropic"), true);
 });
 
-test("setDefaultModelSpec accepts a unique bare model id from authenticated models", () => {
+test("setDefaultModelSpec accepts a unique bare model id from authenticated models", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
 	const settingsPath = join(mkdtempSync(join(tmpdir(), "feynman-settings-")), "settings.json");
-	const openAiModel = getOpenAiGptModel(authPath);
+	const openAiModel = await getOpenAiGptModel(authPath);
 	const logs: string[] = [];
 	const originalLog = console.log;
 
@@ -317,7 +348,7 @@ test("setDefaultModelSpec accepts a unique bare model id from authenticated mode
 		logs.push([message, ...optionalParams].map(String).join(" "));
 	};
 	try {
-		setDefaultModelSpec(settingsPath, authPath, openAiModel.id);
+		await setDefaultModelSpec(settingsPath, authPath, openAiModel.id);
 	} finally {
 		console.log = originalLog;
 	}
@@ -331,15 +362,15 @@ test("setDefaultModelSpec accepts a unique bare model id from authenticated mode
 	assert.match(logs.join("\n"), /Non-Pro default model set to openai\//);
 });
 
-test("setDefaultModelSpec accepts provider:model syntax for authenticated models", () => {
+test("setDefaultModelSpec accepts provider:model syntax for authenticated models", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
 	const settingsPath = join(mkdtempSync(join(tmpdir(), "feynman-settings-")), "settings.json");
 
-	const openAiModel = getOpenAiGptModel(authPath);
+	const openAiModel = await getOpenAiGptModel(authPath);
 
-	setDefaultModelSpec(settingsPath, authPath, `openai:${openAiModel.id}`);
+	await setDefaultModelSpec(settingsPath, authPath, `openai:${openAiModel.id}`);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
 		defaultProvider?: string;
@@ -349,50 +380,50 @@ test("setDefaultModelSpec accepts provider:model syntax for authenticated models
 	assert.equal(settings.defaultModel, openAiModel.id);
 });
 
-test("resolveModelProviderForCommand falls back to API-key providers when OAuth is unavailable", () => {
+test("resolveModelProviderForCommand falls back to API-key providers when OAuth is unavailable", async () => {
 	const authPath = createAuthPath({});
 
-	const resolved = resolveModelProviderForCommand(authPath, "google");
+	const resolved = await resolveModelProviderForCommand(authPath, "google");
 
 	assert.equal(resolved?.kind, "api-key");
 	assert.equal(resolved?.id, "google");
 });
 
-test("resolveModelProviderForCommand supports LM Studio as a first-class local provider", () => {
+test("resolveModelProviderForCommand supports LM Studio as a first-class local provider", async () => {
 	const authPath = createAuthPath({});
 
-	const resolved = resolveModelProviderForCommand(authPath, "lm-studio");
+	const resolved = await resolveModelProviderForCommand(authPath, "lm-studio");
 
 	assert.equal(resolved?.kind, "api-key");
 	assert.equal(resolved?.id, "lm-studio");
 });
 
-test("resolveModelProviderForCommand supports LiteLLM as a first-class proxy provider", () => {
+test("resolveModelProviderForCommand supports LiteLLM as a first-class proxy provider", async () => {
 	const authPath = createAuthPath({});
 
-	const resolved = resolveModelProviderForCommand(authPath, "litellm");
+	const resolved = await resolveModelProviderForCommand(authPath, "litellm");
 
 	assert.equal(resolved?.kind, "api-key");
 	assert.equal(resolved?.id, "litellm");
 });
 
-test("resolveModelProviderForCommand prefers OAuth when a provider supports both auth modes", () => {
+test("resolveModelProviderForCommand prefers OAuth when a provider supports both auth modes", async () => {
 	const authPath = createAuthPath({});
 
-	const resolved = resolveModelProviderForCommand(authPath, "anthropic");
+	const resolved = await resolveModelProviderForCommand(authPath, "anthropic");
 
 	assert.equal(resolved?.kind, "oauth");
 	assert.equal(resolved?.id, "anthropic");
 });
 
-test("setDefaultModelSpec prefers the explicitly configured provider when a bare model id is ambiguous", () => {
+test("setDefaultModelSpec prefers the explicitly configured provider when a bare model id is ambiguous", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
 	const settingsPath = join(mkdtempSync(join(tmpdir(), "feynman-settings-")), "settings.json");
-	const openAiModel = getOpenAiGptModel(authPath);
+	const openAiModel = await getOpenAiGptModel(authPath);
 
-	setDefaultModelSpec(settingsPath, authPath, openAiModel.id);
+	await setDefaultModelSpec(settingsPath, authPath, openAiModel.id);
 
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
 		defaultProvider?: string;
@@ -417,25 +448,25 @@ test("buildModelStatusSnapshotFromRecords flags an invalid current model and sug
 	assert.ok(snapshot.guidance.some((line) => line.includes("Configured default model is unavailable")));
 });
 
-test("chooseRecommendedModel prefers the newest MiniMax over highspeed when that is the authenticated provider", () => {
-	withoutModelEnv(() => {
+test("chooseRecommendedModel prefers the newest MiniMax over highspeed when that is the authenticated provider", async () => {
+	await withoutModelEnv(async () => {
 		const authPath = createAuthPath({
 			minimax: { type: "api_key", key: "minimax-test-key" },
 		});
 
-		const recommendation = chooseRecommendedModel(authPath);
+		const recommendation = await chooseRecommendedModel(authPath);
 
 		assert.equal(recommendation?.spec, "minimax/MiniMax-M3");
 	});
 });
 
-test("chooseRecommendedModel prefers kimi-for-coding when Kimi Coding is the authenticated provider", () => {
-	withoutModelEnv(() => {
+test("chooseRecommendedModel prefers kimi-for-coding when Kimi Coding is the authenticated provider", async () => {
+	await withoutModelEnv(async () => {
 		const authPath = createAuthPath({
 			"kimi-coding": { type: "api_key", key: "kimi-test-key" },
 		});
 
-		const recommendation = chooseRecommendedModel(authPath);
+		const recommendation = await chooseRecommendedModel(authPath);
 
 		assert.equal(recommendation?.spec, "kimi-coding/kimi-for-coding");
 	});
@@ -518,37 +549,37 @@ test("resolvePiPromptOptions keeps top-level workflows interactive when stdin is
 	assert.deepEqual(resolvePiPromptOptions(undefined, [], undefined, workflows), {});
 });
 
-test("shouldRunInteractiveSetup triggers on first run when no default model is configured", () => {
+test("shouldRunInteractiveSetup triggers on first run when no default model is configured", async () => {
 	const authPath = createAuthPath({});
 
-	assert.equal(shouldRunInteractiveSetup(undefined, undefined, true, authPath), true);
+	assert.equal(await shouldRunInteractiveSetup(undefined, undefined, true, authPath), true);
 });
 
-test("shouldRunInteractiveSetup triggers when the configured default model is unavailable", () => {
+test("shouldRunInteractiveSetup triggers when the configured default model is unavailable", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
 
-	assert.equal(shouldRunInteractiveSetup(undefined, "anthropic/claude-opus-4-6", true, authPath), true);
+	assert.equal(await shouldRunInteractiveSetup(undefined, "anthropic/claude-opus-4-6", true, authPath), true);
 });
 
-test("shouldRunInteractiveSetup skips onboarding when the configured default model is available", () => {
+test("shouldRunInteractiveSetup skips onboarding when the configured default model is available", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
-	const openAiModel = getOpenAiGptModel(authPath);
+	const openAiModel = await getOpenAiGptModel(authPath);
 
-	assert.equal(shouldRunInteractiveSetup(undefined, asModelSpec(openAiModel), true, authPath), false);
+	assert.equal(await shouldRunInteractiveSetup(undefined, asModelSpec(openAiModel), true, authPath), false);
 });
 
-test("shouldRunInteractiveSetup skips onboarding for explicit model overrides or non-interactive terminals", () => {
+test("shouldRunInteractiveSetup skips onboarding for explicit model overrides or non-interactive terminals", async () => {
 	const authPath = createAuthPath({
 		openai: { type: "api_key", key: "openai-test-key" },
 	});
-	const openAiModel = getOpenAiGptModel(authPath);
+	const openAiModel = await getOpenAiGptModel(authPath);
 
-	assert.equal(shouldRunInteractiveSetup(asModelSpec(openAiModel), undefined, true, authPath), false);
-	assert.equal(shouldRunInteractiveSetup(undefined, undefined, false, authPath), false);
+	assert.equal(await shouldRunInteractiveSetup(asModelSpec(openAiModel), undefined, true, authPath), false);
+	assert.equal(await shouldRunInteractiveSetup(undefined, undefined, false, authPath), false);
 });
 
 test("isLocalModelProvider flags known local provider ids without consulting models.json", () => {

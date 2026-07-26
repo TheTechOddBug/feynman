@@ -8,6 +8,7 @@ node_modules
 .feynman/schedule-prompts.json
 dist
 *.tgz
+.feynman/runtime-workspace.sha256
 outputs/*
 !outputs/.gitkeep
 papers/*

@@ -36,7 +36,13 @@ import {
 	normalizeOptionalPackagePresetName,
 	resolvePackageUpdateSources,
 } from "./pi/package-presets.js";
-import { normalizeFeynmanSettings, normalizeThinkingLevel, parseModelSpec, type ThinkingLevel } from "./pi/settings.js";
+import {
+	canonicalizeModelSpec,
+	normalizeFeynmanSettings,
+	normalizeThinkingLevel,
+	parseModelSpec,
+	type ThinkingLevel,
+} from "./pi/settings.js";
 import { applyFeynmanPackageManagerEnv } from "./pi/runtime.js";
 import {
 	parseCitationExpansion,
@@ -86,7 +92,7 @@ import {
 	telemetryErrorProperties,
 } from "./telemetry/posthog.js";
 import { ASH, printAsciiHeader, printInfo, printPanel, printSection, RESET, SAGE } from "./ui/terminal.js";
-import { createModelRegistry } from "./model/registry.js";
+import { createModelRuntime } from "./model/registry.js";
 import { parseWorkbenchPort, serveWorkbench } from "./workbench/server.js";
 import {
 	cliCommandSections,
@@ -252,7 +258,7 @@ async function handleAlphaCommand(action: string | undefined): Promise<void> {
 
 async function handleModelCommand(subcommand: string | undefined, args: string[], feynmanSettingsPath: string, feynmanAuthPath: string): Promise<void> {
 	if (!subcommand || subcommand === "list") {
-		printModelList(feynmanSettingsPath, feynmanAuthPath);
+		await printModelList(feynmanSettingsPath, feynmanAuthPath);
 		return;
 	}
 
@@ -277,7 +283,7 @@ async function handleModelCommand(subcommand: string | undefined, args: string[]
 		if (!spec) {
 			throw new Error("Usage: feynman model set <provider/model|provider:model>");
 		}
-		setDefaultModelSpec(feynmanSettingsPath, feynmanAuthPath, spec);
+		await setDefaultModelSpec(feynmanSettingsPath, feynmanAuthPath, spec);
 		return;
 	}
 
@@ -574,19 +580,19 @@ export function resolveThinkingConfig(rawValue: string | undefined): {
 	};
 }
 
-export function shouldRunInteractiveSetup(
+export async function shouldRunInteractiveSetup(
 	explicitModelSpec: string | undefined,
 	currentModelSpec: string | undefined,
 	isInteractiveTerminal: boolean,
 	authPath: string,
-): boolean {
+): Promise<boolean> {
 	if (explicitModelSpec || !isInteractiveTerminal) {
 		return false;
 	}
 
 	const status = buildModelStatusSnapshotFromRecords(
-		getSupportedModelRecords(authPath),
-		getAuthenticatedModelRecords(authPath),
+		await getSupportedModelRecords(authPath),
+		await getAuthenticatedModelRecords(authPath),
 		currentModelSpec,
 	);
 	return !status.currentValid;
@@ -605,7 +611,7 @@ export function resolveWorkspaceInputPath(workingDir: string, value: string | un
 	return trimmed ? resolve(workingDir, trimmed) : undefined;
 }
 
-export function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpec: string | undefined): string | undefined {
+export async function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpec: string | undefined): Promise<string | undefined> {
 	const trimmed = explicitModelSpec?.trim();
 	if (trimmed) {
 		if (isProClassModelSpec(trimmed)) {
@@ -613,7 +619,7 @@ export function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpe
 		}
 		return trimmed;
 	}
-	return chooseRecommendedModel(authPath)?.spec;
+	return (await chooseRecommendedModel(authPath))?.spec;
 }
 
 function createRankModelSynthesizer(options: {
@@ -623,12 +629,12 @@ function createRankModelSynthesizer(options: {
 	modelSpec?: string;
 }): ModelSynthesizer {
 	return async ({ prompt }) => {
-		const modelRegistry = createModelRegistry(options.authPath);
+		const modelRuntime = await createModelRuntime(options.authPath);
 		const requestedModel = options.modelSpec?.trim();
 		if (requestedModel && isProClassModelSpec(requestedModel)) {
 			throw new Error(`Pro-class synthesis model disabled: ${requestedModel}. Choose a non-Pro model.`);
 		}
-		const recommendation = requestedModel ? undefined : chooseRecommendedModel(options.authPath);
+		const recommendation = requestedModel ? undefined : await chooseRecommendedModel(options.authPath);
 		const resolvedModelSpec = requestedModel || recommendation?.spec;
 		if (!resolvedModelSpec) {
 			throw new Error("No non-Pro model is available for PaperRank synthesis. Run `feynman model login` for a non-Pro model or pass `--synthesis-model provider/model` with a non-Pro model.");
@@ -636,7 +642,7 @@ function createRankModelSynthesizer(options: {
 		if (isProClassModelSpec(resolvedModelSpec)) {
 			throw new Error(`Pro-class synthesis model disabled: ${resolvedModelSpec}. Choose a non-Pro model.`);
 		}
-		const model = parseModelSpec(resolvedModelSpec, modelRegistry);
+		const model = parseModelSpec(resolvedModelSpec, modelRuntime);
 		if (!model) {
 			throw new Error(`Unknown synthesis model: ${resolvedModelSpec}`);
 		}
@@ -660,8 +666,7 @@ function createRankModelSynthesizer(options: {
 		const { session } = await createAgentSession({
 			cwd: options.cwd,
 			agentDir: options.agentDir,
-			authStorage: modelRegistry.authStorage,
-			modelRegistry,
+			modelRuntime,
 			model,
 			sessionManager: SessionManager.inMemory(options.cwd),
 			settingsManager,
@@ -952,10 +957,10 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	const feynmanAuthPath = resolve(feynmanAgentDir, "auth.json");
 	const { defaultThinkingLevel, launchThinkingLevel } = resolveThinkingConfig(values.thinking ?? process.env.FEYNMAN_THINKING);
 
-	normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+	await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
 
 	if (values.doctor) {
-		runDoctor({
+		await runDoctor({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -1014,7 +1019,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "doctor") {
-		runDoctor({
+		await runDoctor({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -1025,7 +1030,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "status") {
-		runStatus({
+		await runStatus({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -1288,7 +1293,8 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 		return;
 	}
 
-	const explicitModelSpec = values.model ?? process.env.FEYNMAN_MODEL;
+	const requestedExplicitModelSpec = values.model ?? process.env.FEYNMAN_MODEL;
+	let explicitModelSpec = requestedExplicitModelSpec;
 	const explicitServiceTier = normalizeServiceTier(values["service-tier"] ?? process.env.FEYNMAN_SERVICE_TIER);
 	const mode = values.mode;
 	if (mode !== undefined && mode !== "text" && mode !== "json" && mode !== "rpc") {
@@ -1300,19 +1306,20 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	if (explicitServiceTier) {
 		process.env.FEYNMAN_SERVICE_TIER = explicitServiceTier;
 	}
-	if (explicitModelSpec) {
-		if (isProClassModelSpec(explicitModelSpec)) {
-			throw new Error(`Pro-class model disabled: ${explicitModelSpec}. Choose a non-Pro model.`);
+	if (requestedExplicitModelSpec) {
+		if (isProClassModelSpec(requestedExplicitModelSpec)) {
+			throw new Error(`Pro-class model disabled: ${requestedExplicitModelSpec}. Choose a non-Pro model.`);
 		}
-		const modelRegistry = createModelRegistry(feynmanAuthPath);
-		const explicitModel = parseModelSpec(explicitModelSpec, modelRegistry);
-		if (!explicitModel) {
-			throw new Error(`Unknown model: ${explicitModelSpec}`);
+		const modelRuntime = await createModelRuntime(feynmanAuthPath);
+		const canonicalModelSpec = canonicalizeModelSpec(requestedExplicitModelSpec, modelRuntime);
+		if (!canonicalModelSpec) {
+			throw new Error(`Unknown model: ${requestedExplicitModelSpec}`);
 		}
+		explicitModelSpec = canonicalModelSpec;
 	}
 
 	const currentModelSpec = getCurrentModelSpec(feynmanSettingsPath);
-	if (shouldRunInteractiveSetup(
+	if (await shouldRunInteractiveSetup(
 		explicitModelSpec,
 		currentModelSpec,
 		Boolean(process.stdin.isTTY && process.stdout.isTTY),
@@ -1330,7 +1337,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 		if (!getCurrentModelSpec(feynmanSettingsPath)) {
 			return;
 		}
-		normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+		await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
 	}
 
 	const workflowCommandNames = new Set(readPromptSpecs(appRoot).filter((s) => s.topLevelCli).map((s) => s.name));
