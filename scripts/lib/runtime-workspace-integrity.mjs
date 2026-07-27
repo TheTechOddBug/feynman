@@ -215,7 +215,17 @@ export function computeRuntimeArchiveTreeHash(archivePath) {
 					} else if (type === "2") {
 						entries.push({ label, type: "symlink", value: linkPath });
 					} else if (type === "1") {
-						entries.push({ label, type: "hardlink", value: linkPath });
+						const targetPath = linkPath.replace(/^\.\//, "");
+						if (!targetPath.startsWith("npm/")) {
+							throw new Error(
+								`Runtime archive hardlink target is outside npm/: ${linkPath}`,
+							);
+						}
+						entries.push({
+							label,
+							type: "hardlink",
+							value: normalizeRelativePath(targetPath.slice("npm/".length)),
+						});
 					} else if (type !== "5") {
 						throw new Error(`Unsupported runtime archive entry type ${type}: ${archivePath}`);
 					}
@@ -228,9 +238,37 @@ export function computeRuntimeArchiveTreeHash(archivePath) {
 		offset = contentStart + Math.ceil(size / 512) * 512;
 	}
 	if (!sawWorkspace) throw new Error("Runtime archive does not contain the npm workspace");
-	entries.sort((left, right) => left.label.localeCompare(right.label));
-	const hash = createHash("sha256");
+	const entriesByLabel = new Map();
 	for (const entry of entries) {
+		if (entriesByLabel.has(entry.label)) {
+			throw new Error(`Duplicate runtime archive entry: ${entry.label}`);
+		}
+		entriesByLabel.set(entry.label, entry);
+	}
+	const resolveHardlink = (entry, seen = new Set()) => {
+		if (entry.type !== "hardlink") return entry;
+		if (seen.has(entry.label)) {
+			throw new Error(`Runtime archive hardlink cycle: ${[...seen, entry.label].join(" -> ")}`);
+		}
+		const target = entriesByLabel.get(entry.value);
+		if (!target) {
+			throw new Error(
+				`Runtime archive hardlink target is missing: ${entry.label} -> ${entry.value}`,
+			);
+		}
+		return resolveHardlink(target, new Set([...seen, entry.label]));
+	};
+	const normalizedEntries = entries.map((entry) => {
+		const resolved = resolveHardlink(entry);
+		return {
+			label: entry.label,
+			type: resolved.type,
+			value: resolved.value,
+		};
+	});
+	normalizedEntries.sort((left, right) => left.label.localeCompare(right.label));
+	const hash = createHash("sha256");
+	for (const entry of normalizedEntries) {
 		hash.update(entry.label);
 		hash.update("\0");
 		hash.update(entry.type);

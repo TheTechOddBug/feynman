@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-26 17:48 PDT — intake-sweep-windows-runtime-hardlinks
+
+- Objective: Repair PR `#192` Windows native job `89859997454` at exact head `8bf9f1a2e5af48787c2eb47eae3726b86cacb9c1` without weakening runtime archive integrity.
+- Fixed: Windows tar preserved npm-created NTFS hardlinks, while the live workspace hash treated each hardlink as its regular-file contents and the archive hash treated it as a distinct entry type. Runtime archive verification now resolves in-archive hardlinks to their target file or symlink content, rejects targets outside `npm/`, duplicate entries, missing targets, and cycles, and compares the same logical tree on every platform.
+- Verified: A minimal hardlink repro failed against the prior archive parser; the focused archive/runtime regression suite now passes (`8/8`), including the new hardlink normalization test. Root typecheck and `git diff --check` pass. Exact Windows native/install proof remains pending the next pushed-head CI run.
+- Next: Push the repair, require the complete PR matrix to pass, then finish clean-machine, merge, and release verification.
+
 ### 2026-07-26 17:16 PDT — intake-sweep-0-3-6-windows-ci-repair
 
 - Objective: Repair the first exact-head PR CI failure at `f5974f96ae9b1950ced68093c6ee1abdb9acc5d9` without weakening the release verifier.

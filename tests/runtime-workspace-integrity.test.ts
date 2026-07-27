@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import {
+	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
 	computeRuntimeTreeHash,
 	RUNTIME_INPUT_FILES,
@@ -13,6 +14,7 @@ import {
 	workspacePackagesMatch,
 	writeFileSha256,
 } from "../scripts/lib/runtime-workspace-integrity.mjs";
+import { createDeterministicTarGz } from "../scripts/lib/deterministic-archive.mjs";
 
 test("runtime workspace integrity checks installed versions and the exact archive digest", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-integrity-"));
@@ -124,6 +126,24 @@ test("runtime archive integrity rejects a lock that differs from the committed g
 		packageSpecs: specs,
 		runtimeInputHash,
 	}), false);
+});
+
+test("runtime archive tree hashes normalize tar hardlinks to file contents", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-hardlink-integrity-"));
+	const workspace = join(root, "npm");
+	const original = join(workspace, "original.txt");
+	const hardlink = join(workspace, "hardlink.txt");
+	const archivePath = join(root, "runtime-workspace.tgz");
+
+	mkdirSync(workspace, { recursive: true });
+	writeFileSync(original, "shared bytes\n");
+	linkSync(original, hardlink);
+	await createDeterministicTarGz(workspace, archivePath);
+
+	assert.equal(
+		computeRuntimeArchiveTreeHash(archivePath),
+		computeRuntimeTreeHash(workspace),
+	);
 });
 
 test("runtime input hashes are independent of the checkout root", () => {
