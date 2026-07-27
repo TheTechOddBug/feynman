@@ -42,3 +42,11 @@ test("website Windows installer stays synced with the packaged installer", () =>
 
 	assert.equal(websiteInstaller, installer);
 });
+
+test("Windows installer verifier defines every strict-mode install path", () => {
+	const verifier = readFileSync(resolve(appRoot, "scripts", "verify-windows-installer.ps1"), "utf8");
+
+	assert.match(verifier, /Set-StrictMode -Version 2\.0/);
+	assert.match(verifier, /\$installBinDir = Join-Path \$installRoot "bin"/);
+	assert.match(verifier, /\$env:PATH = "\$installBinDir;\$env:PATH"/);
+});

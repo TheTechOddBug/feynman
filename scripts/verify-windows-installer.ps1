@@ -149,6 +149,7 @@ server.listen(0, "127.0.0.1", () => {
   $installer = [scriptblock]::Create($installerSource)
 
   $installRoot = Join-Path $env:LOCALAPPDATA "Programs\feynman"
+  $installBinDir = Join-Path $installRoot "bin"
   $bundleDir = Join-Path $installRoot "feynman-$Version-win32-x64"
   $shim = Join-Path $installRoot "bin\feynman.cmd"
   $shimPs1 = Join-Path $installRoot "bin\feynman.ps1"
