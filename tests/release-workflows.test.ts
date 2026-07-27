@@ -9,6 +9,10 @@ test("pull-request release gates validate the merge candidate", () => {
 	assert.match(e2eWorkflow, /pull_request:\s*\n\s+branches: \[main\]/);
 	assert.doesNotMatch(e2eWorkflow, /github\.event\.pull_request\.head\.sha/);
 	assert.match(e2eWorkflow, /name: Release candidate \(PR\)/);
+	assert.match(e2eWorkflow, /name: Candidate consumer \(\$\{\{ matrix\.os \}\}, Node \$\{\{ matrix\.node \}\}\)/);
+	assert.match(e2eWorkflow, /name: pr-npm-package/);
+	assert.match(e2eWorkflow, /node: "22\.19\.0"/);
+	assert.match(e2eWorkflow, /node: "25"/);
 	assert.match(e2eWorkflow, /name: Windows native installer \(PR\)/);
 	assert.match(e2eWorkflow, /shell: powershell/);
 	assert.match(e2eWorkflow, /shell: pwsh/);
@@ -44,7 +48,10 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 	);
 	assert.match(publishWorkflow, /verify-package-consumers:/);
 	for (const os of ["ubuntu-latest", "macos-14", "windows-latest"]) {
-		assert.match(publishWorkflow, new RegExp(`- ${os}`));
+		assert.match(publishWorkflow, new RegExp(`- os: ${os}`));
+	}
+	for (const nodeVersion of ["22.19.0", "24.18.0", "25"]) {
+		assert.match(publishWorkflow, new RegExp(`node: "${nodeVersion.replace(/\./g, "\\.")}"`));
 	}
 	assert.match(publishWorkflow, /needs\.build-native-bundles\.result == 'success'/);
 	assert.match(publishWorkflow, /needs\.verify-package-consumers\.result == 'success'/);

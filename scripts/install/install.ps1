@@ -20,7 +20,9 @@ function Normalize-Version {
 }
 
 function Resolve-LatestReleaseVersion {
-  $page = Invoke-WebRequest -Uri "https://github.com/companion-inc/feynman/releases/latest"
+  $page = Invoke-WebRequest `
+    -Uri "https://github.com/companion-inc/feynman/releases/latest" `
+    -UseBasicParsing
   $match = [regex]::Match($page.Content, 'releases/tag/v([0-9][^"''<>\s]*)')
   if (-not $match.Success) {
     throw "Failed to resolve the latest Feynman release version."
@@ -105,7 +107,10 @@ try {
   $extractedBundleDir = Join-Path $extractRoot $bundleName
   Write-Host "==> Downloading $archiveName"
   try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
+    Invoke-WebRequest `
+      -Uri $downloadUrl `
+      -OutFile $archivePath `
+      -UseBasicParsing
   } catch {
     throw @"
 Failed to download $archiveName from:
@@ -122,7 +127,10 @@ Workarounds:
   }
 
   Write-Host "==> Verifying $archiveName"
-  Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath
+  Invoke-WebRequest `
+    -Uri $checksumsUrl `
+    -OutFile $checksumsPath `
+    -UseBasicParsing
   $escapedArchiveName = [regex]::Escape($archiveName)
   $checksumMatches = @(
     Select-String `

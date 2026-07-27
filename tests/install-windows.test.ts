@@ -16,6 +16,8 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.match(installer, /Get-FileHash -LiteralPath \$archivePath -Algorithm SHA256/);
 	assert.match(installer, /SHA-256 mismatch/);
 	assert.match(installer, /SHA256SUMS contains multiple checksum entries/);
+	assert.equal((installer.match(/Invoke-WebRequest/g) ?? []).length, 3);
+	assert.equal((installer.match(/-UseBasicParsing/g) ?? []).length, 3);
 	assert.match(installer, /\$backupBundleDir = Join-Path \$tmpDir "previous-bundle"/);
 	assert.match(installer, /\$backupBinDir = Join-Path \$tmpDir "previous-bin"/);
 	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_BACKUP/);

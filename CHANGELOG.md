@@ -8,8 +8,9 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 
 - Objective: Repair PR `#192` Windows native job `89859997454` at exact head `8bf9f1a2e5af48787c2eb47eae3726b86cacb9c1` without weakening runtime archive integrity.
 - Fixed: Windows tar preserved npm-created NTFS hardlinks, while the live workspace hash treated each hardlink as its regular-file contents and the archive hash treated it as a distinct entry type. Runtime archive verification now resolves in-archive hardlinks to their target file or symlink content, rejects targets outside `npm/`, duplicate entries, missing targets, and cycles, and compares the same logical tree on every platform.
-- Verified: A minimal hardlink repro failed against the prior archive parser; the focused archive/runtime regression suite now passes (`8/8`), including the new hardlink normalization test. Root typecheck and `git diff --check` pass. Exact Windows native/install proof remains pending the next pushed-head CI run.
-- Next: Push the repair, require the complete PR matrix to pass, then finish clean-machine, merge, and release verification.
+- Further fixed: All public Windows PowerShell downloads now use `-UseBasicParsing`, which Microsoft requires after the CVE-2025-54100 PowerShell 5.1 update to avoid an interactive script-execution prompt. PR and publish gates now reuse the exact packed candidate across Node `22.19.0`, `24.18.0`, and `25`, including Windows Node 25 plus macOS and Windows Node 24 consumers, instead of leaving the supported-major matrix manual and post-publication.
+- Verified: A minimal hardlink repro failed against the prior archive parser; the focused archive/runtime regression suite passes (`8/8`), the installer/workflow suite passes (`8/8`), actionlint passes, both public Windows installers are byte-identical, and root typecheck/full tests/build/architecture plus `git diff --check` passed at the hardlink commit (`642/642`). Exact Windows native/install and supported-major consumer proof remain pending the next pushed-head CI run.
+- Next: Push the remaining gate repairs, require the complete PR matrix to pass, then finish clean-machine, merge, and release verification.
 
 ### 2026-07-26 17:16 PDT — intake-sweep-0-3-6-windows-ci-repair
 
