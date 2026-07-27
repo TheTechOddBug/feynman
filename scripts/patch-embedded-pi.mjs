@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { FEYNMAN_LOGO_HTML } from "../logo.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
+import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
@@ -133,6 +134,21 @@ const WORKSPACE_SETUP_LOCK_STALE_MS = 300000;
 const NATIVE_PACKAGE_SPECS = new Set([
 	"@kaiserlich-dev/pi-session-search",
 ]);
+
+function patchMcpSdkManifest(nodeModulesRoot) {
+	const manifestPath = resolve(
+		nodeModulesRoot,
+		"@modelcontextprotocol",
+		"sdk",
+		"package.json",
+	);
+	if (!existsSync(manifestPath)) return;
+	const source = readFileSync(manifestPath, "utf8");
+	const patched = patchMcpSdkPackageJsonSource(source);
+	if (patched !== source) {
+		writeFileSync(manifestPath, patched, "utf8");
+	}
+}
 const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/npm warn deprecated node-domexception@1\.0\.0/i,
 	/npm notice/i,
@@ -794,6 +810,14 @@ for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegi
 const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
 patchPiBraceExpansionTree(resolve(appRoot, "node_modules"), safeBraceExpansionPath);
 patchPiBraceExpansionTree(workspaceRoot, safeBraceExpansionPath);
+for (const nodeModulesRoot of [
+	resolve(appRoot, "node_modules"),
+	resolve(appRoot, "node_modules", "@companion-ai", "alpha-hub", "node_modules"),
+	workspaceRoot,
+	resolve(workspaceRoot, "@companion-ai", "alpha-hub", "node_modules"),
+]) {
+	patchMcpSdkManifest(nodeModulesRoot);
+}
 
 for (const entryPath of [agentLoopPath, workspaceAgentLoopPath].filter(Boolean)) {
 	if (!existsSync(entryPath)) {

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import { patchMcpSdkPackageJsonSource } from "../scripts/lib/mcp-sdk-package-patch.mjs";
@@ -46,4 +48,15 @@ test("MCP SDK package patch fails closed on incompatible manifests", () => {
 			/Unsupported .* @hono\/node-server dependency/,
 		);
 	}
+});
+
+test("embedded runtime patch wires the MCP manifest repair into installed package graphs", () => {
+	const source = readFileSync(resolve("scripts", "patch-embedded-pi.mjs"), "utf8");
+	assert.match(
+		source,
+		/import \{ patchMcpSdkPackageJsonSource \} from "\.\/lib\/mcp-sdk-package-patch\.mjs";/,
+	);
+	assert.match(source, /function patchMcpSdkManifest\(nodeModulesRoot\)/);
+	assert.match(source, /resolve\(appRoot, "node_modules"\)/);
+	assert.match(source, /patchMcpSdkManifest\(nodeModulesRoot\)/);
 });

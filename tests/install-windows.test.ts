@@ -24,6 +24,11 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP/);
 	assert.match(installer, /Move-Item -LiteralPath \$extractedBundleDir -Destination \$bundleDir/);
 	assert.match(installer, /\$candidatePs1 = Join-Path \$extractedBundleDir "feynman\.ps1"/);
+	assert.match(
+		installer,
+		/& \$powerShellExecutable -NoProfile -ExecutionPolicy Bypass -File \$candidatePs1 --version/,
+	);
+	assert.doesNotMatch(installer, /@\(& \$candidate --version 2>&1\)/);
 	assert.match(installer, /"ARM64" \{ return "x64" \}/);
 	assert.match(installer, /"Arm64" \{ return "x64" \}/);
 	assert.doesNotMatch(installer, /\$resolvedCommand\.Source -ne \$shimPath/);
