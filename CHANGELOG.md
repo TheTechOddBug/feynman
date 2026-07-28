@@ -10,7 +10,7 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Found: `workflow_dispatch` could publish a previously absent version, but npm would correctly attest the certificate trigger as `workflow_dispatch`; post-publish and every later reconciliation would then fail the required `push` identity check.
 - Fixed: Manual runs may reconcile an already-published npm version and complete its GitHub release, but they fail before authorizing npm publication for a new version. The `publish-npm` job independently requires a push event.
 - Verified: The gate is scoped to `version-check`, executes before `should_publish_npm=true`, and the publication job has a second event guard. Adversarial review confirmed manual reconciliation remains fail-closed and found one test-only hardening gap, now fixed by scoping downstream skip-condition assertions to their owning jobs. Focused provenance/workflow tests (`7/7`), full tests (`652/652`), actionlint, and `git diff --check` pass.
-- Next: Push the exact follow-up and require the successor main workflow to verify the complete `0.3.6` identity without republishing.
+- Completed: Commit `a3aebe4` is on `main`; run `30375131813` verified the complete `0.3.6` identity without republishing. A disposable Daytona `daytona-large` sandbox re-ran the exact commit's focused suite (`7/7`), full suite (`652/652`), full/production audits, and clean-tree check on Node `24.18.0`, then was deleted.
 
 ### 2026-07-28 08:16 PDT — intake-sweep-0.3.6-release-completion
 
