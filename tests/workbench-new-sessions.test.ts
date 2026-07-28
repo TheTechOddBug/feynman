@@ -118,6 +118,19 @@ test("workbench state exposes Feynman model status for the model menu", async ()
 		assert.equal(payload.modelStatus?.current, "openai/gpt-5.5");
 		assert.ok(Array.isArray(payload.modelStatus?.availableModels));
 		assert.ok(Array.isArray(payload.modelStatus?.guidance));
+
+		writeFileSync(authPath, JSON.stringify({ openai: { type: "api_key", key: "openai-test-key" } }, null, 2) + "\n", "utf8");
+		const refreshedResponse = await fetch(`${handle.url}api/state`, {
+			headers: { cookie: "feynman_workbench=test-token" },
+		});
+		assert.equal(refreshedResponse.status, 200);
+		const refreshedPayload = await refreshedResponse.json() as {
+			modelStatus?: { availableModels: string[] };
+		};
+		assert.ok(
+			refreshedPayload.modelStatus?.availableModels.some((spec) => spec.startsWith("openai/")),
+			"model status must refresh after auth changes without restarting the workbench",
+		);
 	} finally {
 		await handle.close();
 		rmSync(root, { recursive: true, force: true });

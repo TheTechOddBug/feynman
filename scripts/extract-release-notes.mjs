@@ -13,15 +13,11 @@ if (!normalizedVersion) {
 
 const releasesPath = resolve(process.cwd(), "RELEASES.md");
 const source = readFileSync(releasesPath, "utf8");
-const notes =
-	extractReleaseNotes(source, normalizedVersion) ||
-	[
-		`## ${normalizedVersion}`,
-		"",
-		"- See RELEASES.md for the current release history.",
-		"- Standalone native bundles are attached below for macOS, Linux, and Windows.",
-		"",
-	].join("\n");
+const notes = extractReleaseNotes(source, normalizedVersion);
+if (!notes) {
+	console.error(`RELEASES.md has no section for ${normalizedVersion}`);
+	process.exit(1);
+}
 
 if (outputPath) {
 	writeFileSync(outputPath, `${notes.trim()}\n`, "utf8");

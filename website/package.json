@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "engines": {
-    "node": ">=20.19.0 <25"
+    "node": ">=22.22.0 <26"
   },
   "scripts": {
     "dev": "astro dev",
@@ -16,12 +16,12 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@astrojs/react": "^5.0.7",
+    "@astrojs/react": "^6.0.1",
     "@fontsource-variable/ibm-plex-sans": "^5.2.8",
     "@tailwindcss/vite": "^4.3.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "astro": "^6.4.4",
+    "astro": "^7.1.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.18.0",
@@ -35,22 +35,26 @@
   },
   "overrides": {
     "@modelcontextprotocol/sdk": {
-      "@hono/node-server": "1.19.14",
-      "hono": "4.12.26"
+      "@hono/node-server": "2.0.12",
+      "hono": "4.12.31"
     },
-    "hono": "4.12.26",
+    "hono": "4.12.31",
     "qs": "6.15.2",
     "express-rate-limit": "8.5.1",
     "ip-address": "10.2.0",
-    "postcss": "8.5.14",
+    "brace-expansion": "5.0.8",
+    "postcss": "8.5.23",
     "router": {
       "path-to-regexp": "8.4.2"
     },
     "defu": "6.1.7",
     "esbuild": "0.28.1",
-    "vite": "7.3.5",
+    "vite": "8.1.5",
+    "body-parser": "2.3.0",
     "yaml": "2.8.3",
-    "fast-uri": "3.1.2"
+    "fast-uri": "3.1.4",
+    "sharp": "0.35.3",
+    "svgo": "4.0.2"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",

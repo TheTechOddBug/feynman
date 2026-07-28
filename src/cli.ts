@@ -9,18 +9,20 @@ try {
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import {
 	getUserName as getAlphaUserName,
-	isLoggedIn as isAlphaLoggedIn,
 	login as loginAlpha,
 	logout as logoutAlpha,
 } from "@companion-ai/alpha-hub/lib";
+import { getValidToken as getValidAlphaToken } from "@companion-ai/alpha-hub/lib/auth";
 import { createAgentSession, SessionManager, SettingsManager, type AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 
+import { verifyAlphaAuthStatus } from "./alpha-auth-status.js";
 import { syncBundledAssets } from "./bootstrap/sync.js";
 import { ensureFeynmanHome, getDefaultSessionDir, getFeynmanAgentDir, getFeynmanHome } from "./config/paths.js";
 import { launchPiChat } from "./pi/launch.js";
@@ -35,7 +37,13 @@ import {
 	normalizeOptionalPackagePresetName,
 	resolvePackageUpdateSources,
 } from "./pi/package-presets.js";
-import { normalizeFeynmanSettings, normalizeThinkingLevel, parseModelSpec, type ThinkingLevel } from "./pi/settings.js";
+import {
+	canonicalizeModelSpec,
+	normalizeFeynmanSettings,
+	normalizeThinkingLevel,
+	parseModelSpec,
+	type ThinkingLevel,
+} from "./pi/settings.js";
 import { applyFeynmanPackageManagerEnv } from "./pi/runtime.js";
 import {
 	parseCitationExpansion,
@@ -85,7 +93,7 @@ import {
 	telemetryErrorProperties,
 } from "./telemetry/posthog.js";
 import { ASH, printAsciiHeader, printInfo, printPanel, printSection, RESET, SAGE } from "./ui/terminal.js";
-import { createModelRegistry } from "./model/registry.js";
+import { createModelRuntime } from "./model/registry.js";
 import { parseWorkbenchPort, serveWorkbench } from "./workbench/server.js";
 import {
 	cliCommandSections,
@@ -143,10 +151,19 @@ function printHelp(appRoot: string): void {
 }
 
 export function resolveBundledAlphaCliPath(appRoot: string): string {
+	let resolvedPackageAlpha: string | undefined;
+	try {
+		const requireFromApp = createRequire(resolve(appRoot, "package.json"));
+		const packageEntryPath = requireFromApp.resolve("@companion-ai/alpha-hub");
+		resolvedPackageAlpha = resolve(dirname(packageEntryPath), "..", "bin", "alpha");
+	} catch {
+		resolvedPackageAlpha = undefined;
+	}
 	const candidates = [
+		resolvedPackageAlpha,
 		resolve(appRoot, "node_modules", ...ALPHA_HUB_PACKAGE_PATH, "bin", "alpha"),
 		resolve(appRoot, ".feynman", "npm", "node_modules", ...ALPHA_HUB_PACKAGE_PATH, "bin", "alpha"),
-	];
+	].filter((candidate): candidate is string => Boolean(candidate));
 	const found = candidates.find((candidate) => existsSync(candidate));
 	if (!found) {
 		throw new Error(`Bundled alphaXiv CLI not found. Checked: ${candidates.join(", ")}`);
@@ -228,11 +245,13 @@ async function handleAlphaCommand(action: string | undefined): Promise<void> {
 	}
 
 	if (!action || action === "status") {
-		if (isAlphaLoggedIn()) {
-			const name = getAlphaUserName();
+		const status = await verifyAlphaAuthStatus({ getValidToken: getValidAlphaToken });
+		if (status.authenticated) {
+			const name = status.name ?? getAlphaUserName();
 			console.log(name ? `alphaXiv logged in as ${name}` : "alphaXiv logged in");
 		} else {
 			console.log("alphaXiv not logged in");
+			process.exitCode = 1;
 		}
 		return;
 	}
@@ -242,7 +261,7 @@ async function handleAlphaCommand(action: string | undefined): Promise<void> {
 
 async function handleModelCommand(subcommand: string | undefined, args: string[], feynmanSettingsPath: string, feynmanAuthPath: string): Promise<void> {
 	if (!subcommand || subcommand === "list") {
-		printModelList(feynmanSettingsPath, feynmanAuthPath);
+		await printModelList(feynmanSettingsPath, feynmanAuthPath);
 		return;
 	}
 
@@ -267,7 +286,7 @@ async function handleModelCommand(subcommand: string | undefined, args: string[]
 		if (!spec) {
 			throw new Error("Usage: feynman model set <provider/model|provider:model>");
 		}
-		setDefaultModelSpec(feynmanSettingsPath, feynmanAuthPath, spec);
+		await setDefaultModelSpec(feynmanSettingsPath, feynmanAuthPath, spec);
 		return;
 	}
 
@@ -564,19 +583,19 @@ export function resolveThinkingConfig(rawValue: string | undefined): {
 	};
 }
 
-export function shouldRunInteractiveSetup(
+export async function shouldRunInteractiveSetup(
 	explicitModelSpec: string | undefined,
 	currentModelSpec: string | undefined,
 	isInteractiveTerminal: boolean,
 	authPath: string,
-): boolean {
+): Promise<boolean> {
 	if (explicitModelSpec || !isInteractiveTerminal) {
 		return false;
 	}
 
 	const status = buildModelStatusSnapshotFromRecords(
-		getSupportedModelRecords(authPath),
-		getAuthenticatedModelRecords(authPath),
+		await getSupportedModelRecords(authPath),
+		await getAuthenticatedModelRecords(authPath),
 		currentModelSpec,
 	);
 	return !status.currentValid;
@@ -595,7 +614,7 @@ export function resolveWorkspaceInputPath(workingDir: string, value: string | un
 	return trimmed ? resolve(workingDir, trimmed) : undefined;
 }
 
-export function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpec: string | undefined): string | undefined {
+export async function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpec: string | undefined): Promise<string | undefined> {
 	const trimmed = explicitModelSpec?.trim();
 	if (trimmed) {
 		if (isProClassModelSpec(trimmed)) {
@@ -603,7 +622,7 @@ export function resolveRankSynthesisModelSpec(authPath: string, explicitModelSpe
 		}
 		return trimmed;
 	}
-	return chooseRecommendedModel(authPath)?.spec;
+	return (await chooseRecommendedModel(authPath))?.spec;
 }
 
 function createRankModelSynthesizer(options: {
@@ -613,12 +632,12 @@ function createRankModelSynthesizer(options: {
 	modelSpec?: string;
 }): ModelSynthesizer {
 	return async ({ prompt }) => {
-		const modelRegistry = createModelRegistry(options.authPath);
+		const modelRuntime = await createModelRuntime(options.authPath);
 		const requestedModel = options.modelSpec?.trim();
 		if (requestedModel && isProClassModelSpec(requestedModel)) {
 			throw new Error(`Pro-class synthesis model disabled: ${requestedModel}. Choose a non-Pro model.`);
 		}
-		const recommendation = requestedModel ? undefined : chooseRecommendedModel(options.authPath);
+		const recommendation = requestedModel ? undefined : await chooseRecommendedModel(options.authPath);
 		const resolvedModelSpec = requestedModel || recommendation?.spec;
 		if (!resolvedModelSpec) {
 			throw new Error("No non-Pro model is available for PaperRank synthesis. Run `feynman model login` for a non-Pro model or pass `--synthesis-model provider/model` with a non-Pro model.");
@@ -626,7 +645,7 @@ function createRankModelSynthesizer(options: {
 		if (isProClassModelSpec(resolvedModelSpec)) {
 			throw new Error(`Pro-class synthesis model disabled: ${resolvedModelSpec}. Choose a non-Pro model.`);
 		}
-		const model = parseModelSpec(resolvedModelSpec, modelRegistry);
+		const model = parseModelSpec(resolvedModelSpec, modelRuntime);
 		if (!model) {
 			throw new Error(`Unknown synthesis model: ${resolvedModelSpec}`);
 		}
@@ -650,8 +669,7 @@ function createRankModelSynthesizer(options: {
 		const { session } = await createAgentSession({
 			cwd: options.cwd,
 			agentDir: options.agentDir,
-			authStorage: modelRegistry.authStorage,
-			modelRegistry,
+			modelRuntime,
 			model,
 			sessionManager: SessionManager.inMemory(options.cwd),
 			settingsManager,
@@ -862,53 +880,66 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 
 	const rawArgs = process.argv.slice(2);
 	const alphaPassthrough = resolveAlphaPassthroughArgs(rawArgs);
-	if (alphaPassthrough) {
+	if (alphaPassthrough && alphaPassthrough.args[0] !== "status") {
 		await runBundledAlphaCli(appRoot, alphaPassthrough.args, { cwd: alphaPassthrough.cwd });
 		return;
 	}
 
-	const { values, positionals } = parseArgs({
-		args: process.argv.slice(2),
-		allowPositionals: true,
-		options: {
-			cwd: { type: "string" },
-			doctor: { type: "boolean" },
-			help: { type: "boolean" },
-			version: { type: "boolean" },
-			"alpha-login": { type: "boolean" },
-			"alpha-logout": { type: "boolean" },
-			"alpha-status": { type: "boolean" },
-			mode: { type: "string" },
-			model: { type: "string" },
-			"new-session": { type: "boolean" },
-			json: { type: "boolean" },
-			host: { type: "string" },
-			limit: { type: "string" },
-			"no-auth": { type: "boolean" },
-			"no-open": { type: "boolean" },
-			"expand-citations": { type: "string" },
-			"full-text-top": { type: "string" },
-			port: { type: "string" },
-			"critique-top": { type: "string" },
-			synthesize: { type: "boolean" },
-			"synthesis-top": { type: "string" },
-			"synthesis-model": { type: "string" },
-			"output-dir": { type: "string" },
-			"fetch-full-text": { type: "boolean" },
-			"preference-file": { type: "string" },
-			"reproduction-notes": { type: "string" },
-			prompt: { type: "string" },
-			"service-tier": { type: "string" },
-			"session-dir": { type: "string" },
-			"source-fixture": { type: "string" },
-			"setup-preview": { type: "boolean" },
-			"tier1-threshold": { type: "string" },
-			"tier2-threshold": { type: "string" },
-			thinking: { type: "string" },
-			overlap: { type: "string" },
-			"window-size": { type: "string" },
-		},
-	});
+	const parseCliArgs = () =>
+		parseArgs({
+			args: process.argv.slice(2),
+			allowPositionals: true,
+			options: {
+				cwd: { type: "string" },
+				doctor: { type: "boolean" },
+				help: { type: "boolean" },
+				version: { type: "boolean" },
+				"alpha-login": { type: "boolean" },
+				"alpha-logout": { type: "boolean" },
+				"alpha-status": { type: "boolean" },
+				mode: { type: "string" },
+				model: { type: "string" },
+				"new-session": { type: "boolean" },
+				json: { type: "boolean" },
+				host: { type: "string" },
+				limit: { type: "string" },
+				"no-auth": { type: "boolean" },
+				"no-open": { type: "boolean" },
+				"expand-citations": { type: "string" },
+				"full-text-top": { type: "string" },
+				port: { type: "string" },
+				"critique-top": { type: "string" },
+				synthesize: { type: "boolean" },
+				"synthesis-top": { type: "string" },
+				"synthesis-model": { type: "string" },
+				"output-dir": { type: "string" },
+				"fetch-full-text": { type: "boolean" },
+				"preference-file": { type: "string" },
+				"reproduction-notes": { type: "string" },
+				prompt: { type: "string" },
+				"service-tier": { type: "string" },
+				"session-dir": { type: "string" },
+				"source-fixture": { type: "string" },
+				"setup-preview": { type: "boolean" },
+				"tier1-threshold": { type: "string" },
+				"tier2-threshold": { type: "string" },
+				thinking: { type: "string" },
+				overlap: { type: "string" },
+				"window-size": { type: "string" },
+			},
+		});
+
+	let parsedArgs: ReturnType<typeof parseCliArgs>;
+	try {
+		parsedArgs = parseCliArgs();
+	} catch (error) {
+		if (error && typeof error === "object" && "code" in error && error.code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+			const message = error instanceof Error ? error.message : String(error);
+			throw new Error(`${message}\nRun \`feynman help\` to see available commands and flags.`);
+		}
+		throw error;
+	}
+	const { values, positionals } = parsedArgs;
 
 	if (values.help) {
 		printHelp(appRoot);
@@ -929,10 +960,10 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	const feynmanAuthPath = resolve(feynmanAgentDir, "auth.json");
 	const { defaultThinkingLevel, launchThinkingLevel } = resolveThinkingConfig(values.thinking ?? process.env.FEYNMAN_THINKING);
 
-	normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+	await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
 
 	if (values.doctor) {
-		runDoctor({
+		await runDoctor({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -991,7 +1022,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "doctor") {
-		runDoctor({
+		await runDoctor({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -1002,7 +1033,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "status") {
-		runStatus({
+		await runStatus({
 			settingsPath: feynmanSettingsPath,
 			authPath: feynmanAuthPath,
 			sessionDir,
@@ -1050,6 +1081,10 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "alpha") {
+		if (rest[0] === "status") {
+			await handleAlphaCommand("status");
+			return;
+		}
 		await runBundledAlphaCli(appRoot, rest, { cwd: workingDir });
 		return;
 	}
@@ -1265,7 +1300,8 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 		return;
 	}
 
-	const explicitModelSpec = values.model ?? process.env.FEYNMAN_MODEL;
+	const requestedExplicitModelSpec = values.model ?? process.env.FEYNMAN_MODEL;
+	let explicitModelSpec = requestedExplicitModelSpec;
 	const explicitServiceTier = normalizeServiceTier(values["service-tier"] ?? process.env.FEYNMAN_SERVICE_TIER);
 	const mode = values.mode;
 	if (mode !== undefined && mode !== "text" && mode !== "json" && mode !== "rpc") {
@@ -1277,19 +1313,20 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	if (explicitServiceTier) {
 		process.env.FEYNMAN_SERVICE_TIER = explicitServiceTier;
 	}
-	if (explicitModelSpec) {
-		if (isProClassModelSpec(explicitModelSpec)) {
-			throw new Error(`Pro-class model disabled: ${explicitModelSpec}. Choose a non-Pro model.`);
+	if (requestedExplicitModelSpec) {
+		if (isProClassModelSpec(requestedExplicitModelSpec)) {
+			throw new Error(`Pro-class model disabled: ${requestedExplicitModelSpec}. Choose a non-Pro model.`);
 		}
-		const modelRegistry = createModelRegistry(feynmanAuthPath);
-		const explicitModel = parseModelSpec(explicitModelSpec, modelRegistry);
-		if (!explicitModel) {
-			throw new Error(`Unknown model: ${explicitModelSpec}`);
+		const modelRuntime = await createModelRuntime(feynmanAuthPath);
+		const canonicalModelSpec = canonicalizeModelSpec(requestedExplicitModelSpec, modelRuntime);
+		if (!canonicalModelSpec) {
+			throw new Error(`Unknown model: ${requestedExplicitModelSpec}`);
 		}
+		explicitModelSpec = canonicalModelSpec;
 	}
 
 	const currentModelSpec = getCurrentModelSpec(feynmanSettingsPath);
-	if (shouldRunInteractiveSetup(
+	if (await shouldRunInteractiveSetup(
 		explicitModelSpec,
 		currentModelSpec,
 		Boolean(process.stdin.isTTY && process.stdout.isTTY),
@@ -1307,7 +1344,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 		if (!getCurrentModelSpec(feynmanSettingsPath)) {
 			return;
 		}
-		normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+		await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
 	}
 
 	const workflowCommandNames = new Set(readPromptSpecs(appRoot).filter((s) => s.topLevelCli).map((s) => s.name));

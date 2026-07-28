@@ -1,12 +1,21 @@
 import type { PackageSource } from "@earendil-works/pi-coding-agent";
 
-export const CORE_PACKAGE_SOURCES = [
+const UNPINNED_CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub",
 	"npm:pi-subagents",
 	"npm:pi-btw",
 	"npm:pi-docparser",
 	"npm:pi-web-access",
 	"npm:pi-otel",
+] as const;
+
+export const CORE_PACKAGE_SOURCES = [
+	"npm:@companion-ai/alpha-hub@0.1.3",
+	"npm:pi-subagents@0.37.2",
+	"npm:pi-btw@0.4.1",
+	"npm:pi-docparser@3.0.1",
+	"npm:pi-web-access@0.15.0",
+	"npm:pi-otel@0.1.0",
 ] as const;
 
 const LEGACY_CORE_PACKAGE_SOURCES = [
@@ -34,6 +43,19 @@ const LEGACY_TELEMETRY_CORE_PACKAGE_SOURCES = [
 const LEGACY_CORE_WITH_PI_OTEL_PACKAGE_SOURCES = [
 	...LEGACY_CORE_PACKAGE_SOURCES,
 	"npm:pi-otel",
+] as const;
+
+const LEGACY_PINNED_CORE_PACKAGE_SOURCES = [
+	...CORE_PACKAGE_SOURCES,
+	"npm:pi-markdown-preview",
+	"npm:@walterra/pi-charts",
+	"npm:pi-mermaid",
+	"npm:@aliou/pi-processes",
+	"npm:pi-zotero",
+	"npm:@kaiserlich-dev/pi-session-search",
+	"npm:pi-schedule-prompt",
+	"npm:@samfp/pi-memory",
+	"npm:@tmustier/pi-ralph-wiggum",
 ] as const;
 
 const LEGACY_TELEMETRY_WITH_PI_OTEL_PACKAGE_SOURCES = [
@@ -90,6 +112,25 @@ export type OptionalPackagePresetName = keyof typeof OPTIONAL_PACKAGE_PRESETS;
 export type OptionalPackagePresetAlias = OptionalPackagePresetName;
 
 const LEGACY_DEFAULT_PACKAGE_SETS = [
+	[
+		...UNPINNED_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...UNPINNED_CORE_PACKAGE_SOURCES,
+		"npm:pi-generative-ui",
+	],
+	[
+		...UNPINNED_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+	],
+	[
+		...UNPINNED_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+		"npm:pi-generative-ui",
+	],
+	[
+		...LEGACY_PINNED_CORE_PACKAGE_SOURCES,
+	],
 	[
 		...CORE_PACKAGE_SOURCES,
 		"npm:pi-generative-ui",

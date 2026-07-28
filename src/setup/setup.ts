@@ -186,7 +186,7 @@ export async function runSetup(options: SetupOptions): Promise<void> {
 		await maybeLoginAlpha();
 		await maybeInstallPreviewDependencies();
 
-		normalizeFeynmanSettings(
+		await normalizeFeynmanSettings(
 			options.settingsPath,
 			options.bundledSettingsPath,
 			options.defaultThinkingLevel ?? "medium",
@@ -194,8 +194,8 @@ export async function runSetup(options: SetupOptions): Promise<void> {
 		);
 
 		const modelStatus = buildModelStatusSnapshotFromRecords(
-			getSupportedModelRecords(options.authPath),
-			getAvailableModelRecords(options.authPath),
+			await getSupportedModelRecords(options.authPath),
+			await getAvailableModelRecords(options.authPath),
 			getCurrentModelSpec(options.settingsPath),
 		);
 		printSection("Ready");

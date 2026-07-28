@@ -2,7 +2,7 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const MIN_NODE_VERSION = "22.19.0";
+const MIN_NODE_VERSION = "22.22.0";
 const MAX_NODE_MAJOR = 25;
 const PREFERRED_NODE_MAJOR = 24;
 

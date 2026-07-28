@@ -159,6 +159,27 @@ function patchTaskSchemaOutputParam(source) {
 	);
 }
 
+function patchCurrentPiSpawnResolver(source) {
+	if (
+		!source.includes('export const PI_CODING_AGENT_PACKAGE = "@earendil-works/pi-coding-agent";') ||
+		source.includes("FEYNMAN_PI_CLI_PATH")
+	) {
+		return source;
+	}
+	return source.replace(
+		"\tconst argv1 = deps.argv1 ?? process.argv[1];",
+		[
+			"\tconst env = deps.env ?? process.env;",
+			"\tconst feynmanPiCliPath = env.FEYNMAN_PI_CLI_PATH?.trim();",
+			"\tif (feynmanPiCliPath) {",
+			"\t\tconst cliPath = normalizePath(feynmanPiCliPath);",
+			"\t\tif (isRunnableNodeScript(cliPath, existsSync)) return cliPath;",
+			"\t}",
+			"\tconst argv1 = deps.argv1 ?? process.argv[1];",
+		].join("\n"),
+	);
+}
+
 const OLD_AGENT_DIR_DECLS = [
 	'\tconst userDirOld = path.join(os.homedir(), ".pi", "agent", "agents");',
 	'\tconst userDirNew = path.join(os.homedir(), ".agents");',
@@ -312,6 +333,7 @@ export function patchPiSubagentsSource(relativePath, source) {
 					"\texecPath?: string;\n\targv1?: string;\n\targv2?: string;",
 				],
 			]);
+			patched = patchCurrentPiSpawnResolver(patched);
 			break;
 		case "subagent-executor.ts":
 			{

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { getEnvApiKey } from "@earendil-works/pi-ai/compat";
 
-import { createModelRegistry } from "./registry.js";
+import { createModelRuntime } from "./registry.js";
 
 type ModelRecord = {
 	provider: string;
@@ -346,21 +346,22 @@ function sortProviders(left: ProviderStatus, right: ProviderStatus): number {
 	return left.label.localeCompare(right.label);
 }
 
-export function getAuthenticatedModelRecords(authPath: string): ModelRecord[] {
+export async function getAuthenticatedModelRecords(authPath: string): Promise<ModelRecord[]> {
 	const expiredOAuthProviders = readExpiredOAuthProviders(authPath);
-	return createModelRegistry(authPath)
-		.getAvailable()
+	const modelRuntime = await createModelRuntime(authPath);
+	return (await modelRuntime.getAvailable())
 		.filter((model) => !expiredOAuthProviders.has(model.provider))
 		.map((model) => ({ provider: model.provider, id: model.id, name: model.name }));
 }
 
-export function getAvailableModelRecords(authPath: string): ModelRecord[] {
-	return getAuthenticatedModelRecords(authPath).filter((model) => !isProClassModel(model));
+export async function getAvailableModelRecords(authPath: string): Promise<ModelRecord[]> {
+	return (await getAuthenticatedModelRecords(authPath)).filter((model) => !isProClassModel(model));
 }
 
-export function getSupportedModelRecords(authPath: string): ModelRecord[] {
-	return createModelRegistry(authPath)
-		.getAll()
+export async function getSupportedModelRecords(authPath: string): Promise<ModelRecord[]> {
+	const modelRuntime = await createModelRuntime(authPath);
+	return modelRuntime
+		.getModels()
 		.map((model) => ({ provider: model.provider, id: model.id, name: model.name }));
 }
 
@@ -380,8 +381,8 @@ function readExpiredOAuthProviders(authPath: string): Set<string> {
 	return expired;
 }
 
-export function chooseRecommendedModel(authPath: string): { spec: string; reason: string } | undefined {
-	const preferred = choosePreferredModelRecord(getAvailableModelRecords(authPath));
+export async function chooseRecommendedModel(authPath: string): Promise<{ spec: string; reason: string } | undefined> {
+	const preferred = choosePreferredModelRecord(await getAvailableModelRecords(authPath));
 	if (!preferred) {
 		return undefined;
 	}

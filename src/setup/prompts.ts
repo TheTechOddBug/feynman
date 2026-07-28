@@ -50,7 +50,12 @@ export async function promptOutro(message: string): Promise<void> {
 	clackOutro(message);
 }
 
-export async function promptText(question: string, defaultValue = "", placeholder?: string): Promise<string> {
+export async function promptText(
+	question: string,
+	defaultValue = "",
+	placeholder?: string,
+	signal?: AbortSignal,
+): Promise<string> {
 	ensureInteractiveTerminal();
 
 	const value = guardCancelled(
@@ -58,6 +63,7 @@ export async function promptText(question: string, defaultValue = "", placeholde
 			message: question,
 			initialValue: defaultValue || undefined,
 			placeholder: placeholder ?? (defaultValue || undefined),
+			signal,
 		}),
 	);
 
@@ -69,6 +75,7 @@ export async function promptSelect<T>(
 	question: string,
 	options: PromptSelectOption<T>[],
 	initialValue?: T,
+	signal?: AbortSignal,
 ): Promise<T> {
 	ensureInteractiveTerminal();
 
@@ -81,6 +88,7 @@ export async function promptSelect<T>(
 				hint: option.hint,
 			})) as Option<T>[],
 			initialValue,
+			signal,
 		}),
 	);
 

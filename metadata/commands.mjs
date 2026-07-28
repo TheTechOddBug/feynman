@@ -42,6 +42,7 @@ export const extensionCommandSpecs = [
 	{ name: "init", args: "", section: "Project & Session", description: "Bootstrap AGENTS.md and session-log folders for a research project.", publicDocs: true },
 	{ name: "outputs", args: "", section: "Project & Session", description: "Browse all research artifacts (papers, outputs, experiments, notes).", publicDocs: true },
 	{ name: "service-tier", args: "", section: "Project & Session", description: "View or set the provider service tier override for supported models.", publicDocs: true },
+	{ name: "thinking", args: "[level]", section: "Project & Session", description: "View or set the active model thinking level.", publicDocs: true },
 	{ name: "tools", args: "", section: "Project & Session", description: "Browse public research tools with their source and parameter summary.", publicDocs: true },
 ];
 
@@ -149,7 +150,7 @@ export const cliCommandSections = [
 			{ usage: "feynman search status", description: "Show Pi web-access status and config path." },
 			{ usage: "feynman search set <provider> [api-key]", description: "Set the web search provider and optionally save its API key." },
 			{ usage: "feynman search clear", description: "Reset web search provider to auto while preserving API keys." },
-			{ usage: "feynman update [package]", description: "Update installed packages, or a specific package." },
+			{ usage: "feynman update [package]", description: "Update installed packages, or one package. Extensions update with their packages; there is no separate --extensions flag." },
 		],
 	},
 ];
@@ -161,7 +162,7 @@ export const legacyFlags = [
 	{ usage: "--alpha-status", description: "Show alphaXiv auth status and exit." },
 	{ usage: "--model <provider/model|provider:model>", description: "Force a specific non-Pro model." },
 	{ usage: "--service-tier <tier>", description: "Override request service tier for this run." },
-	{ usage: "--thinking <level>", description: "Set thinking level: off | minimal | low | medium | high | xhigh." },
+	{ usage: "--thinking <level>", description: "Set thinking level: off | minimal | low | medium | high | xhigh | max." },
 	{ usage: "--cwd <path>", description: "Set the working directory for tools." },
 	{ usage: "--session-dir <path>", description: "Set the session storage directory." },
 	{ usage: "--new-session", description: "Start a new persisted session." },

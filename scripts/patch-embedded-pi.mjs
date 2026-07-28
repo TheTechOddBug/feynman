@@ -7,11 +7,17 @@ import { fileURLToPath } from "node:url";
 import { FEYNMAN_LOGO_HTML } from "../logo.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
+import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
+import {
+	runtimeManifestPackagesMatch,
+	verifyFileSha256,
+} from "./lib/runtime-workspace-integrity.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
@@ -75,6 +81,7 @@ const interactiveModePath = piPackageRoot ? resolve(piPackageRoot, "dist", "mode
 const interactiveThemePath = piPackageRoot ? resolve(piPackageRoot, "dist", "modes", "interactive", "theme", "theme.js") : null;
 const extensionLoaderPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "extensions", "loader.js") : null;
 const modelRegistryPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-registry.js") : null;
+const modelRuntimePath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-runtime.js") : null;
 const agentLoopPath = piAgentCoreRoot ? resolve(piAgentCoreRoot, "dist", "agent-loop.js") : null;
 const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
 const terminalPath = piTuiRoot ? resolve(piTuiRoot, "dist", "terminal.js") : null;
@@ -121,14 +128,30 @@ const workspaceDir = resolve(appRoot, ".feynman", "npm");
 const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
 const workspaceManifestPath = resolve(workspaceDir, ".runtime-manifest.json");
 const workspaceArchivePath = resolve(appRoot, ".feynman", "runtime-workspace.tgz");
+const workspaceArchiveDigestPath = resolve(appRoot, ".feynman", "runtime-workspace.sha256");
 const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceSetupLockDir = resolve(appRoot, ".feynman", ".workspace-setup.lock");
 const globalNodeModulesRoot = resolve(feynmanNpmPrefix, "lib", "node_modules");
-const PRUNE_VERSION = 6;
+const PRUNE_VERSION = 8;
 const WORKSPACE_SETUP_LOCK_STALE_MS = 300000;
 const NATIVE_PACKAGE_SPECS = new Set([
 	"@kaiserlich-dev/pi-session-search",
 ]);
+
+function patchMcpSdkManifest(nodeModulesRoot) {
+	const manifestPath = resolve(
+		nodeModulesRoot,
+		"@modelcontextprotocol",
+		"sdk",
+		"package.json",
+	);
+	if (!existsSync(manifestPath)) return;
+	const source = readFileSync(manifestPath, "utf8");
+	const patched = patchMcpSdkPackageJsonSource(source);
+	if (patched !== source) {
+		writeFileSync(manifestPath, patched, "utf8");
+	}
+}
 const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/npm warn deprecated node-domexception@1\.0\.0/i,
 	/npm notice/i,
@@ -136,10 +159,6 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^\d+ packages are looking for funding$/i,
 	/^run `npm fund` for details$/i,
 ];
-
-function arraysMatch(left, right) {
-	return left.length === right.length && left.every((value, index) => value === right[index]);
-}
 
 function supportsNativePackageSources(version = process.versions.node) {
 	const [major = "0"] = version.replace(/^v/, "").split(".");
@@ -254,10 +273,6 @@ function filterUnsupportedPackageSpecs(packageSpecs) {
 	return packageSpecs.filter((spec) => !NATIVE_PACKAGE_SPECS.has(parsePackageName(spec)));
 }
 
-function workspaceContainsPackages(packageSpecs) {
-	return packageSpecs.every((spec) => existsSync(resolve(workspaceRoot, parsePackageName(spec))));
-}
-
 function workspaceMatchesRuntime(packageSpecs) {
 	if (!existsSync(workspaceManifestPath)) return false;
 
@@ -266,12 +281,11 @@ function workspaceMatchesRuntime(packageSpecs) {
 		if (!Array.isArray(manifest.packageSpecs)) {
 			return false;
 		}
-		if (!arraysMatch(manifest.packageSpecs, packageSpecs)) {
-			if (!(workspaceContainsPackages(packageSpecs) && packageSpecs.every((spec) => manifest.packageSpecs.includes(spec)))) {
-				return false;
-			}
+		const manifestPackageSpecs = filterUnsupportedPackageSpecs(manifest.packageSpecs);
+		if (!runtimeManifestPackagesMatch(workspaceRoot, manifestPackageSpecs, packageSpecs)) {
+			return false;
 		}
-		if (!supportsNativePackageSources() && workspaceContainsPackages(packageSpecs)) {
+		if (!supportsNativePackageSources()) {
 			return true;
 		}
 		if (
@@ -283,7 +297,7 @@ function workspaceMatchesRuntime(packageSpecs) {
 			return false;
 		}
 
-		return packageSpecs.every((spec) => existsSync(resolve(workspaceRoot, parsePackageName(spec))));
+		return true;
 	} catch {
 		return false;
 	}
@@ -429,6 +443,9 @@ function ensureBundledPackageLinks(packageSpecs) {
 
 function restorePackagedWorkspace(packageSpecs) {
 	if (!existsSync(workspaceArchivePath)) return false;
+	if (!verifyFileSha256(workspaceArchivePath, workspaceArchiveDigestPath)) {
+		throw new Error("Bundled runtime archive failed its SHA-256 integrity check");
+	}
 
 	rmSync(workspaceDir, { recursive: true, force: true });
 	mkdirSync(resolve(appRoot, ".feynman"), { recursive: true });
@@ -774,13 +791,26 @@ for (const loaderPath of [extensionLoaderPath, workspaceExtensionLoaderPath].fil
 
 
 const workspaceModelRegistryPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-registry.js");
-for (const entryPath of [modelRegistryPath, workspaceModelRegistryPath].filter(Boolean)) {
+const workspaceModelRuntimePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-runtime.js");
+for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegistryPath, workspaceModelRuntimePath].filter(Boolean)) {
 	if (!existsSync(entryPath)) continue;
 	const source = readFileSync(entryPath, "utf8");
 	const patched = patchPiModelRegistrySource(source);
 	if (patched !== source) {
 		writeFileSync(entryPath, patched, "utf8");
 	}
+}
+
+const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
+patchPiBraceExpansionTree(resolve(appRoot, "node_modules"), safeBraceExpansionPath);
+patchPiBraceExpansionTree(workspaceRoot, safeBraceExpansionPath);
+for (const nodeModulesRoot of [
+	resolve(appRoot, "node_modules"),
+	resolve(appRoot, "node_modules", "@companion-ai", "alpha-hub", "node_modules"),
+	workspaceRoot,
+	resolve(workspaceRoot, "@companion-ai", "alpha-hub", "node_modules"),
+]) {
+	patchMcpSdkManifest(nodeModulesRoot);
 }
 
 for (const entryPath of [agentLoopPath, workspaceAgentLoopPath].filter(Boolean)) {

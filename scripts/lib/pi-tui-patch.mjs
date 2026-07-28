@@ -110,6 +110,14 @@ const OVERFLOW_TRUNCATE_BLOCK_AFTER_CLEAR = `            let line = newLines[i];
             }
             buffer += line;`;
 
+const OVERFLOW_THROW_BLOCK_AFTER_CLEAR_CURRENT = OVERFLOW_THROW_BLOCK_AFTER_CLEAR.replace(
+	'path.join(os.homedir(), ".pi", "agent", "pi-crash.log")',
+	'path.join(this.logDirectory, "pi-crash.log")',
+);
+
+const CURRENT_EDITOR_IMPORT = 'import { cjkBreakRegex, getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, sliceByColumn, visibleWidth, } from "../utils.js";';
+const CURRENT_EDITOR_IMPORT_PATCHED = 'import { applyBackgroundToLine, cjkBreakRegex, getGraphemeSegmenter, getWordSegmenter, isWhitespaceChar, sliceByColumn, visibleWidth, } from "../utils.js";';
+
 // Two known upstream layouts: pi-tui <=0.75 and the 0.76+ Unicode
 // word-navigation rework. Both need applyBackgroundToLine added for the
 // background-fill render below.
@@ -271,6 +279,125 @@ const EDITOR_THEME_BLOCK = [
 	"}",
 ].join("\n");
 
+function patchCurrentEditorSource(source) {
+	const replacements = [
+		[
+			CURRENT_EDITOR_IMPORT,
+			CURRENT_EDITOR_IMPORT_PATCHED,
+		],
+		[
+			'        const horizontal = this.borderColor("─");\n        // Layout the text',
+			'        const horizontal = this.borderColor("─");\n        const bgColor = this.theme.bgColor;\n        const styleInput = typeof this.theme.input === "function" ? this.theme.input : (text) => text;\n        // Layout the text',
+		],
+		[
+			`        // Render top border (with scroll indicator if scrolled down)
+        if (this.scrollOffset > 0) {
+            const border = createScrollBorder("↑", this.scrollOffset, width);
+            result.push(this.borderColor(border));
+        }
+        else {
+            result.push(horizontal.repeat(width));
+        }`,
+			`        // Render top border (with scroll indicator if scrolled down)
+        if (this.scrollOffset > 0) {
+            const border = createScrollBorder("↑", this.scrollOffset, width);
+            result.push(bgColor ? applyBackgroundToLine(\`  ↑ \${this.scrollOffset} more\`, width, bgColor) : this.borderColor(border));
+        }
+        else {
+            result.push(bgColor ? applyBackgroundToLine("", width, bgColor) : horizontal.repeat(width));
+        }`,
+		],
+		[
+			"        const emitCursorMarker = this.focused;\n        for (const layoutLine of visibleLines) {",
+			`        const emitCursorMarker = this.focused;
+        const showPlaceholder = this.state.lines.length === 1 &&
+            this.state.lines[0] === "" &&
+            typeof this.theme.placeholderText === "string" &&
+            this.theme.placeholderText.length > 0;
+        for (const layoutLine of visibleLines) {`,
+		],
+		[
+			`            let cursorInPadding = false;
+            // Add cursor if this line has it
+            if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {`,
+			`            let cursorInPadding = false;
+            const isPlaceholderLine = showPlaceholder && this.scrollOffset === 0 && layoutLine === visibleLines[0];
+            if (isPlaceholderLine) {
+                const marker = emitCursorMarker ? CURSOR_MARKER : "";
+                const placeholder = typeof this.theme.placeholder === "function"
+                    ? this.theme.placeholder(this.theme.placeholderText)
+                    : this.theme.placeholderText;
+                displayText = marker + placeholder;
+                lineVisibleWidth = visibleWidth(this.theme.placeholderText);
+            }
+            // Add cursor if this line has it
+            else if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {`,
+		],
+		[
+			"                    displayText = before + marker + cursor + restAfter;",
+			"                    displayText = styleInput(before) + marker + cursor + styleInput(restAfter);",
+		],
+		[
+			'                    const cursor = `\\x1b[7m${firstGrapheme}\\x1b[0m`;',
+			'                    const cursor = `\\x1b[7m${firstGrapheme}\\x1b[27m`;',
+		],
+		[
+			'                    const cursor = "\\x1b[7m \\x1b[0m";',
+			'                    const cursor = "\\x1b[7m \\x1b[27m";',
+		],
+		[
+			"                    displayText = before + marker + cursor;",
+			"                    displayText = styleInput(before) + marker + cursor;",
+		],
+		[
+			`                }
+            }
+            // Calculate padding based on actual visible width`,
+			`                }
+            }
+            else {
+                displayText = styleInput(displayText);
+            }
+            // Calculate padding based on actual visible width`,
+		],
+		[
+			'            result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);',
+			'            const renderedLine = `${leftPadding}${displayText}${padding}${lineRightPadding}`;\n            result.push(bgColor ? applyBackgroundToLine(renderedLine, width, bgColor) : renderedLine);',
+		],
+		[
+			`        // Render bottom border (with scroll indicator if more content below)
+        const linesBelow = layoutLines.length - (this.scrollOffset + visibleLines.length);
+        if (linesBelow > 0) {
+            const border = createScrollBorder("↓", linesBelow, width);
+            result.push(this.borderColor(border));
+        }
+        else {
+            result.push(horizontal.repeat(width));
+        }`,
+			`        // Render bottom border (with scroll indicator if more content below)
+        const linesBelow = layoutLines.length - (this.scrollOffset + visibleLines.length);
+        if (linesBelow > 0) {
+            const border = createScrollBorder("↓", linesBelow, width);
+            result.push(bgColor ? applyBackgroundToLine(\`  ↓ \${linesBelow} more\`, width, bgColor) : this.borderColor(border));
+        }
+        else {
+            result.push(bgColor ? applyBackgroundToLine("", width, bgColor) : horizontal.repeat(width));
+        }`,
+		],
+		[
+			'                result.push(`${leftPadding}${line}${linePadding}${rightPadding}`);',
+			'                const renderedLine = `${leftPadding}${line}${linePadding}${rightPadding}`;\n                result.push(bgColor ? applyBackgroundToLine(renderedLine, width, bgColor) : renderedLine);',
+		],
+	];
+	const missing = replacements
+		.map(([original], index) => source.includes(original) ? undefined : index + 1)
+		.filter(Boolean);
+	if (missing.length > 0) {
+		throw new Error(`Unsupported Pi editor layout: missing required 0.82 patch anchors ${missing.join(", ")}`);
+	}
+	return replacements.reduce((patched, [original, replacement]) => patched.replace(original, replacement), source);
+}
+
 export function patchPiTuiSource(source) {
 	if (source.includes("line = sliceByColumn(line, 0, width, true);")) {
 		return source;
@@ -281,10 +408,27 @@ export function patchPiTuiSource(source) {
 	if (source.includes(OVERFLOW_THROW_BLOCK_AFTER_CLEAR)) {
 		return source.replace(OVERFLOW_THROW_BLOCK_AFTER_CLEAR, OVERFLOW_TRUNCATE_BLOCK_AFTER_CLEAR);
 	}
-	return source;
+	if (source.includes(OVERFLOW_THROW_BLOCK_AFTER_CLEAR_CURRENT)) {
+		return source.replace(OVERFLOW_THROW_BLOCK_AFTER_CLEAR_CURRENT, OVERFLOW_TRUNCATE_BLOCK_AFTER_CLEAR);
+	}
+	throw new Error("Unsupported Pi TUI layout: required overflow patch anchor was not found");
 }
 
 export function patchPiEditorSource(source) {
+	if (source.includes(CURRENT_EDITOR_IMPORT) && !source.includes("const styleInput = typeof this.theme.input")) {
+		return patchCurrentEditorSource(source);
+	}
+	if (source.includes("const styleInput = typeof this.theme.input")) {
+		return source
+			.replace(
+				'                    const cursor = `\\x1b[7m${firstGrapheme}\\x1b[0m`;',
+				'                    const cursor = `\\x1b[7m${firstGrapheme}\\x1b[27m`;',
+			)
+			.replace(
+				'                    const cursor = "\\x1b[7m \\x1b[0m";',
+				'                    const cursor = "\\x1b[7m \\x1b[27m";',
+			);
+	}
 	let patched = source;
 	let importsPatched = patched.includes("applyBackgroundToLine,");
 	for (const [original, replacement] of EDITOR_IMPORT_PAIRS) {
@@ -293,18 +437,17 @@ export function patchPiEditorSource(source) {
 			importsPatched = true;
 		}
 	}
-	if (patched.includes("const styleInput = typeof this.theme.input")) {
-		return patched;
-	}
 	if (!importsPatched) {
-		// Unknown upstream layout: leave render() untouched rather than emit a
-		// body that references applyBackgroundToLine without importing it.
-		return source;
+		throw new Error("Unsupported Pi editor layout: required import patch anchor was not found");
 	}
-	return patched.replace(
+	const rendered = patched.replace(
 		/    render\(width\) \{[\s\S]*?\n    handleInput\(data\) \{/m,
 		`${EDITOR_RENDER_BLOCK}\n    handleInput(data) {`,
 	);
+	if (rendered === patched || !rendered.includes("const styleInput = typeof this.theme.input")) {
+		throw new Error("Unsupported Pi editor layout: required render patch anchor was not found");
+	}
+	return rendered;
 }
 
 export function patchPiInteractiveThemeSource(source) {
@@ -314,8 +457,16 @@ export function patchPiInteractiveThemeSource(source) {
 	) {
 		return source;
 	}
-	return source.replace(
+	const patched = source.replace(
 		/export function getEditorTheme\(\) \{[\s\S]*?\n\}\nexport function getSettingsListTheme\(\) \{/m,
 		`${EDITOR_THEME_BLOCK}\nexport function getSettingsListTheme() {`,
 	);
+	if (
+		patched === source ||
+		!patched.includes('bgColor: (text) => theme.bg("userMessageBg", text),') ||
+		!patched.includes('input: (text) => theme.fg("text", text),')
+	) {
+		throw new Error("Unsupported Pi interactive theme layout: required editor-theme patch anchor was not found");
+	}
+	return patched;
 }

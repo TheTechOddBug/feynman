@@ -1,4 +1,4 @@
-import { AuthStorage } from "@earendil-works/pi-coding-agent";
+import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import { readFileSync, writeFileSync } from "node:fs";
 import { exec as execCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -16,15 +16,15 @@ import {
 	type ModelStatusSnapshot,
 } from "./catalog.js";
 import { MODEL_API_KEY_PROVIDERS, type ApiKeyProviderInfo } from "./api-key-providers.js";
-import { createModelRegistry, getModelsJsonPath } from "./registry.js";
+import { createModelRegistry, createModelRuntime, getModelsJsonPath } from "./registry.js";
 import { upsertProviderBaseUrl, upsertProviderConfig } from "./models-json.js";
 
 const exec = promisify(execCallback);
 
-function collectModelStatus(settingsPath: string, authPath: string): ModelStatusSnapshot {
+async function collectModelStatus(settingsPath: string, authPath: string): Promise<ModelStatusSnapshot> {
 	return buildModelStatusSnapshotFromRecords(
-		getSupportedModelRecords(authPath),
-		getAuthenticatedModelRecords(authPath),
+		await getSupportedModelRecords(authPath),
+		await getAuthenticatedModelRecords(authPath),
 		getCurrentModelSpec(settingsPath),
 	);
 }
@@ -35,20 +35,27 @@ type OAuthProviderInfo = {
 	usesCallbackServer?: boolean;
 };
 
-function getOAuthProviders(authPath: string): OAuthProviderInfo[] {
-	return AuthStorage.create(authPath).getOAuthProviders() as OAuthProviderInfo[];
+async function getOAuthProviders(authPath: string): Promise<OAuthProviderInfo[]> {
+	const modelRuntime = await createModelRuntime(authPath);
+	return modelRuntime
+		.getProviders()
+		.filter((provider) => Boolean(provider.auth.oauth))
+		.map((provider) => ({
+			id: provider.id,
+			name: provider.auth.oauth?.name ?? provider.name,
+		}));
 }
 
-function resolveOAuthProvider(authPath: string, input: string): OAuthProviderInfo | undefined {
+async function resolveOAuthProvider(authPath: string, input: string): Promise<OAuthProviderInfo | undefined> {
 	const normalizedInput = input.trim().toLowerCase();
 	if (!normalizedInput) {
 		return undefined;
 	}
-	return getOAuthProviders(authPath).find((provider) => provider.id.toLowerCase() === normalizedInput);
+	return (await getOAuthProviders(authPath)).find((provider) => provider.id.toLowerCase() === normalizedInput);
 }
 
 async function selectOAuthProvider(authPath: string, action: "login" | "logout"): Promise<OAuthProviderInfo | undefined> {
-	const providers = getOAuthProviders(authPath);
+	const providers = await getOAuthProviders(authPath);
 	if (providers.length === 0) {
 		printWarning("No Pi OAuth model providers are available.");
 		return undefined;
@@ -83,11 +90,11 @@ function resolveApiKeyProvider(input: string): ApiKeyProviderInfo | undefined {
 	return MODEL_API_KEY_PROVIDERS.find((provider) => provider.id === normalizedInput);
 }
 
-export function resolveModelProviderForCommand(
+export async function resolveModelProviderForCommand(
 	authPath: string,
 	input: string,
-): { kind: "oauth" | "api-key"; id: string } | undefined {
-	const oauthProvider = resolveOAuthProvider(authPath, input);
+): Promise<{ kind: "oauth" | "api-key"; id: string } | undefined> {
+	const oauthProvider = await resolveOAuthProvider(authPath, input);
 	if (oauthProvider) {
 		return { kind: "oauth", id: oauthProvider.id };
 	}
@@ -465,7 +472,7 @@ async function promptLiteLlmProviderSetup(): Promise<CustomProviderSetup | undef
 }
 
 async function verifyCustomProvider(setup: CustomProviderSetup, authPath: string): Promise<void> {
-	const registry = createModelRegistry(authPath);
+	const registry = await createModelRegistry(authPath);
 	const modelsError = registry.getError();
 	if (modelsError) {
 		printWarning("Verification: models.json failed to load.");
@@ -605,8 +612,11 @@ async function configureBedrockProvider(authPath: string): Promise<boolean> {
 
 	try {
 		await verifyBedrockCredentialChain();
-		AuthStorage.create(authPath).set("amazon-bedrock", { type: "api_key", key: "<authenticated>" });
-		printSuccess("Verified AWS credential chain and marked Amazon Bedrock as configured.");
+		const modelRuntime = await createModelRuntime(authPath);
+		if (!(await modelRuntime.checkAuth("amazon-bedrock"))) {
+			throw new Error("Pi could not resolve the verified AWS credential chain for Amazon Bedrock.");
+		}
+		printSuccess("Verified the AWS credential chain used by Amazon Bedrock.");
 		printInfo("Use `feynman model list` to see available Bedrock models.");
 		return true;
 	} catch (error) {
@@ -619,19 +629,19 @@ async function configureBedrockProvider(authPath: string): Promise<boolean> {
 	}
 }
 
-function maybeSetRecommendedDefaultModel(settingsPath: string | undefined, authPath: string): void {
+async function maybeSetRecommendedDefaultModel(settingsPath: string | undefined, authPath: string): Promise<void> {
 	if (!settingsPath) {
 		return;
 	}
 
 	const currentSpec = getCurrentModelSpec(settingsPath);
-	const available = getAvailableModelRecords(authPath);
+	const available = await getAvailableModelRecords(authPath);
 	const currentValid = currentSpec ? available.some((m) => `${m.provider}/${m.id}` === currentSpec) : false;
 
 	if ((!currentSpec || !currentValid) && available.length > 0) {
-		const recommended = chooseRecommendedModel(authPath);
+		const recommended = await chooseRecommendedModel(authPath);
 		if (recommended) {
-			setDefaultModelSpec(settingsPath, authPath, recommended.spec);
+			await setDefaultModelSpec(settingsPath, authPath, recommended.spec);
 		}
 	}
 }
@@ -740,7 +750,11 @@ async function configureApiKeyProvider(authPath: string, providerId?: string): P
 		return false;
 	}
 
-	AuthStorage.create(authPath).set(provider.id, { type: "api_key", key: apiKey });
+	const modelRuntime = await createModelRuntime(authPath);
+	await modelRuntime.login(provider.id, "api_key", {
+		prompt: async () => apiKey,
+		notify: () => undefined,
+	});
 	printSuccess(`Saved API key for ${provider.id} in auth storage.`);
 
 	const baseUrl = await promptText("Base URL override (optional, include /v1 for OpenAI-compatible endpoints)", "");
@@ -757,13 +771,13 @@ async function configureApiKeyProvider(authPath: string, providerId?: string): P
 	return true;
 }
 
-function resolveAvailableModelSpec(authPath: string, input: string): string | undefined {
+async function resolveAvailableModelSpec(authPath: string, input: string): Promise<string | undefined> {
 	const normalizedInput = input.trim().replace(/^([^/:]+):(.+)$/, "$1/$2").toLowerCase();
 	if (!normalizedInput) {
 		return undefined;
 	}
 
-	const available = getAvailableModelRecords(authPath);
+	const available = await getAvailableModelRecords(authPath);
 	const fullSpecMatch = available.find((model) => `${model.provider}/${model.id}`.toLowerCase() === normalizedInput);
 	if (fullSpecMatch) {
 		return `${fullSpecMatch.provider}/${fullSpecMatch.id}`;
@@ -796,8 +810,8 @@ export function getCurrentModelSpec(settingsPath: string): string | undefined {
 	return undefined;
 }
 
-export function printModelList(settingsPath: string, authPath: string): void {
-	const status = collectModelStatus(settingsPath, authPath);
+export async function printModelList(settingsPath: string, authPath: string): Promise<void> {
+	const status = await collectModelStatus(settingsPath, authPath);
 	if (status.availableModels.length === 0) {
 		printWarning("No authenticated Pi models are currently available.");
 		for (const line of status.guidance) {
@@ -836,7 +850,7 @@ export async function authenticateModelProvider(authPath: string, settingsPath?:
 	if (selection === 1) {
 		const configured = await configureApiKeyProvider(authPath);
 		if (configured) {
-			maybeSetRecommendedDefaultModel(settingsPath, authPath);
+			await maybeSetRecommendedDefaultModel(settingsPath, authPath);
 		}
 		return configured;
 	}
@@ -847,20 +861,20 @@ export async function authenticateModelProvider(authPath: string, settingsPath?:
 
 export async function loginModelProvider(authPath: string, providerId?: string, settingsPath?: string): Promise<boolean> {
 	if (providerId) {
-		const resolvedProvider = resolveModelProviderForCommand(authPath, providerId);
+		const resolvedProvider = await resolveModelProviderForCommand(authPath, providerId);
 		if (!resolvedProvider) {
 			throw new Error(`Unknown model provider: ${providerId}`);
 		}
 		if (resolvedProvider.kind === "api-key") {
 			const configured = await configureApiKeyProvider(authPath, resolvedProvider.id);
 			if (configured) {
-				maybeSetRecommendedDefaultModel(settingsPath, authPath);
+				await maybeSetRecommendedDefaultModel(settingsPath, authPath);
 			}
 			return configured;
 		}
 	}
 
-	const provider = providerId ? resolveOAuthProvider(authPath, providerId) : await selectOAuthProvider(authPath, "login");
+	const provider = providerId ? await resolveOAuthProvider(authPath, providerId) : await selectOAuthProvider(authPath, "login");
 	if (!provider) {
 		if (providerId) {
 			throw new Error(`Unknown model provider: ${providerId}`);
@@ -869,66 +883,73 @@ export async function loginModelProvider(authPath: string, providerId?: string, 
 		return false;
 	}
 
-	const authStorage = AuthStorage.create(authPath);
+	const modelRuntime = await createModelRuntime(authPath);
 	const abortController = new AbortController();
 
-	await authStorage.login(provider.id, {
-		onAuth: (info: { url: string; instructions?: string }) => {
-			printSection(`Login: ${provider.name ?? provider.id}`);
-			const opened = openUrl(info.url);
-			if (opened) {
-				printInfo("Opened the login URL in your browser.");
-			} else {
-				printWarning("Couldn't open your browser automatically.");
+	await modelRuntime.login(provider.id, "oauth", {
+		prompt: async (prompt: AuthPrompt) => {
+			if (prompt.type === "select") {
+				return promptSelect(
+					prompt.message,
+					prompt.options.map((option) => ({
+						value: option.id,
+						label: option.label,
+						hint: option.description,
+					})),
+					undefined,
+					prompt.signal,
+				);
 			}
-			printInfo(`Auth URL: ${info.url}`);
-			if (info.instructions) {
-				printInfo(info.instructions);
+			return promptText(prompt.message, "", prompt.placeholder, prompt.signal);
+		},
+		notify: (event: AuthEvent) => {
+			if (event.type === "auth_url") {
+				printSection(`Login: ${provider.name ?? provider.id}`);
+				if (openUrl(event.url)) {
+					printInfo("Opened the login URL in your browser.");
+				} else {
+					printWarning("Couldn't open your browser automatically.");
+				}
+				printInfo(`Auth URL: ${event.url}`);
+				if (event.instructions) {
+					printInfo(event.instructions);
+				}
+				return;
 			}
-		},
-		onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-			return promptText(prompt.message, prompt.placeholder ?? "");
-		},
-		onProgress: (message: string) => {
-			printInfo(message);
-		},
-		onManualCodeInput: async () => {
-			return promptText("Paste redirect URL or auth code");
-		},
-		onDeviceCode: (info: { userCode: string; verificationUri: string }) => {
-			printSection(`Login: ${provider.name ?? provider.id}`);
-			printInfo(`Visit ${info.verificationUri} and enter code: ${info.userCode}`);
-			openUrl(info.verificationUri);
-		},
-		onSelect: async (prompt: { message: string; options: Array<{ id: string; label: string }> }) => {
-			return promptSelect(
-				prompt.message,
-				prompt.options.map((option) => ({ value: option.id, label: option.label })),
-			);
+			if (event.type === "device_code") {
+				printSection(`Login: ${provider.name ?? provider.id}`);
+				printInfo(`Visit ${event.verificationUri} and enter code: ${event.userCode}`);
+				openUrl(event.verificationUri);
+				return;
+			}
+			if (event.type === "progress" || event.type === "info") {
+				printInfo(event.message);
+			}
 		},
 		signal: abortController.signal,
 	});
 
 	printSuccess(`Model provider login complete: ${provider.id}`);
 
-	maybeSetRecommendedDefaultModel(settingsPath, authPath);
+	await maybeSetRecommendedDefaultModel(settingsPath, authPath);
 
 	return true;
 }
 
 export async function logoutModelProvider(authPath: string, providerId?: string): Promise<void> {
-	const authStorage = AuthStorage.create(authPath);
+	const modelRuntime = await createModelRuntime(authPath);
 	if (providerId) {
-		const resolvedProvider = resolveModelProviderForCommand(authPath, providerId);
+		const resolvedProvider = await resolveModelProviderForCommand(authPath, providerId);
 		if (resolvedProvider) {
-			authStorage.logout(resolvedProvider.id);
+			await modelRuntime.logout(resolvedProvider.id);
 			printSuccess(`Model provider logout complete: ${resolvedProvider.id}`);
 			return;
 		}
 
 		const normalizedProviderId = normalizeProviderId(providerId);
-		if (authStorage.has(normalizedProviderId)) {
-			authStorage.logout(normalizedProviderId);
+		const credentials = await modelRuntime.listCredentials();
+		if (credentials.some((credential) => credential.providerId === normalizedProviderId)) {
+			await modelRuntime.logout(normalizedProviderId);
 			printSuccess(`Model provider logout complete: ${normalizedProviderId}`);
 			return;
 		}
@@ -942,12 +963,12 @@ export async function logoutModelProvider(authPath: string, providerId?: string)
 		return;
 	}
 
-	authStorage.logout(provider.id);
+	await modelRuntime.logout(provider.id);
 	printSuccess(`Model provider logout complete: ${provider.id}`);
 }
 
-export function setDefaultModelSpec(settingsPath: string, authPath: string, spec: string): void {
-	const resolvedSpec = resolveAvailableModelSpec(authPath, spec);
+export async function setDefaultModelSpec(settingsPath: string, authPath: string, spec: string): Promise<void> {
+	const resolvedSpec = await resolveAvailableModelSpec(authPath, spec);
 	if (!resolvedSpec) {
 		throw new Error(`Model not available in Pi auth storage: ${spec}. Run \`feynman model list\` first.`);
 	}
@@ -962,7 +983,7 @@ export function setDefaultModelSpec(settingsPath: string, authPath: string, spec
 }
 
 export async function runModelSetup(settingsPath: string, authPath: string): Promise<void> {
-	let status = collectModelStatus(settingsPath, authPath);
+	let status = await collectModelStatus(settingsPath, authPath);
 
 	while (status.availableModels.length === 0) {
 		const choices = [
@@ -974,20 +995,20 @@ export async function runModelSetup(settingsPath: string, authPath: string): Pro
 		if (selection === 0) {
 			const loggedIn = await loginModelProvider(authPath, undefined, settingsPath);
 			if (!loggedIn) {
-				status = collectModelStatus(settingsPath, authPath);
+				status = await collectModelStatus(settingsPath, authPath);
 				continue;
 			}
 		} else if (selection === 1) {
 			const configured = await configureApiKeyProvider(authPath);
 			if (!configured) {
-				status = collectModelStatus(settingsPath, authPath);
+				status = await collectModelStatus(settingsPath, authPath);
 				continue;
 			}
 		} else {
 			printInfo("Setup cancelled.");
 			return;
 		}
-		status = collectModelStatus(settingsPath, authPath);
+		status = await collectModelStatus(settingsPath, authPath);
 		if (status.availableModels.length === 0) {
 			printWarning("No authenticated models are available yet.");
 			printInfo("If you configured a custom provider, ensure it has `apiKey` set in models.json.");
@@ -1002,6 +1023,6 @@ export async function runModelSetup(settingsPath: string, authPath: string): Pro
 
 	const recommended = status.recommended ?? status.availableModels[0];
 	if (recommended) {
-		setDefaultModelSpec(settingsPath, authPath, recommended);
+		await setDefaultModelSpec(settingsPath, authPath, recommended);
 	}
 }

@@ -432,6 +432,34 @@ test("patchPiSubagentsSource makes pi-spawn prefer the real Pi CLI over Feynman 
 	assert.doesNotMatch(patched, /resolvePiAgentDir/);
 });
 
+test("patchPiSubagentsSource preserves the exact Feynman Pi path in the current package resolver", () => {
+	const input = [
+		'import * as fs from "node:fs";',
+		'import * as path from "node:path";',
+		'export const PI_CODING_AGENT_PACKAGE = "@earendil-works/pi-coding-agent";',
+		"interface PiSpawnDeps {",
+		"\targv1?: string;",
+		"\tenv?: NodeJS.ProcessEnv;",
+		"}",
+		"function isRunnableNodeScript(filePath: string, existsSync: (filePath: string) => boolean): boolean {",
+		"\treturn existsSync(filePath);",
+		"}",
+		"function normalizePath(filePath: string): string { return path.resolve(filePath); }",
+		"export function resolvePiCliScript(deps: PiSpawnDeps = {}): string | undefined {",
+		"\tconst existsSync = fs.existsSync;",
+		"\tconst argv1 = deps.argv1 ?? process.argv[1];",
+		"\treturn argv1;",
+		"}",
+	].join("\n");
+
+	const patched = patchPiSubagentsSource("src/runs/shared/pi-spawn.ts", input);
+
+	assert.match(patched, /const env = deps\.env \?\? process\.env;/);
+	assert.match(patched, /env\.FEYNMAN_PI_CLI_PATH\?\.trim\(\)/);
+	assert.match(patched, /isRunnableNodeScript\(cliPath, existsSync\)/);
+	assert.equal(patchPiSubagentsSource("src/runs/shared/pi-spawn.ts", patched), patched);
+});
+
 test("patchPiSubagentsSource upgrades old Feynman pi-spawn patch to derive cli.js from wrapper main arg", () => {
 	const input = [
 		"export interface PiSpawnDeps {",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -144,6 +144,27 @@ test("ensureFeynmanActiveOrg preserves a reference-shaped existing active org", 
 		assert.ok(existsSync(join(home, "orgs", orgUuid)));
 		const persisted = JSON.parse(readFileSync(getFeynmanActiveOrgPath(home), "utf8")) as { schema?: string };
 		assert.equal(persisted.schema, "feynman.activeOrg.v1");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("ensureFeynmanActiveOrg does not rewrite a valid manifest", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-paths-"));
+	try {
+		const home = join(root, "home");
+		const activeOrg = ensureFeynmanActiveOrg(home);
+		const path = getFeynmanActiveOrgPath(home);
+		const before = statSync(path, { bigint: true });
+
+		for (let index = 0; index < 20; index += 1) {
+			assert.equal(ensureFeynmanActiveOrg(home).org_uuid, activeOrg.org_uuid);
+		}
+
+		const after = statSync(path, { bigint: true });
+		assert.equal(after.mtimeNs, before.mtimeNs);
+		assert.equal(after.ino, before.ino);
+		assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), activeOrg);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

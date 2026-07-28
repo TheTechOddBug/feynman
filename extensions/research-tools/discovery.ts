@@ -149,6 +149,7 @@ export function registerDiscoveryCommands(pi: ExtensionAPI): void {
 				"/tools — inspect callable tools",
 				"/hotkeys — view keyboard shortcuts",
 				"/service-tier — set request tier for supported providers",
+				"/thinking — view or set the active model thinking level",
 				"--- Installed Packages ---",
 				...packages.map((pkg) => pkg),
 			];

@@ -78,7 +78,7 @@ These commands manage your model provider configuration. The `model set` command
 | --- | --- |
 | `feynman alpha login` | Sign in to alphaXiv |
 | `feynman alpha logout` | Clear alphaXiv auth |
-| `feynman alpha status` | Check alphaXiv auth status |
+| `feynman alpha status` | Refresh expired alphaXiv credentials when possible and verify live auth status |
 | `feynman alpha search "query"` | Search papers through Feynman's bundled alphaXiv client |
 | `feynman alpha get <id-or-url>` | Fetch paper content and local annotations |
 | `feynman alpha ask <id-or-url> "question"` | Ask a question about a paper |
@@ -135,7 +135,7 @@ These are equivalent to launching the REPL and typing the corresponding slash co
 | --- | --- |
 | `--prompt "<text>"` | Run one prompt and exit (one-shot mode) |
 | `--model <provider/model|provider:model>` | Force a specific non-Pro model for this session |
-| `--thinking <level>` | Set thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` |
+| `--thinking <level>` | Set thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `--cwd <path>` | Set the working directory for all file operations |
 | `--session-dir <path>` | Set the session storage directory |
 | `--new-session` | Start a new persisted session |

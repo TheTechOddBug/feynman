@@ -9,6 +9,7 @@ import {
 	resolveAdjacentNpmCommand,
 	seedBundledWorkspacePackages,
 } from "../src/pi/package-ops.js";
+import { RUNTIME_INPUT_FILES } from "../scripts/lib/runtime-workspace-integrity.mjs";
 
 function createBundledWorkspace(
 	appRoot: string,
@@ -45,15 +46,18 @@ test("Pi runtime fallback version follows the bundled Pi runtime version", async
 test("prepare runtime workspace hash tracks every imported patch file", async () => {
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
 	const importedPatchFiles = [...runtimeWorkspaceSource.matchAll(/from "\.\/lib\/([^"]+\.mjs)"/g)].map((match) => match[1]);
-	const hashedPatchFiles = [...runtimeWorkspaceSource.matchAll(/resolve\(appRoot, "scripts", "lib", "([^"]+\.mjs)"\)/g)].map((match) => match[1]);
 
-	assert.match(runtimeWorkspaceSource, /resolve\(appRoot, "scripts", "prepare-runtime-workspace\.mjs"\)/);
+	assert.ok(RUNTIME_INPUT_FILES.includes("scripts/prepare-runtime-workspace.mjs"));
+	assert.ok(RUNTIME_INPUT_FILES.includes("scripts/prune-runtime-deps.mjs"));
 	assert.ok(importedPatchFiles.length > 0);
 	for (const patchFile of importedPatchFiles) {
-		assert.ok(hashedPatchFiles.includes(patchFile), `${patchFile} must be included in the runtime input hash`);
+		assert.ok(
+			RUNTIME_INPUT_FILES.includes(`scripts/lib/${patchFile}`),
+			`${patchFile} must be included in the runtime input hash`,
+		);
 	}
-	for (const patchFile of hashedPatchFiles) {
-		assert.equal(existsSync(resolve(process.cwd(), "scripts", "lib", patchFile)), true, `${patchFile} must exist`);
+	for (const inputFile of RUNTIME_INPUT_FILES) {
+		assert.equal(existsSync(resolve(process.cwd(), inputFile)), true, `${inputFile} must exist`);
 	}
 });
 
@@ -61,8 +65,8 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
 
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
-	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.219\.0"/);
-	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.8\.0"/);
+	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
+	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
 });
 

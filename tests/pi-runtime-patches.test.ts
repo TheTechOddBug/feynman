@@ -165,6 +165,12 @@ async function execute(params, configWorkflow, ctx) {
 pi.registerCommand("search", { description: "Browse stored web search results" });
 `;
 
+const WEB_ACCESS_PDF_SOURCE = `
+import { join, basename } from "node:path";
+import { homedir } from "node:os";
+const DEFAULT_OUTPUT_DIR = join(homedir(), "Downloads");
+`;
+
 const SUBAGENT_PI_SPAWN_SOURCE = `
 export interface PiSpawnDeps {
 	execPath?: string;
@@ -184,6 +190,53 @@ export function resolveWindowsPiCliScript(deps: PiSpawnDeps = {}): string | unde
 }
 `;
 
+const MODEL_REGISTRY_SOURCE = `
+export { clearApiKeyCache } from "./provider-composer.js";
+export class ModelRegistry {
+    async getApiKeyAndHeaders(model) {
+        try {
+            const resolution = await this.runtime.getAuth(model);
+            if (!resolution) {
+                const compatibility = this.runtime.getCompatibilityRequestConfig(model);
+                const headers = compatibility.headers
+                    ? Object.fromEntries(Object.entries(compatibility.headers).filter((entry) => entry[1] !== null))
+                    : undefined;
+                return { ok: true, headers };
+            }
+            const headers = resolution.auth.headers
+                ? Object.fromEntries(Object.entries(resolution.auth.headers).filter((entry) => entry[1] !== null))
+                : undefined;
+            return { ok: true, apiKey: resolution.auth.apiKey, headers, env: resolution.env };
+        }
+        catch (error) {
+            return { ok: false, error: String(error) };
+        }
+    }
+}
+`;
+
+const MODEL_RUNTIME_SOURCE = `
+function mergeHeaders(base, override) {
+    return { ...base, ...override };
+}
+export class ModelRuntime {
+    async prepareRequest(model, options) {
+        const resolution = await this.getAuth(model, { apiKey: options?.apiKey, env: options?.env });
+        const { transformHeaders, ...providerOptions } = options ?? {};
+        let headers = mergeHeaders(resolution.auth.headers, providerOptions.headers);
+        if (transformHeaders)
+            headers = await transformHeaders(headers ?? {});
+        return {
+            options: {
+                ...providerOptions,
+                apiKey: providerOptions.apiKey ?? resolution.auth.apiKey,
+                headers,
+            },
+        };
+    }
+}
+`;
+
 test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-runtime-patches-"));
 	const agentLoopPath = join(appRoot, "node_modules", "@earendil-works", "pi-agent-core", "dist", "agent-loop.js");
@@ -191,6 +244,9 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 	const editorPath = join(appRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "components", "editor.js");
 	const themePath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
 	const packageJsonPath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+	const modelRegistryPath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "model-registry.js");
+	const modelRuntimePath = join(appRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "model-runtime.js");
+	const mcpManifestPath = join(appRoot, "node_modules", "@modelcontextprotocol", "sdk", "package.json");
 	const alphaSearchPath = join(appRoot, "node_modules", "@companion-ai", "alpha-hub", "src", "lib", "alphaxiv.js");
 	const sessionSearchPath = join(appRoot, "node_modules", "@kaiserlich-dev", "pi-session-search", "extensions", "indexer.ts");
 	await mkdir(dirname(agentLoopPath), { recursive: true });
@@ -198,6 +254,9 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 	await mkdir(dirname(editorPath), { recursive: true });
 	await mkdir(dirname(themePath), { recursive: true });
 	await mkdir(dirname(packageJsonPath), { recursive: true });
+	await mkdir(dirname(modelRegistryPath), { recursive: true });
+	await mkdir(dirname(modelRuntimePath), { recursive: true });
+	await mkdir(dirname(mcpManifestPath), { recursive: true });
 	await mkdir(dirname(alphaSearchPath), { recursive: true });
 	await mkdir(dirname(sessionSearchPath), { recursive: true });
 	writeFileSync(agentLoopPath, SOURCE, "utf8");
@@ -209,6 +268,12 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 		JSON.stringify({ name: "@earendil-works/pi-coding-agent", piConfig: { configDir: ".pi" } }, null, 2) + "\n",
 		"utf8",
 	);
+	writeFileSync(modelRegistryPath, MODEL_REGISTRY_SOURCE, "utf8");
+	writeFileSync(modelRuntimePath, MODEL_RUNTIME_SOURCE, "utf8");
+	writeFileSync(mcpManifestPath, JSON.stringify({
+		name: "@modelcontextprotocol/sdk",
+		dependencies: { "@hono/node-server": "^1.19.9" },
+	}) + "\n", "utf8");
 	writeFileSync(alphaSearchPath, ALPHA_SEARCH_SOURCE, "utf8");
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 
@@ -228,6 +293,23 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 	const patchedPackageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { piConfig?: Record<string, unknown> };
 	assert.equal(patchedPackageJson.piConfig?.name, "feynman");
 	assert.equal(patchedPackageJson.piConfig?.configDir, ".feynman");
+	assert.match(
+		readFileSync(modelRuntimePath, "utf8"),
+		/assertHeaderSafeRequestConfig\(model\.provider, providerOptions\.apiKey \?\? resolution\.auth\.apiKey, headers\)/,
+	);
+	const patchedRegistry = readFileSync(modelRegistryPath, "utf8");
+	assert.match(
+		patchedRegistry,
+		/assertHeaderSafeRequestConfig\(model\.provider, undefined, headers\)/,
+	);
+	assert.match(
+		patchedRegistry,
+		/assertHeaderSafeRequestConfig\(model\.provider, resolution\.auth\.apiKey, headers\)/,
+	);
+		assert.equal(
+			JSON.parse(readFileSync(mcpManifestPath, "utf8")).dependencies["@hono/node-server"],
+			"2.0.12",
+		);
 	assert.match(readFileSync(alphaSearchPath, "utf8"), /async function searchRestFast/);
 	assert.match(readFileSync(sessionSearchPath, "utf8"), /process\.env\.FEYNMAN_SESSION_DIR/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
@@ -241,6 +323,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	const themePath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "dist", "modes", "interactive", "theme", "theme.js");
 	const packageJsonPath = join(appRoot, ".feynman", "npm", "node_modules", "@mariozechner", "pi-coding-agent", "package.json");
 	const webAccessPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access", "index.ts");
+	const webAccessPdfPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access", "pdf-extract.ts");
 	const subagentSpawnPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-subagents", "src", "runs", "shared", "pi-spawn.ts");
 	const piOtelConfigPath = join(appRoot, ".feynman", "npm", "node_modules", "pi-otel", "dist", "config.js");
 	const sessionSearchPath = join(appRoot, ".feynman", "npm", "node_modules", "@kaiserlich-dev", "pi-session-search", "extensions", "indexer.ts");
@@ -250,6 +333,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	await mkdir(dirname(themePath), { recursive: true });
 	await mkdir(dirname(packageJsonPath), { recursive: true });
 	await mkdir(dirname(webAccessPath), { recursive: true });
+	await mkdir(dirname(webAccessPdfPath), { recursive: true });
 	await mkdir(dirname(subagentSpawnPath), { recursive: true });
 	await mkdir(dirname(piOtelConfigPath), { recursive: true });
 	await mkdir(dirname(sessionSearchPath), { recursive: true });
@@ -263,6 +347,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 		"utf8",
 	);
 	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
+	writeFileSync(webAccessPdfPath, WEB_ACCESS_PDF_SOURCE, "utf8");
 	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(piOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
@@ -278,6 +363,9 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.equal(patchedPackageJson.piConfig?.configDir, ".feynman");
 	assert.match(readFileSync(webAccessPath, "utf8"), /params\.workflow \?\? configWorkflow \?\? "none"/);
 	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.match(readFileSync(webAccessPdfPath, "utf8"), /FEYNMAN_FETCH_CACHE_DIR/);
+	assert.match(readFileSync(webAccessPdfPath, "utf8"), /\.feynman.*cache.*fetch-content/);
+	assert.doesNotMatch(readFileSync(webAccessPdfPath, "utf8"), /Downloads|homedir/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /process\.env\.FEYNMAN_PI_CLI_PATH/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /\targv2\?: string;/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /path\.basename\(argvPath\) !== "pi-cli-wrapper\.js"/);

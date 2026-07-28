@@ -4,9 +4,11 @@ node_modules
 .feynman/git
 .feynman/sessions
 .feynman/workbench
+.feynman/cache
 .feynman/schedule-prompts.json
 dist
 *.tgz
+.feynman/runtime-workspace.sha256
 outputs/*
 !outputs/.gitkeep
 papers/*

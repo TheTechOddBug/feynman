@@ -21,7 +21,7 @@ These are installed by default with every Feynman installation. They provide the
 | `pi-subagents` | Parallel agent spawning for literature gathering and task decomposition. Powers the multi-agent workflows |
 | `pi-btw` | Side conversations while the main research agent is busy, including `/btw` follow-ups and handoff back into the main thread |
 | `pi-docparser` | Parse PDFs, Office documents, spreadsheets, and images for content extraction |
-| `pi-web-access` | Web browsing, GitHub access, PDF fetching, and media retrieval |
+| `pi-web-access` | Web browsing, simultaneous multi-provider search, GitHub access, PDF fetching, and media retrieval |
 | `pi-otel` | OpenTelemetry spans for Pi sessions, model calls, turns, and tool usage, exported without prompt or tool payload content |
 
 These packages are updated together when you run `feynman update`. You do not need to install them individually.
@@ -32,7 +32,7 @@ These packages are updated together when you run `feynman update`. You do not ne
 | --- | --- |
 | AlphaXiv tools | Search papers, fetch paper reports, ask paper questions, read linked code, and manage annotations |
 | Hugging Face Hub tools | Inspect dataset metadata, features, splits, access status, and small files from model, dataset, and Space repos |
-| Feynman commands | `/help`, `/outputs`, `/init`, `/feynman-model`, `/service-tier`, and discovery helpers |
+| Feynman commands | `/help`, `/outputs`, `/init`, `/feynman-model`, `/service-tier`, `/thinking`, and discovery helpers |
 
 ## Optional packages
 

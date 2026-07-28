@@ -17,6 +17,27 @@ test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => 
 	assert.match(patched, /PI_WEB_SEARCH_CONFIG/);
 });
 
+test("patchPiWebAccessSource keeps current upstream config helpers on Feynman's exact config file", () => {
+	const input = [
+		'import { join } from "node:path";',
+		"export function getWebSearchConfigDir(): string {",
+		"\tif (process.env.PI_CODING_AGENT_DIR) return process.env.PI_CODING_AGENT_DIR;",
+		'\treturn "/tmp/.pi";',
+		"}",
+		"export function getWebSearchConfigPath(): string {",
+		'\treturn join(getWebSearchConfigDir(), "web-search.json");',
+		"}",
+		"",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("utils.ts", input);
+
+	assert.match(patched, /process\.env\.FEYNMAN_WEB_SEARCH_CONFIG\?\.trim\(\)/);
+	assert.match(patched, /process\.env\.PI_WEB_SEARCH_CONFIG\?\.trim\(\)/);
+	assert.match(patched, /configuredPath \|\| join\(getWebSearchConfigDir\(\), "web-search\.json"\)/);
+	assert.equal(patchPiWebAccessSource("utils.ts", patched), patched);
+});
+
 test("patchPiWebAccessSource updates index.ts directory handling", () => {
 	const input = [
 		'import { existsSync, mkdirSync } from "node:fs";',
@@ -233,4 +254,19 @@ test("patchPiWebAccessSource enforces a curator browser-connect deadline in cura
 
 	const twice = patchPiWebAccessSource("curator-server.ts", patched);
 	assert.equal(twice, patched);
+});
+
+test("patchPiWebAccessSource keeps fetched PDF scratch files inside the project", () => {
+	const source = [
+		'import { join, basename } from "node:path";',
+		'import { homedir } from "node:os";',
+		'const DEFAULT_OUTPUT_DIR = join(homedir(), "Downloads");',
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("pdf-extract.ts", source);
+
+	assert.match(patched, /FEYNMAN_FETCH_CACHE_DIR/);
+	assert.match(patched, /process\.cwd\(\).*\.feynman.*cache.*fetch-content/);
+	assert.doesNotMatch(patched, /homedir|Downloads/);
+	assert.equal(patchPiWebAccessSource("pdf-extract.ts", patched), patched);
 });

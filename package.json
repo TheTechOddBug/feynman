@@ -1,11 +1,11 @@
 {
   "name": "@companion-ai/feynman",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Research-first CLI agent built on Pi and alphaXiv",
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=22.19.0 <26"
+    "node": ">=22.22.0 <26"
   },
   "bin": {
     "feynman": "bin/feynman.js"
@@ -15,7 +15,10 @@
     "dist/",
     "metadata/",
     ".feynman/agents/",
+    ".feynman/config/",
+    ".feynman/runtime-package-lock.json",
     ".feynman/runtime-workspace.tgz",
+    ".feynman/runtime-workspace.sha256",
     ".feynman/settings.json",
     ".feynman/SYSTEM.md",
     ".feynman/themes/",
@@ -35,12 +38,26 @@
     "scripts/prepare-runtime-workspace.mjs",
     "scripts/prune-runtime-deps.mjs",
     "scripts/sync-website-installers.mjs",
+    "scripts/verify-package-artifact.mjs",
+    "scripts/verify-package-budget.mjs",
     "skills/",
+    "src/config/paths.ts",
+    "src/workbench/data-root.ts",
+    "src/workbench/oauth-store.ts",
+    "src/workbench/settings-store.ts",
+    ".nvmrc",
     "AGENTS.md",
     "CONTRIBUTING.md",
     "RELEASES.md",
     "README.md",
     ".env.example"
+  ],
+  "bundleDependencies": [
+    "@companion-ai/alpha-hub",
+    "@earendil-works/pi-agent-core",
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-tui"
   ],
   "scripts": {
     "preinstall": "node ./scripts/check-node-version.mjs",
@@ -48,7 +65,8 @@
     "build:workbench-web": "vite build --config workbench.vite.config.ts",
     "build:native-bundle": "node ./scripts/build-native-bundle.mjs",
     "dev": "tsx src/index.ts",
-    "prepack": "node ./scripts/clean-publish-artifacts.mjs && npm run build && node ./scripts/prepare-runtime-workspace.mjs",
+    "prepack": "node ./scripts/clean-publish-artifacts.mjs && npm run build && node ./scripts/patch-embedded-pi.mjs && node ./scripts/prepare-runtime-workspace.mjs --rebuild",
+    "runtime:lock": "node ./scripts/prepare-runtime-workspace.mjs --refresh-lock",
     "start": "tsx src/index.ts",
     "start:dist": "node ./bin/feynman.js",
     "test": "node ./scripts/patch-embedded-pi.mjs && node --import tsx --test --test-concurrency=1 tests/*.test.ts",
@@ -62,6 +80,11 @@
     "literature-review",
     "experiments"
   ],
+  "feynmanReleaseBudget": {
+    "maxTarballBytes": 131072000,
+    "maxUnpackedBytes": 377487360,
+    "maxFileCount": 42000
+  },
   "pi": {
     "extensions": [
       "./extensions"
@@ -76,30 +99,28 @@
   "dependencies": {
     "@clack/prompts": "^1.5.1",
     "@companion-ai/alpha-hub": "^0.1.3",
-    "@earendil-works/pi-agent-core": "0.80.3",
-    "@earendil-works/pi-ai": "0.80.3",
-    "@earendil-works/pi-coding-agent": "0.80.3",
-    "@earendil-works/pi-tui": "0.80.3",
+    "@earendil-works/pi-agent-core": "0.82.1",
+    "@earendil-works/pi-ai": "0.82.1",
+    "@earendil-works/pi-coding-agent": "0.82.1",
+    "@earendil-works/pi-tui": "0.82.1",
     "@nightingale-elements/nightingale-msa": "^5.6.0",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/api-logs": "^0.219.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.219.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.219.0",
-    "@opentelemetry/resources": "^2.8.0",
-    "@opentelemetry/sdk-logs": "^0.219.0",
-    "@opentelemetry/sdk-trace-base": "^2.8.0",
-    "@opentelemetry/sdk-trace-node": "^2.8.0",
+    "@opentelemetry/api-logs": "^0.221.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.221.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-logs": "^0.221.0",
+    "@opentelemetry/sdk-trace-base": "^2.10.0",
+    "@opentelemetry/sdk-trace-node": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@rdkit/rdkit": "^2025.3.4-1.0.0",
     "@sinclair/typebox": "^0.34.49",
     "3dmol": "^2.5.5",
+    "brace-expansion": "5.0.8",
     "d3": "^7.9.0",
     "fast-xml-parser": "5.7.3",
     "igv": "^3.8.4",
     "jszip": "^3.10.1",
-    "ketcher-core": "^3.15.0",
-    "ketcher-react": "^3.15.0",
-    "ketcher-standalone": "^3.15.0",
     "npyjs": "^1.1.0",
     "patristic": "^0.5.7",
     "pdfjs-dist": "^6.1.200",
@@ -110,12 +131,13 @@
   },
   "overrides": {
     "basic-ftp": "5.3.1",
-    "hono": "4.12.26",
+    "brace-expansion": "5.0.8",
+    "hono": "4.12.31",
     "qs": "6.15.2",
     "ws": "8.21.0",
     "@modelcontextprotocol/sdk": {
-      "@hono/node-server": "1.19.14",
-      "hono": "4.12.26"
+      "@hono/node-server": "2.0.12",
+      "hono": "4.12.31"
     },
     "express-rate-limit": "8.5.1",
     "ip-address": "10.2.0",
@@ -131,26 +153,27 @@
         }
       }
     },
-    "fast-uri": "3.1.2",
+    "fast-uri": "3.1.4",
     "esbuild": "0.28.1",
     "fast-xml-builder": "1.2.0",
-    "protobufjs": "7.6.4",
-    "minimatch": {
-      "brace-expansion": "5.0.6"
-    }
+    "protobufjs": "7.6.5"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "ketcher-core": "3.15.0",
+    "ketcher-react": "3.15.0",
+    "ketcher-standalone": "3.15.0",
     "lucide-react": "^1.23.0",
     "radix-ui": "^1.6.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vite": "^8.1.3"
+    "vite": "^8.1.3",
+    "yaml": "2.9.0"
   },
   "repository": {
     "type": "git",

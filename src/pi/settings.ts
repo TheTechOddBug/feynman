@@ -1,27 +1,43 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { ModelRegistry, type PackageSource } from "@earendil-works/pi-coding-agent";
+import type { ModelRegistry, ModelRuntime, PackageSource } from "@earendil-works/pi-coding-agent";
 
 import { CORE_PACKAGE_SOURCES, filterPackageSourcesForCurrentNode, shouldPruneLegacyDefaultPackages } from "./package-presets.js";
 import { choosePreferredModelRecord, getAvailableModelRecords, isProClassModelSpec } from "../model/catalog.js";
 
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
-export function parseModelSpec(spec: string, modelRegistry: ModelRegistry) {
+type ModelLookup = Pick<ModelRegistry, "find"> | Pick<ModelRuntime, "getModel">;
+
+function findModel(modelLookup: ModelLookup, provider: string, id: string) {
+	return "find" in modelLookup
+		? modelLookup.find(provider, id)
+		: modelLookup.getModel(provider, id);
+}
+
+export function parseModelSpec(spec: string, modelLookup: ModelLookup) {
 	const trimmed = spec.trim();
-	const separator = trimmed.includes(":") ? ":" : trimmed.includes("/") ? "/" : null;
-	if (!separator) {
-		return undefined;
+	for (const separator of ["/", ":"] as const) {
+		const separatorIndex = trimmed.indexOf(separator);
+		if (separatorIndex <= 0 || separatorIndex === trimmed.length - 1) {
+			continue;
+		}
+
+		const provider = trimmed.slice(0, separatorIndex);
+		const id = trimmed.slice(separatorIndex + 1);
+		const model = findModel(modelLookup, provider, id);
+		if (model) {
+			return model;
+		}
 	}
 
-	const [provider, ...rest] = trimmed.split(separator);
-	const id = rest.join(separator);
-	if (!provider || !id) {
-		return undefined;
-	}
+	return undefined;
+}
 
-	return modelRegistry.find(provider, id);
+export function canonicalizeModelSpec(spec: string, modelLookup: ModelLookup): string | undefined {
+	const model = parseModelSpec(spec, modelLookup);
+	return model ? `${model.provider}/${model.id}` : undefined;
 }
 
 export function normalizeThinkingLevel(value: string | undefined): ThinkingLevel | undefined {
@@ -36,7 +52,8 @@ export function normalizeThinkingLevel(value: string | undefined): ThinkingLevel
 		normalized === "low" ||
 		normalized === "medium" ||
 		normalized === "high" ||
-		normalized === "xhigh"
+		normalized === "xhigh" ||
+		normalized === "max"
 	) {
 		return normalized;
 	}
@@ -78,12 +95,12 @@ export function readJson(path: string): Record<string, unknown> {
 	}
 }
 
-export function normalizeFeynmanSettings(
+export async function normalizeFeynmanSettings(
 	settingsPath: string,
 	bundledSettingsPath: string,
 	defaultThinkingLevel: ThinkingLevel,
 	authPath: string,
-): void {
+): Promise<void> {
 	let settings: Record<string, unknown> = {};
 
 	if (existsSync(settingsPath)) {
@@ -118,7 +135,7 @@ export function normalizeFeynmanSettings(
 		settings.packages = filterConfiguredPackagesForCurrentNode(settings.packages as PackageSource[]);
 	}
 
-	const availableModels = getAvailableModelRecords(authPath).map((model) => ({
+	const availableModels = (await getAvailableModelRecords(authPath)).map((model) => ({
 		provider: model.provider,
 		id: model.id,
 	}));

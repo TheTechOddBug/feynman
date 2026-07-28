@@ -14,9 +14,24 @@ test("patchPiOtelSource strips cwd attributes from pi-otel spans and resources",
 	assert.doesNotMatch(patchPiOtelSource("dist/otel/sdk.js", sdk), /ATTR_PI_CWD|cfg\.cwd/);
 	assert.doesNotMatch(patchPiOtelSource("dist/index.js", index), /ATTR_PI_CWD|cfg\.cwd/);
 	assert.match(patchPiOtelSource("dist/index.js", index), /if \(await probeEndpoint\(cfg\.endpoint\)\)/);
-	assert.match(patchPiOtelSource("dist/otel/sdk.js", sdk), /import \{ resourceFromAttributes \} from "@opentelemetry\/resources"/);
-	assert.match(patchPiOtelSource("dist/otel/sdk.js", sdk), /const resource = resourceFromAttributes\(\{/);
+	assert.match(patchPiOtelSource("dist/otel/sdk.js", sdk), /import \* as otelResources from "@opentelemetry\/resources"/);
+	assert.match(patchPiOtelSource("dist/otel/sdk.js", sdk), /const resource = createFeynmanResource\(\{/);
 	assert.match(patchPiOtelSource("dist/otel/sdk.js", sdk), /u\.protocol === "https:" \? 443/);
+});
+
+test("patchPiOtelSource supports both OpenTelemetry 1.x and 2.x resource APIs", () => {
+	for (const source of [
+		`import { Resource } from "@opentelemetry/resources";
+const resource = new Resource({});`,
+		`import { resourceFromAttributes } from "@opentelemetry/resources";
+const resource = resourceFromAttributes({});`,
+	]) {
+		const patched = patchPiOtelSource("dist/otel/sdk.js", source);
+
+		assert.match(patched, /typeof otelResources\.resourceFromAttributes === "function"/);
+		assert.match(patched, /new otelResources\.Resource\(attributes\)/);
+		assert.match(patched, /const resource = createFeynmanResource\(\{\}\)/);
+	}
 });
 
 test("patchPiOtelSource makes pi-otel honor trace-specific OTLP env vars", () => {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import { extractReleaseNotes, normalizeReleaseVersion } from "../scripts/lib/release-notes.mjs";
@@ -34,4 +35,14 @@ test("extractReleaseNotes returns only the requested release section", () => {
 
 test("extractReleaseNotes returns empty string for missing versions", () => {
 	assert.equal(extractReleaseNotes("## v0.2.33\n\n- Existing.", "0.2.34"), "");
+});
+
+test("release-note extraction fails closed when the version section is missing", () => {
+	const result = spawnSync(
+		process.execPath,
+		["scripts/extract-release-notes.mjs", "99.99.99"],
+		{ cwd: process.cwd(), encoding: "utf8" },
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /RELEASES\.md has no section for v99\.99\.99/);
 });

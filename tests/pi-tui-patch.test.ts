@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "../scripts/lib/pi-tui-patch.mjs";
 
@@ -118,10 +120,41 @@ test("patchPiTuiSource truncates the current upstream overflow check after clear
 	assert.doesNotMatch(patched, /throw new Error\(errorMsg\)/);
 });
 
+test("embedded Pi 0.82 TUI and editor patches apply without dropping Unicode behavior", () => {
+	const tui = readFileSync(join(process.cwd(), "node_modules", "@earendil-works", "pi-tui", "dist", "tui.js"), "utf8");
+	const editor = readFileSync(join(process.cwd(), "node_modules", "@earendil-works", "pi-tui", "dist", "components", "editor.js"), "utf8");
+
+	assert.match(tui, /line = sliceByColumn\(line, 0, width, true\)/);
+	assert.doesNotMatch(tui, /Rendered line .* exceeds terminal width/);
+	assert.match(editor, /applyBackgroundToLine, cjkBreakRegex/);
+	assert.match(editor, /const styleInput = typeof this\.theme\.input === "function"/);
+	assert.match(editor, /createScrollBorder/);
+	assert.match(editor, /firstGrapheme/);
+	assert.match(editor, /const cursor = `\\x1b\[7m\$\{firstGrapheme\}\\x1b\[27m`/);
+	assert.match(editor, /const cursor = "\\x1b\[7m \\x1b\[27m"/);
+	assert.doesNotMatch(editor, /const cursor = .*\\x1b\[0m/);
+	assert.match(editor, /sliceByColumn/);
+});
+
 test("patchPiTuiSource is idempotent", () => {
 	const once = patchPiTuiSource(SOURCE);
 	const twice = patchPiTuiSource(once);
 	assert.equal(twice, once);
+});
+
+test("Pi TUI patchers fail closed on unknown upstream layouts", () => {
+	assert.throws(
+		() => patchPiTuiSource("export class TUI {}"),
+		/Unsupported Pi TUI layout/,
+	);
+	assert.throws(
+		() => patchPiEditorSource("export class Editor {}"),
+		/Unsupported Pi editor layout/,
+	);
+	assert.throws(
+		() => patchPiInteractiveThemeSource("export function getEditorTheme() { return {}; }"),
+		/Unsupported Pi interactive theme layout/,
+	);
 });
 
 const EDITOR_SOURCE = `
@@ -164,6 +197,19 @@ test("patchPiEditorSource is idempotent", () => {
 	const once = patchPiEditorSource(EDITOR_SOURCE);
 	const twice = patchPiEditorSource(once);
 	assert.equal(twice, once);
+});
+
+test("patchPiEditorSource upgrades full fake-cursor resets without clearing the background", () => {
+	const source = [
+		'const styleInput = typeof this.theme.input === "function" ? this.theme.input : (text) => text;',
+		'                    const cursor = `\\x1b[7m${firstGrapheme}\\x1b[0m`;',
+		'                    const cursor = "\\x1b[7m \\x1b[0m";',
+	].join("\n");
+	const patched = patchPiEditorSource(source);
+
+	assert.match(patched, /\\x1b\[27m/);
+	assert.doesNotMatch(patched, /\\x1b\[0m/);
+	assert.equal(patchPiEditorSource(patched), patched);
 });
 
 test("patchPiInteractiveThemeSource gives editor input an explicit foreground", () => {

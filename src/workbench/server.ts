@@ -36,7 +36,7 @@ import { createWorkbenchProject } from "./projects.js";
 import { upsertWorkbenchFrameReadCursor } from "./read-cursors.js";
 import { requestWorkbenchReview } from "./review.js";
 import { readWorkbenchPdfText } from "./pdf-text.js";
-import { buildWorkbenchState, readWorkbenchFile, readWorkbenchFileDownload } from "./scan.js";
+import { buildWorkbenchState, loadWorkbenchModelStatus, readWorkbenchFile, readWorkbenchFileDownload, type BuildWorkbenchStateOptions } from "./scan.js";
 import { ensureOpenScienceSeedFixtures } from "./seed-fixtures.js";
 import { readWorkbenchSettings, removeWorkbenchSettingsRecord, upsertWorkbenchSettingsRecord, type WorkbenchSettingsCollection, type WorkbenchCustomConnector } from "./settings-store.js";
 import { diffArtifactVersionSnapshot, restoreArtifactVersionSnapshot } from "./artifact-snapshot-actions.js";
@@ -312,11 +312,11 @@ function contentDispositionFilename(name: string): string {
 	return name.replace(/["\r\n\\]/g, "_");
 }
 
-function stateOptions(options: { authPath?: string; settingsPath?: string; version?: string; workingDir: string }) {
-	return { workingDir: options.workingDir, ...(options.version ? { version: options.version } : {}), ...(options.settingsPath ? { settingsPath: options.settingsPath } : {}), ...(options.authPath ? { authPath: options.authPath } : {}) };
+function stateOptions(options: BuildWorkbenchStateOptions) {
+	return { workingDir: options.workingDir, ...(options.version ? { version: options.version } : {}), ...(options.settingsPath ? { settingsPath: options.settingsPath } : {}), ...(options.authPath ? { authPath: options.authPath } : {}), ...(options.modelStatus ? { modelStatus: options.modelStatus } : {}) };
 }
 
-function buildServedWorkbenchState(options: { authPath?: string; settingsPath?: string; version?: string; workingDir: string }) {
+function buildServedWorkbenchState(options: BuildWorkbenchStateOptions) {
 	const state = buildWorkbenchState(stateOptions(options));
 	materializeWorkbenchOrgDatabase(state);
 	return state;
@@ -333,7 +333,7 @@ function findArtifactVersion(options: WorkbenchRequestHandlerOptions, body: Reco
 	return version;
 }
 
-type WorkbenchRequestHandlerOptions = Required<Pick<WorkbenchServerOptions, "workingDir" | "token">> & {
+type WorkbenchRequestHandlerOptions = Required<Pick<WorkbenchServerOptions, "workingDir" | "token">> & BuildWorkbenchStateOptions & {
 	appRoot?: string;
 	settingsPath?: string;
 	authPath?: string;
@@ -414,7 +414,7 @@ async function handleWorkbenchRequest(
 			if (sendWorkbenchWeb(response, options, url, headers)) {
 				return;
 			}
-
+			options = { ...options, modelStatus: await loadWorkbenchModelStatus(options) };
 			if (url.pathname === "/api/state") {
 				sendJson(response, 200, buildServedWorkbenchState(options), headers);
 				return;
