@@ -60,4 +60,13 @@ test("Windows installer verifier defines every strict-mode install path", () => 
 	assert.match(verifier, /\$env:PATH = "\$installBinDir;\$env:PATH"/);
 	assert.match(verifier, /-ExecutionPolicy Restricted/);
 	assert.match(verifier, /PATH bin must not contain a policy-blocked feynman\.ps1 shim/);
+	assert.match(verifier, /\$servedArchive = Join-Path \$testRoot \$archiveName/);
+	assert.match(verifier, /Exact-candidate replacement retained the old bundle/);
+	assert.match(verifier, /\$fixtureRoot = Join-Path \$testRoot "compact-fixture"/);
+	assert.match(
+		verifier,
+		/\[System\.IO\.Compression\.ZipFile\]::CreateFromDirectory\(\$fixtureRoot, \$fixtureArchive\)/,
+	);
+	assert.match(verifier, /Copy-Item -LiteralPath \$fixtureArchive -Destination \$servedArchive -Force/);
+	assert.doesNotMatch(verifier, /for \(\$pass = 1; \$pass -le 2;/);
 });

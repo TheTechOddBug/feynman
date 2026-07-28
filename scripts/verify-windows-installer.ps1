@@ -27,8 +27,10 @@ $serverJob = $null
 
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 $archiveName = Split-Path -Leaf $archive
-$archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-"$archiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
+$servedArchive = Join-Path $testRoot $archiveName
+Copy-Item -LiteralPath $archive -Destination $servedArchive
+$activeArchiveSha256 = (Get-FileHash -LiteralPath $servedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+"$activeArchiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
 
 try {
   @'
@@ -96,7 +98,7 @@ server.listen(0, "127.0.0.1", () => {
     if ($LASTEXITCODE -ne 0) {
       throw "Local archive server failed: $LASTEXITCODE"
     }
-  } -ArgumentList $serverScript, $archive, $checksumFile, $portFile
+  } -ArgumentList $serverScript, $servedArchive, $checksumFile, $portFile
 
   $baseUrl = $null
   for ($attempt = 0; $attempt -lt 30; $attempt += 1) {
@@ -232,25 +234,65 @@ server.listen(0, "127.0.0.1", () => {
   $env:PATH = "$installBinDir;$env:PATH"
   Assert-BareRestrictedLauncher
 
-  for ($pass = 1; $pass -le 2; $pass += 1) {
-    $sentinel = Join-Path $bundleDir "stale-pass-$pass.sentinel"
-    "must be removed" | Set-Content -LiteralPath $sentinel
+  $replacementSentinel = Join-Path $bundleDir "stale-replacement.sentinel"
+  "must be removed" | Set-Content -LiteralPath $replacementSentinel
 
-    & $installer -Version $Version
+  & $installer -Version $Version
 
-    if (Test-Path -LiteralPath $sentinel) {
-      throw "Replacement pass $pass retained the old bundle"
-    }
-    Assert-InstalledCandidate
-    Assert-BareRestrictedLauncher
+  if (Test-Path -LiteralPath $replacementSentinel) {
+    throw "Exact-candidate replacement retained the old bundle"
   }
+  Assert-InstalledCandidate
+  Assert-BareRestrictedLauncher
+
+  # The exact release ZIP is large enough that repeatedly downloading and
+  # extracting it can consume the entire hosted-runner timeout. The clean and
+  # replacement passes above prove the real candidate in both PowerShell
+  # hosts. Exercise checksum and rollback branches with a compact, valid bundle
+  # so those same installer paths remain covered without ten redundant 530 MiB
+  # transfers across the two hosts.
+  $fixtureRoot = Join-Path $testRoot "compact-fixture"
+  $fixtureBundleDir = Join-Path $fixtureRoot "feynman-$Version-win32-x64"
+  $fixtureArchive = Join-Path $testRoot "compact-fixture.zip"
+  New-Item -ItemType Directory -Path $fixtureBundleDir -Force | Out-Null
+  @"
+@echo off
+if "%~1"=="--version" (
+  echo $Version
+  exit /b 0
+)
+if "%~1"=="--help" (
+  echo Feynman installer verifier fixture
+  exit /b 0
+)
+exit /b 0
+"@ | Set-Content -LiteralPath (Join-Path $fixtureBundleDir "feynman.cmd") -Encoding ASCII
+  @"
+if (`$args[0] -eq "--version") {
+  Write-Output "$Version"
+  exit 0
+}
+if (`$args[0] -eq "--help") {
+  Write-Output "Feynman installer verifier fixture"
+  exit 0
+}
+exit 0
+"@ | Set-Content -LiteralPath (Join-Path $fixtureBundleDir "feynman.ps1") -Encoding UTF8
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory($fixtureRoot, $fixtureArchive)
+  Copy-Item -LiteralPath $fixtureArchive -Destination $servedArchive -Force
+  $activeArchiveSha256 = (
+    Get-FileHash -LiteralPath $servedArchive -Algorithm SHA256
+  ).Hash.ToLowerInvariant()
+  "$activeArchiveSha256  $archiveName" |
+    Set-Content -LiteralPath $checksumFile -Encoding ASCII
 
   $duplicateSentinel = Join-Path $bundleDir "duplicate-checksum-must-preserve.sentinel"
   "must remain" | Set-Content -LiteralPath $duplicateSentinel
   $conflictingChecksum = "0" * 64
   foreach ($checksumLines in @(
-    @("$archiveSha256  $archiveName", "$conflictingChecksum  $archiveName"),
-    @("$conflictingChecksum  $archiveName", "$archiveSha256  $archiveName")
+    @("$activeArchiveSha256  $archiveName", "$conflictingChecksum  $archiveName"),
+    @("$conflictingChecksum  $archiveName", "$activeArchiveSha256  $archiveName")
   )) {
     $checksumLines | Set-Content -LiteralPath $checksumFile -Encoding ASCII
     $duplicateRejected = $false
@@ -267,7 +309,7 @@ server.listen(0, "127.0.0.1", () => {
     }
   }
 
-  "$archiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
+  "$activeArchiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
   $backupFailureSentinel = Join-Path $bundleDir "backup-failure-must-preserve.sentinel"
   "must remain" | Set-Content -LiteralPath $backupFailureSentinel
   $env:FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_BACKUP = "1"
@@ -311,7 +353,7 @@ CALL "$previousBundleDir\feynman.cmd" %*
 "@ | Set-Content -LiteralPath $shim -Encoding ASCII
   $upgradeSentinel = Join-Path $previousBundleDir "upgrade-failure-must-preserve.sentinel"
   "must remain" | Set-Content -LiteralPath $upgradeSentinel
-  "$archiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
+  "$activeArchiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
 
   $env:FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP = "1"
   $upgradeFailureRejected = $false
