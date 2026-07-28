@@ -4,6 +4,22 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 08:16 PDT — intake-sweep-0.3.6-release-completion
+
+- Objective: Complete the `0.3.6` npm/GitHub release, reconcile every tracked user issue, and preserve the final development-audit refresh.
+- Published: Main run `30367434326` published the exact verified 39,102-file npm tarball and six-asset GitHub release from `ccc8030c1090efb6afab8c4f907115309d1eb788`. The package integrity is `sha512-DKIzet0eGtJt8lAN307j6pfGrpT+Vu+Lmrju/YbW+DDHJ+/hO/jmxavu494EwqPk2Sied3kvmtGQzhqb6Eqo0g==`; GitHub targets the same commit and publishes five nonempty native archives plus `SHA256SUMS`.
+- Failed: npm `11.18.0` does not add `gitHead` when publishing a prebuilt tarball, so the original final verification stopped before testing the installed package and release assets even though npm's signed SLSA provenance binds the package digest to `ccc8030`.
+- Fixed: Release reconciliation now uses `npm audit signatures --include-attestations` and validates the verified SLSA subject digest, repository, workflow, branch, invocation, and resolved Git commit instead of relying on optional registry `gitHead` metadata.
+- Verified: The live npm attestation resolves to `ccc8030`; focused provenance/workflow tests pass (`7/7`), full tests pass (`652/652`), typecheck, build, architecture check, actionlint, root and website full/production audits, website lint/typecheck/build (`34` pages), and `git diff --check` pass. The post-release dry/real package remains within its release budgets; source, clean installed-consumer, and extracted-runtime verification/audits pass.
+- Next: Push the provenance verifier plus dev-lock refresh, require the successor main workflow to verify the published identity without republishing, then close `#182/#185/#186/#187/#188/#190/#193/#196`.
+
+### 2026-07-28 07:30 PDT — intake-sweep-root-dev-audit-refresh
+
+- Objective: Clear the one remaining root development-only advisory without changing the validated `0.3.6` production graph.
+- Fixed: Refreshed Vite's transitive `postcss` from `8.5.16` to patched `8.5.24` and its `nanoid` dependency from `3.3.15` to `3.3.16` in the root lockfile. `package.json`, the runtime lock, website dependencies, and published package inputs remain unchanged.
+- Verified: Root full and production audits, website full and production audits, focused release tests (`5/5`), full tests (`650/650`), typecheck, build, architecture check, website lint/typecheck/build (`34` pages), and `git diff --check` pass. Non-security package drift remains intentionally deferred.
+- Next: Persist the lock refresh after the in-flight `0.3.6` release reaches terminal identity, then require the successor main workflow to skip release work cleanly at the already-published version.
+
 ### 2026-07-28 07:12 PDT — intake-sweep-release-tarball-publish-path
 
 - Objective: Repair npm publication after all successor package consumers and native bundles passed.

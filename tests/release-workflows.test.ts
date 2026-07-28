@@ -82,6 +82,8 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 	assert.match(publishWorkflow, /needs\.verify-package-consumers\.result == 'success'/);
 	assert.match(publishWorkflow, /dist\.integrity/);
 	assert.match(publishWorkflow, /dist\.tarball/);
+	assert.match(publishWorkflow, /audit signatures --json --include-attestations/);
+	assert.match(publishWorkflow, /verify-npm-provenance\.mjs/);
 	assert.match(publishWorkflow, /SHOULD_PUBLISH_NPM/);
 	assert.match(publishWorkflow, /needs\.verify\.outputs\.package_integrity/);
 	assert.doesNotMatch(
@@ -128,12 +130,9 @@ test("version reconciliation and post-publish verification cover all release sur
 	assert.match(publishWorkflow, /identical \| ahead/);
 	assert.match(
 		publishWorkflow,
-		/npm version \$LOCAL belongs to \$PUBLISHED_GIT_HEAD, but GitHub release v\$LOCAL targets \$RELEASE_TARGET/,
+		/npm version \$LOCAL provenance belongs to \$PUBLISHED_SOURCE_SHA, but GitHub release v\$LOCAL targets \$RELEASE_TARGET/,
 	);
-	assert.doesNotMatch(
-		publishWorkflow,
-		/\[ -z "\$PUBLISHED_GIT_HEAD" \] \|\| \[ "\$PUBLISHED_GIT_HEAD" != "\$GITHUB_SHA" \]/,
-	);
+	assert.doesNotMatch(publishWorkflow, /npm view .* gitHead/);
 	assert.doesNotMatch(
 		publishWorkflow,
 		/npm view "@companion-ai\/feynman@\$VERSION" version 2>\/dev\/null \|\| true/,

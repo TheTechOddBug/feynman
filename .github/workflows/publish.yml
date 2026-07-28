@@ -41,7 +41,7 @@ jobs:
           LOCAL=$(node -p "require('./package.json').version")
           echo "version=$LOCAL" >> "$GITHUB_OUTPUT"
 
-          PUBLISHED_GIT_HEAD=""
+          PUBLISHED_SOURCE_SHA=""
           npm_error="$RUNNER_TEMP/npm-view-version.err"
           if PUBLISHED=$(npm view "@companion-ai/feynman@$LOCAL" version 2>"$npm_error"); then
             :
@@ -52,15 +52,23 @@ jobs:
             exit 1
           fi
           if [ "$PUBLISHED" = "$LOCAL" ]; then
-            git_head_error="$RUNNER_TEMP/npm-view-git-head.err"
-            if ! PUBLISHED_GIT_HEAD=$(npm view "@companion-ai/feynman@$LOCAL" gitHead 2>"$git_head_error"); then
-              cat "$git_head_error" >&2
-              exit 1
-            fi
-            if [ -z "$PUBLISHED_GIT_HEAD" ]; then
-              echo "npm version $LOCAL has no gitHead" >&2
-              exit 1
-            fi
+            published_integrity=$(npm view "@companion-ai/feynman@$LOCAL" dist.integrity)
+            provenance_dir="$RUNNER_TEMP/npm-provenance-version-check"
+            mkdir -p "$provenance_dir"
+            (
+              cd "$provenance_dir"
+              npm init -y >/dev/null
+              npm install --ignore-scripts --omit=dev --no-audit "@companion-ai/feynman@$LOCAL" >/dev/null
+              npx --yes npm@11.18.0 audit signatures --json --include-attestations > audit-signatures.json
+            )
+            PUBLISHED_SOURCE_SHA=$(node scripts/verify-npm-provenance.mjs \
+              "$provenance_dir/audit-signatures.json" \
+              "@companion-ai/feynman" \
+              "$LOCAL" \
+              "$published_integrity" \
+              "https://github.com/$GITHUB_REPOSITORY" \
+              ".github/workflows/publish.yml" \
+              "refs/heads/main")
             echo "should_publish_npm=false" >> "$GITHUB_OUTPUT"
           else
             latest_error="$RUNNER_TEMP/npm-view-latest.err"
@@ -134,8 +142,8 @@ jobs:
           fi
 
           if [ "$RELEASE_COMPLETE" = "true" ] && [ "$PUBLISHED" = "$LOCAL" ]; then
-            if [ "$PUBLISHED_GIT_HEAD" != "$RELEASE_TARGET" ]; then
-              echo "npm version $LOCAL belongs to $PUBLISHED_GIT_HEAD, but GitHub release v$LOCAL targets $RELEASE_TARGET" >&2
+            if [ "$PUBLISHED_SOURCE_SHA" != "$RELEASE_TARGET" ]; then
+              echo "npm version $LOCAL provenance belongs to $PUBLISHED_SOURCE_SHA, but GitHub release v$LOCAL targets $RELEASE_TARGET" >&2
               exit 1
             fi
             release_relation=$(gh api \
@@ -149,8 +157,8 @@ jobs:
                 exit 1
                 ;;
             esac
-          elif [ "$PUBLISHED" = "$LOCAL" ] && [ "$PUBLISHED_GIT_HEAD" != "$GITHUB_SHA" ]; then
-            echo "Incomplete release v$LOCAL belongs to npm commit $PUBLISHED_GIT_HEAD, not $GITHUB_SHA" >&2
+          elif [ "$PUBLISHED" = "$LOCAL" ] && [ "$PUBLISHED_SOURCE_SHA" != "$GITHUB_SHA" ]; then
+            echo "Incomplete release v$LOCAL belongs to npm provenance commit $PUBLISHED_SOURCE_SHA, not $GITHUB_SHA" >&2
             exit 1
           fi
 
@@ -393,10 +401,24 @@ jobs:
             exit 1
           fi
           if [ "$PUBLISHED" = "$LOCAL" ]; then
-            published_git_head=$(npm view "@companion-ai/feynman@$LOCAL" gitHead)
-            test -n "$published_git_head"
-            test "$published_git_head" = "$GITHUB_SHA"
             published_integrity=$(npm view "@companion-ai/feynman@$LOCAL" dist.integrity)
+            provenance_dir="$RUNNER_TEMP/npm-provenance-publish"
+            mkdir -p "$provenance_dir"
+            (
+              cd "$provenance_dir"
+              npm init -y >/dev/null
+              npm install --ignore-scripts --omit=dev --no-audit "@companion-ai/feynman@$LOCAL" >/dev/null
+              npx --yes npm@11.18.0 audit signatures --json --include-attestations > audit-signatures.json
+            )
+            published_source_sha=$(node scripts/verify-npm-provenance.mjs \
+              "$provenance_dir/audit-signatures.json" \
+              "@companion-ai/feynman" \
+              "$LOCAL" \
+              "$published_integrity" \
+              "https://github.com/$GITHUB_REPOSITORY" \
+              ".github/workflows/publish.yml" \
+              "refs/heads/main")
+            test "$published_source_sha" = "$GITHUB_SHA"
             test "$published_integrity" = "${{ needs.verify.outputs.package_integrity }}"
             echo "@companion-ai/feynman@$LOCAL already matches this verified commit and tarball; skipping npm publish."
             exit 0
@@ -638,11 +660,6 @@ jobs:
             sleep 10
           done
 
-          published_git_head=$(npm view "@companion-ai/feynman@$VERSION" gitHead)
-          if [ -z "$published_git_head" ] || [ "$published_git_head" != "$GITHUB_SHA" ]; then
-            echo "Published npm package belongs to $published_git_head, not $GITHUB_SHA" >&2
-            exit 1
-          fi
           published_integrity=$(npm view "@companion-ai/feynman@$VERSION" dist.integrity)
           test "$published_integrity" = "${{ needs.verify.outputs.package_integrity }}"
 
@@ -650,6 +667,19 @@ jobs:
           mkdir -p "$consumer"
           (cd "$consumer" && npm init -y >/dev/null)
           npm install --prefix "$consumer" --omit=dev --no-audit "@companion-ai/feynman@$VERSION"
+          (
+            cd "$consumer"
+            npx --yes npm@11.18.0 audit signatures --json --include-attestations > audit-signatures.json
+          )
+          published_source_sha=$(node scripts/verify-npm-provenance.mjs \
+            "$consumer/audit-signatures.json" \
+            "@companion-ai/feynman" \
+            "$VERSION" \
+            "$published_integrity" \
+            "https://github.com/$GITHUB_REPOSITORY" \
+            ".github/workflows/publish.yml" \
+            "refs/heads/main")
+          test "$published_source_sha" = "$GITHUB_SHA"
           npm audit --omit=dev --prefix "$consumer"
           bin="$consumer/node_modules/.bin/feynman"
           test "$("$bin" --version | tail -1)" = "$VERSION"
