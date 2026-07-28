@@ -178,6 +178,10 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 }
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
+const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
+if (typeof expectedPiWebAccessVersion !== "string") {
+	fail("committed runtime lock does not pin pi-web-access");
+}
 if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
@@ -279,6 +283,22 @@ requireMarkers(
 if (
 	readArchivedJson(
 		archivePath,
+		"npm/node_modules/pi-web-access/package.json",
+	).version !== expectedPiWebAccessVersion
+) {
+	fail(`runtime pi-web-access is not ${expectedPiWebAccessVersion}`);
+}
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/utils.ts",
+	),
+	"runtime pi-web-access config helper",
+	["FEYNMAN_WEB_SEARCH_CONFIG", "PI_WEB_SEARCH_CONFIG", "configuredPath || join(getWebSearchConfigDir()"],
+);
+if (
+	readArchivedJson(
+		archivePath,
 		"npm/node_modules/@modelcontextprotocol/sdk/package.json",
 	).dependencies?.["@hono/node-server"] !== "2.0.12"
 ) {
@@ -305,6 +325,7 @@ console.log(JSON.stringify({
 	ok: true,
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
+	piWebAccessVersion: expectedPiWebAccessVersion,
 	runtimePackages: runtimeManifest.packageSpecs.length,
 	runtimeArchiveSha256: computeFileSha256(archivePath),
 }));

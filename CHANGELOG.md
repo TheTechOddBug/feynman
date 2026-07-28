@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 01:49 PDT — intake-sweep-pi-web-access-0-15
+
+- Objective: Resolve the post-cutoff `pi-web-access@0.15.0` research-search release before publishing Feynman `0.3.6`.
+- Changed: Pinned the bundled and seeded web-access package to `0.15.0`, refreshed the committed runtime lock/archive, documented simultaneous all-provider search, TinyFish search/extraction, and configurable OpenAI Responses-compatible gateways, and extended Feynman's package patch so current upstream `utils.ts` continues to honor the exact `FEYNMAN_WEB_SEARCH_CONFIG` file instead of falling back to Pi's agent directory.
+- Verified: The exact upstream tag/commit passed its patched test suite (`215/215`), typecheck, runtime production audit, idempotency, and diff check. Focused Feynman package/runtime/settings/integrity regressions passed (`50/50`); full tests passed (`649/649`); typecheck, build, architecture, actionlint, website lint/typecheck/build, root/site/runtime/consumer audits, and diff check passed. Dry and real packs matched at SHA-1 `ae23ce2976abe5a3d5920435ad4f4f9a68a8a395`; the real tarball SHA-256 is `b6d10e01f6bea37984016b7b4a294a8a038ac5e295ccc38c826040583cfa025d`. Clean installed-artifact verification reports Pi `0.82.1`, `pi-web-access@0.15.0`, and runtime SHA-256 `2ec33eae33d1d994b73a6826703200daf0883295b2e52a786ea268f5b94375ef`; isolated RPC loaded `web-results` while ignoring an intentionally invalid agent-directory web config in favor of Feynman's exact config path.
+- Next: Commit and push the exact candidate, run the clean Daytona ladder at that SHA, require the final GitHub Windows/Node matrix to pass, then merge and verify npm/GitHub release identity.
+
 ### 2026-07-28 01:24 PDT — intake-sweep-windows-consumer-path
 
 - Objective: Repair the final exact-head PR `#192` platform failure without weakening the shared candidate-tarball gate.

@@ -17,6 +17,27 @@ test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => 
 	assert.match(patched, /PI_WEB_SEARCH_CONFIG/);
 });
 
+test("patchPiWebAccessSource keeps current upstream config helpers on Feynman's exact config file", () => {
+	const input = [
+		'import { join } from "node:path";',
+		"export function getWebSearchConfigDir(): string {",
+		"\tif (process.env.PI_CODING_AGENT_DIR) return process.env.PI_CODING_AGENT_DIR;",
+		'\treturn "/tmp/.pi";',
+		"}",
+		"export function getWebSearchConfigPath(): string {",
+		'\treturn join(getWebSearchConfigDir(), "web-search.json");',
+		"}",
+		"",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("utils.ts", input);
+
+	assert.match(patched, /process\.env\.FEYNMAN_WEB_SEARCH_CONFIG\?\.trim\(\)/);
+	assert.match(patched, /process\.env\.PI_WEB_SEARCH_CONFIG\?\.trim\(\)/);
+	assert.match(patched, /configuredPath \|\| join\(getWebSearchConfigDir\(\), "web-search\.json"\)/);
+	assert.equal(patchPiWebAccessSource("utils.ts", patched), patched);
+});
+
 test("patchPiWebAccessSource updates index.ts directory handling", () => {
 	const input = [
 		'import { existsSync, mkdirSync } from "node:fs";',

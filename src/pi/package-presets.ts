@@ -14,7 +14,7 @@ export const CORE_PACKAGE_SOURCES = [
 	"npm:pi-subagents@0.37.2",
 	"npm:pi-btw@0.4.1",
 	"npm:pi-docparser@3.0.1",
-	"npm:pi-web-access@0.14.0",
+	"npm:pi-web-access@0.15.0",
 	"npm:pi-otel@0.1.0",
 ] as const;
 

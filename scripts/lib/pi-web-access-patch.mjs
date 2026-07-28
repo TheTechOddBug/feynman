@@ -11,6 +11,7 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"pdf-extract.ts",
 	"video-extract.ts",
 	"youtube-extract.ts",
+	"utils.ts",
 ];
 
 const LEGACY_CONFIG_EXPR = 'join(homedir(), ".pi", "web-search.json")';
@@ -20,6 +21,17 @@ const LEGACY_PDF_OUTPUT_DIR = 'const DEFAULT_OUTPUT_DIR = join(homedir(), "Downl
 const PATCHED_PDF_OUTPUT_DIR = [
 	"const DEFAULT_OUTPUT_DIR =",
 	'  process.env.FEYNMAN_FETCH_CACHE_DIR?.trim() || join(process.cwd(), ".feynman", "cache", "fetch-content");',
+].join("\n");
+const CONFIG_PATH_HELPER = [
+	"export function getWebSearchConfigPath(): string {",
+	'\treturn join(getWebSearchConfigDir(), "web-search.json");',
+	"}",
+].join("\n");
+const PATCHED_CONFIG_PATH_HELPER = [
+	"export function getWebSearchConfigPath(): string {",
+	"\tconst configuredPath = process.env.FEYNMAN_WEB_SEARCH_CONFIG?.trim() || process.env.PI_WEB_SEARCH_CONFIG?.trim();",
+	'\treturn configuredPath || join(getWebSearchConfigDir(), "web-search.json");',
+	"}",
 ].join("\n");
 
 function patchGeminiWebSource(source) {
@@ -396,6 +408,10 @@ export function patchPiWebAccessSource(relativePath, source) {
 			patched = patched.replace('import { homedir } from "node:os";\n', "");
 			changed = true;
 		}
+	}
+
+	if (relativePath === "utils.ts" && patched.includes(CONFIG_PATH_HELPER)) {
+		patched = patched.replace(CONFIG_PATH_HELPER, PATCHED_CONFIG_PATH_HELPER);
 	}
 
 	return patched;
