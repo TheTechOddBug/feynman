@@ -290,9 +290,16 @@ jobs:
           test "$count" = "1"
           tarball=$(find npm-package -type f -name '*.tgz' -print)
           tarball=$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$tarball")
-          version=$(tar -xOf "$tarball" package/package.json | node -e \
+          tarball_for_tar="$tarball"
+          if command -v cygpath >/dev/null 2>&1; then
+            tarball_for_tar=$(cygpath -u "$tarball")
+          fi
+          version=$(tar -xOf "$tarball_for_tar" package/package.json | node -e \
             'let source=""; process.stdin.on("data", chunk => source += chunk).on("end", () => process.stdout.write(JSON.parse(source).version))')
           consumer="$RUNNER_TEMP/feynman-consumer"
+          if command -v cygpath >/dev/null 2>&1; then
+            consumer=$(cygpath -u "$consumer")
+          fi
           mkdir -p "$consumer"
           (cd "$consumer" && npm init -y >/dev/null)
           npm install --prefix "$consumer" --omit=dev --no-audit "$tarball"
@@ -304,8 +311,13 @@ jobs:
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
           runtime_audit="$RUNNER_TEMP/feynman-runtime-audit"
           mkdir -p "$runtime_audit"
+          runtime_archive="$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz"
+          if command -v cygpath >/dev/null 2>&1; then
+            runtime_archive=$(cygpath -u "$runtime_archive")
+            runtime_audit=$(cygpath -u "$runtime_audit")
+          fi
           tar -xzf \
-            "$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz" \
+            "$runtime_archive" \
             -C "$runtime_audit"
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \

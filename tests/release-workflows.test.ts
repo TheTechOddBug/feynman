@@ -16,6 +16,9 @@ test("pull-request release gates validate the merge candidate", () => {
 	assert.match(e2eWorkflow, /name: Windows native installer \(PR\)/);
 	assert.match(e2eWorkflow, /shell: powershell/);
 	assert.match(e2eWorkflow, /shell: pwsh/);
+	assert.match(e2eWorkflow, /tarball_for_tar=\$\(cygpath -u "\$tarball"\)/);
+	assert.match(e2eWorkflow, /consumer=\$\(cygpath -u "\$consumer"\)/);
+	assert.match(e2eWorkflow, /runtime_archive=\$\(cygpath -u "\$runtime_archive"\)/);
 	assert.equal(
 		(e2eWorkflow.match(/scripts\/verify-windows-installer\.ps1/g) ?? []).length,
 		2,

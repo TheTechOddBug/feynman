@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 01:24 PDT — intake-sweep-windows-consumer-path
+
+- Objective: Repair the final exact-head PR `#192` platform failure without weakening the shared candidate-tarball gate.
+- Fixed: Run `30341296771` proved that both Windows Node `24.18.0` and Node `25` consumers converted the downloaded tarball to a native `D:\...` path, which GNU tar interpreted as a remote host. The PR consumer gate now retains a native absolute tarball for npm, derives an MSYS path for GNU tar, and normalizes shell-owned consumer and runtime extraction paths under Git Bash.
+- Verified: The exact parent candidate passed the GitHub release-candidate source/package job and entered both Windows installer hosts; actionlint, the focused release-workflow suite (`5/5`), and `git diff --check` pass with the path repair. Exact successor CI, final clean Daytona verification, merge, and publication remain pending.
+- Next: Commit and push the repair, require every Windows/Node/native job to pass, rerun clean-machine proof at the successor SHA, then merge and verify the `0.3.6` release.
+
 ### 2026-07-28 01:07 PDT — intake-sweep-0-3-6-final-candidate
 
 - Objective: Finish PR `#192` as the single release path for issues `#182/#185/#186/#187/#188/#190/#193/#196`, including the remaining Windows, supported-Node, packaged-runtime, and live-auth gates.
