@@ -62,12 +62,16 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 	for (const nodeVersion of ["22.22.0", "24.18.0", "25"]) {
 		assert.match(publishWorkflow, new RegExp(`node: "${nodeVersion.replace(/\./g, "\\.")}"`));
 	}
+	const consumerJob = publishWorkflow.match(
+		/\n  verify-package-consumers:[\s\S]*?(?=\n  publish-npm:)/,
+	);
+	assert.ok(consumerJob, "publish workflow must define the package consumer job");
 	assert.match(
-		publishWorkflow,
+		consumerJob[0],
 		/runtime_archive="\$consumer\/node_modules\/@companion-ai\/feynman\/\.feynman\/runtime-workspace\.tgz"/,
 	);
-	assert.match(publishWorkflow, /runtime_archive=\$\(cygpath -u "\$runtime_archive"\)/);
-	assert.match(publishWorkflow, /runtime_audit=\$\(cygpath -u "\$runtime_audit"\)/);
+	assert.match(consumerJob[0], /runtime_archive=\$\(cygpath -u "\$runtime_archive"\)/);
+	assert.match(consumerJob[0], /runtime_audit=\$\(cygpath -u "\$runtime_audit"\)/);
 	assert.match(publishWorkflow, /needs\.build-native-bundles\.result == 'success'/);
 	assert.match(publishWorkflow, /needs\.verify-package-consumers\.result == 'success'/);
 	assert.match(publishWorkflow, /dist\.integrity/);

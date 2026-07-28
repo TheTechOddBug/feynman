@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 06:32 PDT — intake-sweep-release-consumer-job-path
+
+- Objective: Correct the first release-workflow repair after successor run `30361556647` repeated the Windows runtime-audit failure.
+- Found: Commit `c67c99c` normalized the source-verification consumer block, but the failing cross-platform `verify-package-consumers` matrix was a separate duplicated block and remained unchanged. The regression asserted against the whole workflow, so the unrelated first block satisfied it. Both Windows Node `24.18.0` and `25` receipts show the old native `D:\...` archive argument at the failure.
+- Fixed: Normalize the runtime archive and extraction paths inside the matrix job itself, and scope the regression to the `verify-package-consumers` job so another block cannot false-green it.
+- Verified: Full tests (`650/650`), the focused workflow suite (`5/5`), actionlint, and `git diff --check` pass.
+- Next: Push the exact successor and require both Windows consumers plus native/publish/release identity to pass before issue closure.
+
 ### 2026-07-28 06:00 PDT — intake-sweep-release-windows-runtime-path
 
 - Objective: Repair the first post-merge `0.3.6` release run without allowing a partially published release.
