@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 07:12 PDT — intake-sweep-release-tarball-publish-path
+
+- Objective: Repair npm publication after all successor package consumers and native bundles passed.
+- Found: Run `30364141613` passed source verification, all six Linux/macOS/Windows consumer jobs, and all five native bundles. `publish-npm` job `90300538798` then passed the downloaded artifact as bare relative path `npm-package/companion-ai-feynman-0.3.6.tgz`; npm `11.18.0` interpreted that as a Git dependency and attempted `ssh://git@github.com/npm-package/...tgz.git`. npm `0.3.6` and GitHub `v0.3.6` remain absent, so no partial release occurred.
+- Fixed: Resolve the single downloaded tarball to an absolute filesystem path before inspecting and publishing it, and scope the regression to the `publish-npm` job.
+- Verified: Full tests (`650/650`), the focused workflow suite (`5/5`), actionlint, and `git diff --check` pass.
+- Next: Push the exact successor, then require npm provenance publication, six GitHub assets, checksums, installability, and final release identity before issue closure.
+
 ### 2026-07-28 06:32 PDT — intake-sweep-release-consumer-job-path
 
 - Objective: Correct the first release-workflow repair after successor run `30361556647` repeated the Windows runtime-audit failure.

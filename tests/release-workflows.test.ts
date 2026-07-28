@@ -46,7 +46,13 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 	assert.match(publishWorkflow, /concurrency:\s*\n\s+group: publish-/);
 	assert.match(publishWorkflow, /name: npm-package/);
 	assert.match(publishWorkflow, /name: npm-package\s*\n\s+path: npm-package/);
-	assert.match(publishWorkflow, /npx npm@11\.18\.0 publish "\$tarball" --access public --provenance/);
+	const publishNpmJob = publishWorkflow.match(/\n  publish-npm:[\s\S]*?(?=\n  build-native-bundles:)/);
+	assert.ok(publishNpmJob, "publish workflow must define the npm publication job");
+	assert.match(
+		publishNpmJob[0],
+		/tarball=\$\(node -e 'process\.stdout\.write\(require\("node:path"\)\.resolve\(process\.argv\[1\]\)\)' "\$tarball"\)/,
+	);
+	assert.match(publishNpmJob[0], /npx npm@11\.18\.0 publish "\$tarball" --access public --provenance/);
 	assert.match(
 		publishWorkflow,
 		/publish-npm:\s*\n\s+needs:\s*\n\s+- version-check\s*\n\s+- verify\s*\n\s+- verify-package-consumers\s*\n\s+- build-native-bundles/,
