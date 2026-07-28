@@ -151,7 +151,8 @@ Workarounds:
 
   Write-Host "==> Extracting $archiveName"
   New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-  Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractRoot)
   if (-not (Test-Path $extractedBundleDir)) {
     throw "Downloaded archive did not contain the expected $bundleName directory."
   }

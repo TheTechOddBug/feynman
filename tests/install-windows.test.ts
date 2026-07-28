@@ -11,7 +11,11 @@ test("Windows installer extracts into staging before replacing installed bundle"
 
 	assert.match(installer, /\$extractRoot = Join-Path \$tmpDir "extract"/);
 	assert.match(installer, /\$extractedBundleDir = Join-Path \$extractRoot \$bundleName/);
-	assert.match(installer, /Expand-Archive -LiteralPath \$archivePath -DestinationPath \$extractRoot -Force/);
+	assert.match(installer, /Add-Type -AssemblyName System\.IO\.Compression\.FileSystem/);
+	assert.match(
+		installer,
+		/\[System\.IO\.Compression\.ZipFile\]::ExtractToDirectory\(\$archivePath, \$extractRoot\)/,
+	);
 	assert.match(installer, /Downloaded archive did not contain the expected \$bundleName directory/);
 	assert.match(installer, /Get-FileHash -LiteralPath \$archivePath -Algorithm SHA256/);
 	assert.match(installer, /SHA-256 mismatch/);
@@ -38,7 +42,7 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.match(installer, /Install only the CMD shim on PATH/);
 	assert.doesNotMatch(installer, /\$resolvedCommand\.Source -ne \$shimPath/);
 	assert.doesNotMatch(installer, /Move-Item -LiteralPath \$shimCandidate -Destination \$shimPath/);
-	assert.doesNotMatch(installer, /Expand-Archive -LiteralPath \$archivePath -DestinationPath \$installRoot -Force/);
+	assert.doesNotMatch(installer, /Expand-Archive/);
 });
 
 test("website Windows installer stays synced with the packaged installer", () => {
