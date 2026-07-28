@@ -35,7 +35,7 @@ If you prefer installing Feynman into an existing Node.js environment, use npm i
 npm install -g @companion-ai/feynman
 ```
 
-This path uses your local Node.js runtime instead of the bundled standalone runtime. It requires a compatible Node.js version that satisfies Feynman's current engine range: `>=22.19.0 <26`.
+This path uses your local Node.js runtime instead of the bundled standalone runtime. It requires a compatible Node.js version that satisfies Feynman's current engine range: `>=22.22.0 <26`.
 
 ## Updating the standalone app
 

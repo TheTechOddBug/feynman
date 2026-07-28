@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, linkSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -11,6 +11,7 @@ import {
 	computeRuntimeTreeHash,
 	RUNTIME_INPUT_FILES,
 	runtimeArchiveMatches,
+	runtimeManifestPackagesMatch,
 	workspacePackagesMatch,
 	writeFileSha256,
 } from "../scripts/lib/runtime-workspace-integrity.mjs";
@@ -50,6 +51,7 @@ test("runtime workspace integrity checks installed versions and the exact archiv
 		packageSpecs: specs,
 		runtimeInputHash,
 		runtimeTreeHash: computeRuntimeTreeHash(workspace),
+		workspaceTreeHash: computeRuntimeTreeHash(workspace),
 	}) + "\n");
 
 	const packed = spawnSync("tar", ["-czf", archivePath, "-C", feynmanDir, "npm"], {
@@ -90,6 +92,40 @@ test("runtime workspace integrity checks installed versions and the exact archiv
 	assert.equal(workspacePackagesMatch(nodeModules, ["@scope/runtime@9.9.9"]), false);
 });
 
+test("runtime manifest verification checks bundled packages beyond configured extensions", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-manifest-"));
+	const writePackage = (name: string, version: string) => {
+		const packagePath = join(root, ...name.split("/"));
+		mkdirSync(packagePath, { recursive: true });
+		writeFileSync(
+			join(packagePath, "package.json"),
+			`${JSON.stringify({ name, version })}\n`,
+			"utf8",
+		);
+	};
+	writePackage("pi-subagents", "0.37.2");
+	writePackage("@earendil-works/pi-coding-agent", "0.79.1");
+
+	const manifestSpecs = [
+		"pi-subagents@0.37.2",
+		"@earendil-works/pi-coding-agent@0.82.1",
+	];
+	assert.equal(
+		runtimeManifestPackagesMatch(root, manifestSpecs, ["pi-subagents@0.37.2"]),
+		false,
+	);
+
+	writePackage("@earendil-works/pi-coding-agent", "0.82.1");
+	assert.equal(
+		runtimeManifestPackagesMatch(root, manifestSpecs, ["pi-subagents@0.37.2"]),
+		true,
+	);
+	assert.equal(
+		runtimeManifestPackagesMatch(root, manifestSpecs, ["missing-package@1.0.0"]),
+		false,
+	);
+});
+
 test("runtime archive integrity rejects a lock that differs from the committed graph", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-lock-integrity-"));
 	const feynmanDir = join(root, ".feynman");
@@ -112,6 +148,7 @@ test("runtime archive integrity rejects a lock that differs from the committed g
 		packageSpecs: specs,
 		runtimeInputHash,
 		runtimeTreeHash: computeRuntimeTreeHash(workspace),
+		workspaceTreeHash: computeRuntimeTreeHash(workspace),
 	}) + "\n");
 	assert.equal(spawnSync("tar", ["-czf", archivePath, "-C", feynmanDir, "npm"], {
 		env: { ...process.env, COPYFILE_DISABLE: "1" },
@@ -161,6 +198,16 @@ test("runtime input hashes are independent of the checkout root", () => {
 		computeRuntimeInputHash(left, inputFiles),
 		computeRuntimeInputHash(right, inputFiles),
 	);
+});
+
+test("runtime manifests preserve separate workspace and archive tree hashes", () => {
+	const source = readFileSync(
+		join(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"),
+		"utf8",
+	);
+	assert.match(source, /workspaceTreeHash/);
+	assert.match(source, /computeRuntimeArchiveTreeHash\(workspaceArchivePath\)/);
+	assert.match(source, /writeManifest\(packageSpecs, archiveTreeHash\)/);
 });
 
 test("runtime input hashes use only files shipped in installed packages", () => {

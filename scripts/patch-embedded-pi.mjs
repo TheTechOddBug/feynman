@@ -14,7 +14,10 @@ import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
-import { verifyFileSha256, workspacePackagesMatch } from "./lib/runtime-workspace-integrity.mjs";
+import {
+	runtimeManifestPackagesMatch,
+	verifyFileSha256,
+} from "./lib/runtime-workspace-integrity.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
@@ -157,10 +160,6 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^run `npm fund` for details$/i,
 ];
 
-function arraysMatch(left, right) {
-	return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 function supportsNativePackageSources(version = process.versions.node) {
 	const [major = "0"] = version.replace(/^v/, "").split(".");
 	return (Number.parseInt(major, 10) || 0) <= 22;
@@ -274,10 +273,6 @@ function filterUnsupportedPackageSpecs(packageSpecs) {
 	return packageSpecs.filter((spec) => !NATIVE_PACKAGE_SPECS.has(parsePackageName(spec)));
 }
 
-function workspaceContainsPackages(packageSpecs) {
-	return workspacePackagesMatch(workspaceRoot, packageSpecs);
-}
-
 function workspaceMatchesRuntime(packageSpecs) {
 	if (!existsSync(workspaceManifestPath)) return false;
 
@@ -286,12 +281,11 @@ function workspaceMatchesRuntime(packageSpecs) {
 		if (!Array.isArray(manifest.packageSpecs)) {
 			return false;
 		}
-		if (!arraysMatch(manifest.packageSpecs, packageSpecs)) {
-			if (!(workspaceContainsPackages(packageSpecs) && packageSpecs.every((spec) => manifest.packageSpecs.includes(spec)))) {
-				return false;
-			}
+		const manifestPackageSpecs = filterUnsupportedPackageSpecs(manifest.packageSpecs);
+		if (!runtimeManifestPackagesMatch(workspaceRoot, manifestPackageSpecs, packageSpecs)) {
+			return false;
 		}
-		if (!supportsNativePackageSources() && workspaceContainsPackages(packageSpecs)) {
+		if (!supportsNativePackageSources()) {
 			return true;
 		}
 		if (
@@ -303,7 +297,7 @@ function workspaceMatchesRuntime(packageSpecs) {
 			return false;
 		}
 
-		return workspacePackagesMatch(workspaceRoot, packageSpecs);
+		return true;
 	} catch {
 		return false;
 	}

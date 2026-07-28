@@ -153,14 +153,15 @@ server.listen(0, "127.0.0.1", () => {
   $bundleDir = Join-Path $installRoot "feynman-$Version-win32-x64"
   $shim = Join-Path $installRoot "bin\feynman.cmd"
   $shimPs1 = Join-Path $installRoot "bin\feynman.ps1"
+  $bundleCmd = Join-Path $bundleDir "feynman.cmd"
+  $bundlePs1 = Join-Path $bundleDir "feynman.ps1"
 
   function Assert-InstalledCandidate {
-    $launchers = @(
-      $shim,
-      $shimPs1,
-      (Join-Path $bundleDir "feynman.cmd"),
-      (Join-Path $bundleDir "feynman.ps1")
-    )
+    if (Test-Path -LiteralPath $shimPs1) {
+      throw "PATH bin must not contain a policy-blocked feynman.ps1 shim: $shimPs1"
+    }
+
+    $launchers = @($shim, $bundleCmd)
     foreach ($launcher in $launchers) {
       if (-not (Test-Path -LiteralPath $launcher)) {
         throw "Installed launcher is missing: $launcher"
@@ -186,11 +187,50 @@ server.listen(0, "127.0.0.1", () => {
       }
       $helpOutput | Select-Object -First 20
     }
+
+    if (-not (Test-Path -LiteralPath $bundlePs1)) {
+      throw "Installed bundle PowerShell launcher is missing: $bundlePs1"
+    }
+    $powerShellExecutable = (Get-Process -Id $PID).Path
+    $ps1VersionOutput = @(
+      & $powerShellExecutable -NoProfile -ExecutionPolicy Bypass -File $bundlePs1 --version 2>&1
+    )
+    if ($LASTEXITCODE -ne 0) {
+      throw "Installed bundle PowerShell launcher failed --version: $bundlePs1"
+    }
+    $actualPs1Version = ($ps1VersionOutput | Select-Object -Last 1).ToString().Trim()
+    if ($actualPs1Version -ne $Version) {
+      throw "Version mismatch for ${bundlePs1}: expected=$Version actual=$actualPs1Version"
+    }
+  }
+
+  function Assert-BareRestrictedLauncher {
+    foreach ($hostName in @("powershell.exe", "pwsh")) {
+      $hostCommand = Get-Command $hostName -ErrorAction SilentlyContinue
+      if (-not $hostCommand) {
+        continue
+      }
+      $versionOutput = @(
+        & $hostCommand.Source `
+          -NoProfile `
+          -ExecutionPolicy Restricted `
+          -Command "feynman --version; exit `$LASTEXITCODE" `
+          2>&1
+      )
+      if ($LASTEXITCODE -ne 0) {
+        throw "Bare feynman failed under Restricted policy in ${hostName}: $LASTEXITCODE"
+      }
+      $actualVersion = ($versionOutput | Select-Object -Last 1).ToString().Trim()
+      if ($actualVersion -ne $Version) {
+        throw "Bare feynman version mismatch under Restricted policy in ${hostName}: expected=$Version actual=$actualVersion"
+      }
+    }
   }
 
   & $installer -Version $Version
   Assert-InstalledCandidate
   $env:PATH = "$installBinDir;$env:PATH"
+  Assert-BareRestrictedLauncher
 
   for ($pass = 1; $pass -le 2; $pass += 1) {
     $sentinel = Join-Path $bundleDir "stale-pass-$pass.sentinel"
@@ -202,6 +242,7 @@ server.listen(0, "127.0.0.1", () => {
       throw "Replacement pass $pass retained the old bundle"
     }
     Assert-InstalledCandidate
+    Assert-BareRestrictedLauncher
   }
 
   $duplicateSentinel = Join-Path $bundleDir "duplicate-checksum-must-preserve.sentinel"
@@ -268,10 +309,6 @@ server.listen(0, "127.0.0.1", () => {
 @echo off
 CALL "$previousBundleDir\feynman.cmd" %*
 "@ | Set-Content -LiteralPath $shim -Encoding ASCII
-  @"
-`$BundleDir = "$previousBundleDir"
-& "`$BundleDir\node\node.exe" "`$BundleDir\app\bin\feynman.js" @args
-"@ | Set-Content -LiteralPath $shimPs1 -Encoding UTF8
   $upgradeSentinel = Join-Path $previousBundleDir "upgrade-failure-must-preserve.sentinel"
   "must remain" | Set-Content -LiteralPath $upgradeSentinel
   "$archiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
@@ -294,7 +331,7 @@ CALL "$previousBundleDir\feynman.cmd" %*
   if (-not (Test-Path -LiteralPath $upgradeSentinel)) {
     throw "Failed upgrade removed the previous bundle"
   }
-  foreach ($launcher in @($shim, $shimPs1)) {
+  foreach ($launcher in @($shim)) {
     $versionOutput = @(& $launcher --version 2>&1)
     $versionExit = $LASTEXITCODE
     if ($versionExit -ne 0) {

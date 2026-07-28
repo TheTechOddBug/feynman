@@ -16,6 +16,7 @@ import { patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { createDeterministicTarGz } from "./lib/deterministic-archive.mjs";
 import {
+	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
 	computeRuntimeTreeHash,
 	filesMatch,
@@ -170,7 +171,9 @@ function workspaceIsCurrent(packageSpecs) {
 		}
 		if (
 			typeof manifest.runtimeTreeHash !== "string" ||
-			computeRuntimeTreeHash(workspaceDir) !== manifest.runtimeTreeHash
+			typeof (manifest.workspaceTreeHash ?? manifest.runtimeTreeHash) !== "string" ||
+			computeRuntimeTreeHash(workspaceDir) !==
+				(manifest.workspaceTreeHash ?? manifest.runtimeTreeHash)
 		) {
 			return false;
 		}
@@ -279,14 +282,16 @@ function prepareWorkspace(packageSpecs, refreshRuntimeLock) {
 	]);
 }
 
-function writeManifest(packageSpecs) {
+function writeManifest(packageSpecs, runtimeTreeHash = computeRuntimeTreeHash(workspaceDir)) {
+	const workspaceTreeHash = computeRuntimeTreeHash(workspaceDir);
 	writeFileSync(
 		manifestPath,
 		JSON.stringify(
 			{
 				packageSpecs,
 				runtimeInputHash: getRuntimeInputHash(),
-				runtimeTreeHash: computeRuntimeTreeHash(workspaceDir),
+				runtimeTreeHash,
+				workspaceTreeHash,
 				nodeAbi: process.versions.modules,
 				nodeVersion: process.version,
 				platform: process.platform,
@@ -569,9 +574,26 @@ function archiveIsCurrent(packageSpecs) {
 	});
 }
 
-async function createWorkspaceArchive() {
+async function createWorkspaceArchive(packageSpecs) {
 	rmSync(workspaceArchivePath, { force: true });
+	const workspaceTreeHash = computeRuntimeTreeHash(workspaceDir);
+	writeManifest(packageSpecs, workspaceTreeHash);
 	await createDeterministicTarGz(workspaceDir, workspaceArchivePath);
+	const archiveTreeHash = computeRuntimeArchiveTreeHash(workspaceArchivePath);
+	if (archiveTreeHash !== workspaceTreeHash) {
+		// Windows tar can encode NTFS links differently from lstat(). Keep both
+		// logical hashes so source freshness and the shipped archive are each
+		// verified against the representation that users actually consume.
+		writeManifest(packageSpecs, archiveTreeHash);
+		rmSync(workspaceArchivePath, { force: true });
+		await createDeterministicTarGz(workspaceDir, workspaceArchivePath);
+		const rebuiltArchiveTreeHash = computeRuntimeArchiveTreeHash(workspaceArchivePath);
+		if (rebuiltArchiveTreeHash !== archiveTreeHash) {
+			throw new Error(
+				`Runtime archive tree changed while recording its manifest: ${archiveTreeHash} -> ${rebuiltArchiveTreeHash}`,
+			);
+		}
+	}
 	writeFileSha256(workspaceArchivePath, workspaceArchiveDigestPath);
 }
 
@@ -595,7 +617,7 @@ if (!refreshRuntimeLock && !rebuildWorkspace && workspaceIsCurrent(packageSpecs)
 		process.exit(0);
 	}
 	console.log("[feynman] refreshing runtime workspace archive...");
-	await createWorkspaceArchive();
+	await createWorkspaceArchive(packageSpecs);
 	console.log("[feynman] runtime workspace archive ready");
 	process.exit(0);
 }
@@ -610,5 +632,5 @@ if (refreshRuntimeLock) {
 	console.log("[feynman] refreshed committed runtime lock");
 }
 writeManifest(packageSpecs);
-await createWorkspaceArchive();
+await createWorkspaceArchive(packageSpecs);
 console.log("[feynman] vendored runtime workspace ready");

@@ -78,7 +78,7 @@ These commands manage your model provider configuration. The `model set` command
 | --- | --- |
 | `feynman alpha login` | Sign in to alphaXiv |
 | `feynman alpha logout` | Clear alphaXiv auth |
-| `feynman alpha status` | Check alphaXiv auth status |
+| `feynman alpha status` | Refresh expired alphaXiv credentials when possible and verify live auth status |
 | `feynman alpha search "query"` | Search papers through Feynman's bundled alphaXiv client |
 | `feynman alpha get <id-or-url>` | Fetch paper content and local annotations |
 | `feynman alpha ask <id-or-url> "question"` | Ask a question about a paper |

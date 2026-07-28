@@ -16,12 +16,13 @@ import { fileURLToPath } from "node:url";
 
 import {
 	getUserName as getAlphaUserName,
-	isLoggedIn as isAlphaLoggedIn,
 	login as loginAlpha,
 	logout as logoutAlpha,
 } from "@companion-ai/alpha-hub/lib";
+import { getValidToken as getValidAlphaToken } from "@companion-ai/alpha-hub/lib/auth";
 import { createAgentSession, SessionManager, SettingsManager, type AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 
+import { verifyAlphaAuthStatus } from "./alpha-auth-status.js";
 import { syncBundledAssets } from "./bootstrap/sync.js";
 import { ensureFeynmanHome, getDefaultSessionDir, getFeynmanAgentDir, getFeynmanHome } from "./config/paths.js";
 import { launchPiChat } from "./pi/launch.js";
@@ -244,11 +245,13 @@ async function handleAlphaCommand(action: string | undefined): Promise<void> {
 	}
 
 	if (!action || action === "status") {
-		if (isAlphaLoggedIn()) {
-			const name = getAlphaUserName();
+		const status = await verifyAlphaAuthStatus({ getValidToken: getValidAlphaToken });
+		if (status.authenticated) {
+			const name = status.name ?? getAlphaUserName();
 			console.log(name ? `alphaXiv logged in as ${name}` : "alphaXiv logged in");
 		} else {
 			console.log("alphaXiv not logged in");
+			process.exitCode = 1;
 		}
 		return;
 	}
@@ -877,7 +880,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 
 	const rawArgs = process.argv.slice(2);
 	const alphaPassthrough = resolveAlphaPassthroughArgs(rawArgs);
-	if (alphaPassthrough) {
+	if (alphaPassthrough && alphaPassthrough.args[0] !== "status") {
 		await runBundledAlphaCli(appRoot, alphaPassthrough.args, { cwd: alphaPassthrough.cwd });
 		return;
 	}
@@ -1078,6 +1081,10 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 
 	if (command === "alpha") {
+		if (rest[0] === "status") {
+			await handleAlphaCommand("status");
+			return;
+		}
 		await runBundledAlphaCli(appRoot, rest, { cwd: workingDir });
 		return;
 	}

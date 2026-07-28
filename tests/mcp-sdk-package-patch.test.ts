@@ -6,18 +6,23 @@ import test from "node:test";
 import { patchMcpSdkPackageJsonSource } from "../scripts/lib/mcp-sdk-package-patch.mjs";
 
 test("MCP SDK package patch carries the safe Hono node server into bundled consumers", () => {
-	const source = JSON.stringify({
-		name: "@modelcontextprotocol/sdk",
-		version: "1.29.0",
-		dependencies: {
-			"@hono/node-server": "^1.19.9",
-		},
-	});
+	for (const [version, range] of [
+		["1.29.0", "^1.19.9"],
+		["1.30.0", "^1.19.9 || ^2.0.5"],
+	]) {
+		const source = JSON.stringify({
+			name: "@modelcontextprotocol/sdk",
+			version,
+			dependencies: {
+				"@hono/node-server": range,
+			},
+		});
 
-	const patched = JSON.parse(patchMcpSdkPackageJsonSource(source)) as {
-		dependencies: Record<string, string>;
-	};
-	assert.equal(patched.dependencies["@hono/node-server"], "2.0.12");
+		const patched = JSON.parse(patchMcpSdkPackageJsonSource(source)) as {
+			dependencies: Record<string, string>;
+		};
+		assert.equal(patched.dependencies["@hono/node-server"], "2.0.12");
+	}
 });
 
 test("MCP SDK package patch is idempotent and replaces unsafe lower 2.x ranges", () => {

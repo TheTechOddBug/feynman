@@ -62,6 +62,17 @@ export function workspacePackagesMatch(nodeModulesPath, packageSpecs) {
 	});
 }
 
+export function runtimeManifestPackagesMatch(
+	nodeModulesPath,
+	manifestPackageSpecs,
+	configuredPackageSpecs = manifestPackageSpecs,
+) {
+	if (!configuredPackageSpecs.every((spec) => manifestPackageSpecs.includes(spec))) {
+		return false;
+	}
+	return workspacePackagesMatch(nodeModulesPath, manifestPackageSpecs);
+}
+
 export function computeFileSha256(path) {
 	return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -342,14 +353,18 @@ export function runtimeArchiveMatches({
 		typeof runtimeInputHash !== "string" ||
 		manifest.runtimeInputHash !== runtimeInputHash ||
 		typeof manifest.runtimeTreeHash !== "string" ||
-		!/^[a-f0-9]{64}$/.test(manifest.runtimeTreeHash)
+		!/^[a-f0-9]{64}$/.test(manifest.runtimeTreeHash) ||
+		(typeof manifest.workspaceTreeHash !== "undefined" &&
+			(typeof manifest.workspaceTreeHash !== "string" ||
+				!/^[a-f0-9]{64}$/.test(manifest.workspaceTreeHash)))
 	) {
 		return false;
 	}
 	try {
 		const workspacePath = dirname(manifestPath);
 		if (
-			computeRuntimeTreeHash(workspacePath) !== manifest.runtimeTreeHash ||
+			computeRuntimeTreeHash(workspacePath) !==
+				(manifest.workspaceTreeHash ?? manifest.runtimeTreeHash) ||
 			computeRuntimeArchiveTreeHash(archivePath) !== manifest.runtimeTreeHash
 		) {
 			return false;

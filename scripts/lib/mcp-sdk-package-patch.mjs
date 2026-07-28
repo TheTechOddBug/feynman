@@ -1,10 +1,10 @@
 const SAFE_HONO_NODE_SERVER_VERSION = "2.0.12";
 
 /**
- * MCP SDK 1.29.0 still declares @hono/node-server ^1.19.9 even though the
- * compatible v2 line contains the security fix required by Feynman's Node 22+
- * runtime. Feynman bundles this dependency tree so consumers receive the
- * tested override; remove this patch once MCP itself requires >=2.0.5.
+ * MCP SDK 1.30.0 allows the security-fixed @hono/node-server v2 line, but also
+ * retains the vulnerable v1 line for compatibility. Feynman bundles this
+ * dependency tree, so pin the exact tested v2 release in the shipped manifest.
+ * Remove this patch once MCP no longer permits the vulnerable v1 range.
  */
 export function patchMcpSdkPackageJsonSource(source) {
 	const manifest = JSON.parse(source);
@@ -21,6 +21,7 @@ export function patchMcpSdkPackageJsonSource(source) {
 	}
 	const knownUnsafeRange =
 		current === "^1.19.9" ||
+		current === "^1.19.9 || ^2.0.5" ||
 		(() => {
 			const match = /^[~^]?2\.0\.(\d+)$/.exec(current);
 			return match !== null && Number.parseInt(match[1], 10) < 12;

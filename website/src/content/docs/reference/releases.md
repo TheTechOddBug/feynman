@@ -9,11 +9,13 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.6 - 2026-07-26
+## v0.3.6 - 2026-07-28
+
+- Raised the npm-install Node 22 floor to `22.22.0`, matching the direct telemetry runtime's actual engine contract; standalone installers continue to bundle Node `24.18.0`.
 
 ### Reliability
 
-- Fixed alphaXiv login after its OAuth migration by shipping the current OAuth2 endpoints and validating the loopback callback state before exchanging authorization codes.
+- Fixed alphaXiv login after its OAuth migration by shipping the current OAuth2 endpoints and validating the loopback callback state before exchanging authorization codes. `feynman alpha status` now refreshes expired credentials and verifies them against the live user-info endpoint instead of treating any cached token as logged in.
 - Fixed Windows one-line installs by extracting release archives into temporary staging before replacing the installed bundle.
 - Fixed workbench state switching between newly minted local organizations when concurrent processes read `active-org.json` during a rewrite. Valid manifests are no longer rewritten, and required writes are atomic.
 - Option+Enter now inserts a newline in Feynman's REPL input. Shift+Enter preserves Pi's follow-up action in terminals that report modified Enter keys, Ctrl+J remains a portable newline alternative, and existing user-modified keybindings remain untouched.
@@ -24,9 +26,10 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 ### Package Stack
 
 - Added `pi-btw` to Feynman's default Pi package stack so `/btw` side conversations are available during long-running research turns without requiring a separate package install.
+- Updated `pi-subagents` to `0.37.2` so child runs that disable inherited project context follow Pi's current context-file contract, while reducing repeated TUI and skill-file scans.
 - Refreshed the bundled Pi runtime packages from `0.80.3` to `0.82.1`, migrated Feynman's model/auth integration to Pi's asynchronous `ModelRuntime`, and kept the runtime fallback pins aligned with the installed package set.
-- Repaired the current Pi and MCP production dependency advisories in the packaged runtime by replacing Pi's vulnerable nested `brace-expansion` copy with `5.0.8` and pinning MCP's compatible Hono server dependency to `2.0.12`. Both repairs fail closed and can be removed once upstream publishes fixed dependency ranges.
-- Pinned the bundled runtime's complete dependency graph in a committed lockfile, upgraded its coordinated OpenTelemetry train to `2.10.0`/`0.221.0`, and made pruning changes and archive digests invalidate stale runtime artifacts.
+- Repaired the current Pi and MCP production dependency advisories in the packaged runtime by replacing Pi's vulnerable nested `brace-expansion` copy with `5.0.8`, updating MCP SDK to `1.30.0`, and pinning its compatible Hono server dependency to `2.0.12`. The Pi repair can be removed after upstream updates its shrinkwrap; the Hono pin can be removed after MCP no longer permits the vulnerable v1 range.
+- Pinned the bundled runtime's complete dependency graph in a committed lockfile, upgraded its coordinated OpenTelemetry train to `2.10.0`/`0.221.0`, and made pruning changes and archive digests invalidate stale runtime artifacts. Startup now verifies every package named by the bundled runtime manifest, so a stale Pi copy is restored even when it is not itself a user-configured extension.
 - Runtime and standalone archives now bind relative build inputs and the complete patched tree, reject stale or transplanted manifests, normalize archive metadata, and omit macOS AppleDouble metadata that previously doubled package size.
 - Added pre-merge Linux package/consumer plus Windows PowerShell installer replacement gates. Release publication now promotes the exact verified tarball only after native bundles pass.
 - Added explicit release-package budgets of 125 MiB compressed, 360 MiB unpacked, and 42,000 files around the current bundled research runtime so accidental package growth fails before publication.

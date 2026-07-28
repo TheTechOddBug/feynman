@@ -33,6 +33,9 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.doesNotMatch(installer, /@\(& \$candidate --version 2>&1\)/);
 	assert.match(installer, /"ARM64" \{ return "x64" \}/);
 	assert.match(installer, /"Arm64" \{ return "x64" \}/);
+	assert.doesNotMatch(installer, /\$shimPs1Candidate/);
+	assert.doesNotMatch(installer, /Join-Path \$stagedBinDir "feynman\.ps1"/);
+	assert.match(installer, /Install only the CMD shim on PATH/);
 	assert.doesNotMatch(installer, /\$resolvedCommand\.Source -ne \$shimPath/);
 	assert.doesNotMatch(installer, /Move-Item -LiteralPath \$shimCandidate -Destination \$shimPath/);
 	assert.doesNotMatch(installer, /Expand-Archive -LiteralPath \$archivePath -DestinationPath \$installRoot -Force/);
@@ -51,4 +54,6 @@ test("Windows installer verifier defines every strict-mode install path", () => 
 	assert.match(verifier, /Set-StrictMode -Version 2\.0/);
 	assert.match(verifier, /\$installBinDir = Join-Path \$installRoot "bin"/);
 	assert.match(verifier, /\$env:PATH = "\$installBinDir;\$env:PATH"/);
+	assert.match(verifier, /-ExecutionPolicy Restricted/);
+	assert.match(verifier, /PATH bin must not contain a policy-blocked feynman\.ps1 shim/);
 });

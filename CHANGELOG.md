@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 01:07 PDT — intake-sweep-0-3-6-final-candidate
+
+- Objective: Finish PR `#192` as the single release path for issues `#182/#185/#186/#187/#188/#190/#193/#196`, including the remaining Windows, supported-Node, packaged-runtime, and live-auth gates.
+- Fixed: Raised the Node 22 floor to `22.22.0`; made candidate-tarball paths absolute; kept the PowerShell launcher while validating it under execution-policy bypass; normalized Windows runtime hardlinks; updated MCP to `1.30.0`, Hono to `2.0.12`, and `pi-subagents` to `0.37.2`; made installed-consumer CI audit the extracted runtime archive; made runtime recovery verify every manifest package; and made both alphaXiv status paths refresh and verify credentials against live user-info.
+- Verified: Full tests passed (`648/648`); typecheck, build, architecture, actionlint, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, and `git diff --check` passed. Final tarball SHA-256 is `06cdfd606a52e5a59d15d7276c68a9e542f3b40dfa120a4fda5a970e2676fa2b` (`111572902` bytes, `327212330` unpacked, `39105` files); source and installed artifact verification passed with Pi `0.82.1` and runtime SHA-256 `7a858a29c51dcf977be07ba6be1c64ba023b4eaad3aacf0f7ed03414c9679056`. Exact-package RPC proved extension/prompt loading, direct bash, and `/thinking` clamping; live OpenAI model, researcher subagent, and refreshed alphaXiv user-info smokes passed.
+- Next: Commit and push the exact candidate, run and delete a disposable Daytona sandbox at that SHA, require the full GitHub Windows and Node `22/24/25` matrix to pass, merge, then verify npm/GitHub/native release identity and issue closure.
+
 ### 2026-07-26 17:48 PDT — intake-sweep-windows-runtime-hardlinks
 
 - Objective: Repair PR `#192` Windows native job `89859997454` at exact head `8bf9f1a2e5af48787c2eb47eae3726b86cacb9c1` without weakening runtime archive integrity.

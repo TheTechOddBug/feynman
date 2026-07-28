@@ -260,7 +260,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            node: "22.19.0"
+            node: "22.22.0"
           - os: ubuntu-latest
             node: "24.18.0"
           - os: ubuntu-latest
@@ -289,6 +289,7 @@ jobs:
           count=$(find npm-package -type f -name '*.tgz' | wc -l | tr -d ' ')
           test "$count" = "1"
           tarball=$(find npm-package -type f -name '*.tgz' -print)
+          tarball=$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$tarball")
           version=$(tar -xOf "$tarball" package/package.json | node -e \
             'let source=""; process.stdin.on("data", chunk => source += chunk).on("end", () => process.stdout.write(JSON.parse(source).version))')
           consumer="$RUNNER_TEMP/feynman-consumer"
@@ -301,8 +302,12 @@ jobs:
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
-          npm audit --omit=dev --prefix \
-            "$consumer/node_modules/@companion-ai/feynman/.feynman/npm"
+          runtime_audit="$RUNNER_TEMP/feynman-runtime-audit"
+          mkdir -p "$runtime_audit"
+          tar -xzf \
+            "$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz" \
+            -C "$runtime_audit"
+          npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
 

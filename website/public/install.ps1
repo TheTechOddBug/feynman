@@ -201,16 +201,10 @@ Workarounds:
   $stagedBinDir = Join-Path $tmpDir "bin"
   New-Item -ItemType Directory -Path $stagedBinDir -Force | Out-Null
   $shimCandidate = Join-Path $stagedBinDir "feynman.cmd"
-  $shimPs1Candidate = Join-Path $stagedBinDir "feynman.ps1"
   @"
 @echo off
 CALL "$bundleDir\feynman.cmd" %*
 "@ | Set-Content -Path $shimCandidate -Encoding ASCII
-
-  @"
-`$BundleDir = "$bundleDir"
-& "`$BundleDir\node\node.exe" "`$BundleDir\app\bin\feynman.js" @args
-"@ | Set-Content -Path $shimPs1Candidate -Encoding UTF8
 
   $backupBundleDir = Join-Path $tmpDir "previous-bundle"
   $backupBinDir = Join-Path $tmpDir "previous-bin"
@@ -283,9 +277,11 @@ CALL "$bundleDir\feynman.cmd" %*
   }
 
   $resolvedCommand = Get-Command feynman -ErrorAction SilentlyContinue
+  # Install only the CMD shim on PATH. Windows PowerShell resolves .ps1 before
+  # PATHEXT launchers, so a same-name PowerShell shim is blocked by the default
+  # Restricted policy before the working CMD launcher can be selected.
   $expectedShimPaths = @(
-    [System.IO.Path]::GetFullPath((Join-Path $installBinDir "feynman.cmd")),
-    [System.IO.Path]::GetFullPath((Join-Path $installBinDir "feynman.ps1"))
+    [System.IO.Path]::GetFullPath((Join-Path $installBinDir "feynman.cmd"))
   )
   $resolvedSource = if ($resolvedCommand) { $resolvedCommand.Source } else { $null }
   $resolvedToInstalledShim = $false

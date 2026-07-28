@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=22.19.0 <26"
+    "node": ">=22.22.0 <26"
   },
   "bin": {
     "feynman": "bin/feynman.js"

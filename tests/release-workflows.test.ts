@@ -11,7 +11,7 @@ test("pull-request release gates validate the merge candidate", () => {
 	assert.match(e2eWorkflow, /name: Release candidate \(PR\)/);
 	assert.match(e2eWorkflow, /name: Candidate consumer \(\$\{\{ matrix\.os \}\}, Node \$\{\{ matrix\.node \}\}\)/);
 	assert.match(e2eWorkflow, /name: pr-npm-package/);
-	assert.match(e2eWorkflow, /node: "22\.19\.0"/);
+	assert.match(e2eWorkflow, /node: "22\.22\.0"/);
 	assert.match(e2eWorkflow, /node: "25"/);
 	assert.match(e2eWorkflow, /name: Windows native installer \(PR\)/);
 	assert.match(e2eWorkflow, /shell: powershell/);
@@ -26,6 +26,12 @@ test("PR and publish workflows require clean package and consumer audits", () =>
 	for (const workflow of [e2eWorkflow, publishWorkflow]) {
 		assert.match(workflow, /npm audit --omit=dev --prefix \.feynman\/npm/);
 		assert.match(workflow, /npm audit --omit=dev --prefix "\$consumer"/);
+		assert.match(workflow, /\.feynman\/runtime-workspace\.tgz/);
+		assert.match(workflow, /npm audit --omit=dev --prefix "\$runtime_audit\/npm"/);
+		assert.doesNotMatch(
+			workflow,
+			/npm audit --omit=dev --prefix\s+\\?\s*"\$consumer\/node_modules\/@companion-ai\/feynman\/\.feynman\/npm"/,
+		);
 		assert.match(workflow, /npm pack --dry-run --json/);
 		assert.match(workflow, /verify-package-artifact\.mjs/);
 		assert.match(workflow, /verify-package-budget\.mjs/);
@@ -50,7 +56,7 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 	for (const os of ["ubuntu-latest", "macos-14", "windows-latest"]) {
 		assert.match(publishWorkflow, new RegExp(`- os: ${os}`));
 	}
-	for (const nodeVersion of ["22.19.0", "24.18.0", "25"]) {
+	for (const nodeVersion of ["22.22.0", "24.18.0", "25"]) {
 		assert.match(publishWorkflow, new RegExp(`node: "${nodeVersion.replace(/\./g, "\\.")}"`));
 	}
 	assert.match(publishWorkflow, /needs\.build-native-bundles\.result == 'success'/);

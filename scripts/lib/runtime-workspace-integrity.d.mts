@@ -9,6 +9,11 @@ export declare function workspacePackagesMatch(
 	nodeModulesPath: string,
 	packageSpecs: string[],
 ): boolean;
+export declare function runtimeManifestPackagesMatch(
+	nodeModulesPath: string,
+	manifestPackageSpecs: string[],
+	configuredPackageSpecs?: string[],
+): boolean;
 
 export declare function computeFileSha256(path: string): string;
 export declare function computeRuntimeInputHash(
