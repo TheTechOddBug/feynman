@@ -4,6 +4,9 @@ import test from "node:test";
 
 const e2eWorkflow = readFileSync(".github/workflows/e2e.yml", "utf8");
 const publishWorkflow = readFileSync(".github/workflows/publish.yml", "utf8");
+const packageManifest = JSON.parse(readFileSync("package.json", "utf8")) as {
+	bundleDependencies?: string[];
+};
 
 test("pull-request release gates validate the merge candidate", () => {
 	assert.match(e2eWorkflow, /pull_request:\s*\n\s+branches: \[main\]/);
@@ -40,6 +43,29 @@ test("PR and publish workflows require clean package and consumer audits", () =>
 		assert.match(workflow, /verify-package-budget\.mjs/);
 		assert.match(workflow, /git status --porcelain --untracked-files=all/);
 	}
+});
+
+test("package gates exercise the global npm install path", () => {
+	assert.ok(
+		packageManifest.bundleDependencies?.includes("@opentelemetry/api"),
+		"the direct telemetry API must be bundled so npm global installs cannot leave an empty hoist target",
+	);
+	assert.equal(
+		(e2eWorkflow.match(/npm install --global --prefix "\$global_prefix"/g) ?? []).length,
+		1,
+	);
+	assert.equal(
+		(publishWorkflow.match(/npm install --global --prefix "\$global_prefix"/g) ?? []).length,
+		2,
+	);
+	for (const workflow of [e2eWorkflow, publishWorkflow]) {
+		assert.match(workflow, /global_bin="\$global_prefix\/feynman\.cmd"/);
+		assert.match(workflow, /global_bin="\$global_prefix\/bin\/feynman"/);
+		assert.match(workflow, /test "\$\("\$global_bin" --version \| tail -1\)"/);
+		assert.match(workflow, /"\$global_bin" --help >\/dev\/null/);
+	}
+	assert.match(publishWorkflow, /global_prefix="\$RUNNER_TEMP\/published-global"/);
+	assert.match(publishWorkflow, /"@companion-ai\/feynman@\$VERSION"/);
 });
 
 test("publish uses the exact verified tarball after native bundles pass", () => {

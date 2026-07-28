@@ -309,6 +309,16 @@ jobs:
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
+          global_prefix="$RUNNER_TEMP/feynman-global"
+          if command -v cygpath >/dev/null 2>&1; then
+            global_prefix=$(cygpath -u "$global_prefix")
+            global_bin="$global_prefix/feynman.cmd"
+          else
+            global_bin="$global_prefix/bin/feynman"
+          fi
+          npm install --global --prefix "$global_prefix" --omit=dev --no-audit "$tarball"
+          test "$("$global_bin" --version | tail -1)" = "$version"
+          "$global_bin" --help >/dev/null
           runtime_audit="$RUNNER_TEMP/feynman-runtime-audit"
           mkdir -p "$runtime_audit"
           runtime_archive="$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz"

@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 14:30 PDT — intake-sweep-global-npm-install
+
+- Objective: Re-run the terminal intake after `0.3.6`, including the documented global npm install path rather than treating a clean project-prefix consumer as equivalent.
+- Found: Both an upgrade under `~/.npm-global` and a fresh disposable `npm install --global --prefix ... @companion-ai/feynman@0.3.6` produced an empty `node_modules/@opentelemetry/api` directory. `feynman --version` then failed before command dispatch from the direct telemetry import, while the existing non-global consumer gate passed because npm could hoist `@opentelemetry/api@1.9.1` above the package root.
+- Fixed: Bundle the exact direct OpenTelemetry API with the five existing runtime packages, and exercise the exact global install/version/help path across every supported package-consumer matrix plus post-publication registry verification.
+- Verified locally: Focused release tests passed (`10/10`); the complete suite passed (`653/653`); typecheck, build, architecture check, actionlint, website lint/typecheck/build (`34` pages), root and website full/production audits, package freshness review, and `git diff --check` passed. Dry and real packs matched at 111,637,876 bytes / 328,227,251 unpacked / 39,692 files with npm integrity `sha512-PFChM+N8VQsNZQ64uFLb9EDytP96vKFvThpooai5P0KnmYfyspXyFrleW5gHeQipEH5zuIxTZnbJZ2Fv/jC/SQ==` and tarball SHA-256 `941389ca83a06b49105a4c07515fad1e250617ced593192ad2a90c4b851b61a0`.
+- Installed proof: A clean consumer and extracted runtime each audited at zero, artifact verification passed with runtime SHA-256 `c31b7db649f47997abfc6a3622c5af1758af71789a5eae9c96c98932c3d96ac1`, and clean global installs under npm `11.16.0` and `11.18.0` each contained nonempty bundled OpenTelemetry API `1.9.1` trees and passed version/help. Installed RPC loaded `112` commands including `thinking` and `web-results`.
+- State: `verified` locally; exact pushed-SHA Daytona, GitHub Linux/macOS/Windows Node `22`/`24`/`25`, merge, and npm/GitHub `0.3.7` release identity remain required. Next: persist the candidate, require every exact-head gate green, then publish and verify the registry global install.
+
 ### 2026-07-28 08:30 PDT — intake-sweep-manual-release-provenance-gate
 
 - Objective: Keep manual release recovery from creating an immutable npm package whose provenance the push-only identity policy would reject.

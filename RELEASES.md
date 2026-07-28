@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.7 - 2026-07-28
+
+### Reliability
+
+- Fixed `npm install -g @companion-ai/feynman` producing an unusable CLI when npm left the direct OpenTelemetry API hoist target empty beside Feynman's bundled Pi packages. The package now bundles its exact direct telemetry API so global installs can start reliably.
+
+### Validation
+
+- Added clean global-install version and help smokes to every supported Linux, macOS, Windows, and Node `22`/`24`/`25` package-consumer gate, plus post-publication verification of the registry package.
+
 ## v0.3.6 - 2026-07-28
 
 - Raised the npm-install Node 22 floor to `22.22.0`, matching the direct telemetry runtime's actual engine contract; standalone installers continue to bundle Node `24.18.0`.
