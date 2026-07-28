@@ -51,6 +51,10 @@ jobs:
             cat "$npm_error" >&2
             exit 1
           fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$PUBLISHED" != "$LOCAL" ]; then
+            echo "Manual release runs may only reconcile an npm version already published from a main push." >&2
+            exit 1
+          fi
           if [ "$PUBLISHED" = "$LOCAL" ]; then
             published_integrity=$(npm view "@companion-ai/feynman@$LOCAL" dist.integrity)
             provenance_dir="$RUNNER_TEMP/npm-provenance-version-check"
@@ -361,6 +365,7 @@ jobs:
       - verify-package-consumers
       - build-native-bundles
     if: >-
+      github.event_name == 'push' &&
       needs.version-check.outputs.should_publish_npm == 'true' &&
       needs.verify.result == 'success' &&
       needs.verify-package-consumers.result == 'success' &&

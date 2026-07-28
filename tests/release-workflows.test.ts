@@ -44,8 +44,21 @@ test("PR and publish workflows require clean package and consumer audits", () =>
 
 test("publish uses the exact verified tarball after native bundles pass", () => {
 	assert.match(publishWorkflow, /concurrency:\s*\n\s+group: publish-/);
+	assert.match(publishWorkflow, /workflow_dispatch:/);
 	assert.match(publishWorkflow, /name: npm-package/);
 	assert.match(publishWorkflow, /name: npm-package\s*\n\s+path: npm-package/);
+	const versionCheckJob = publishWorkflow.match(
+		/\n  version-check:[\s\S]*?(?=\n  verify:)/,
+	);
+	assert.ok(versionCheckJob, "publish workflow must define the version check job");
+	const manualPublishGate =
+		/if \[ "\$GITHUB_EVENT_NAME" = "workflow_dispatch" \] && \[ "\$PUBLISHED" != "\$LOCAL" \]; then/;
+	assert.match(versionCheckJob[0], manualPublishGate);
+	assert.ok(
+		versionCheckJob[0].search(manualPublishGate) <
+			versionCheckJob[0].indexOf('echo "should_publish_npm=true"'),
+		"manual publication must fail before publication is authorized",
+	);
 	const publishNpmJob = publishWorkflow.match(/\n  publish-npm:[\s\S]*?(?=\n  build-native-bundles:)/);
 	assert.ok(publishNpmJob, "publish workflow must define the npm publication job");
 	assert.match(
@@ -53,6 +66,11 @@ test("publish uses the exact verified tarball after native bundles pass", () => 
 		/tarball=\$\(node -e 'process\.stdout\.write\(require\("node:path"\)\.resolve\(process\.argv\[1\]\)\)' "\$tarball"\)/,
 	);
 	assert.match(publishNpmJob[0], /npx npm@11\.18\.0 publish "\$tarball" --access public --provenance/);
+	assert.match(publishNpmJob[0], /github\.event_name == 'push'/);
+	assert.match(
+		publishWorkflow,
+		/Manual release runs may only reconcile an npm version already published from a main push\./,
+	);
 	assert.match(
 		publishWorkflow,
 		/publish-npm:\s*\n\s+needs:\s*\n\s+- version-check\s*\n\s+- verify\s*\n\s+- verify-package-consumers\s*\n\s+- build-native-bundles/,
@@ -97,9 +115,16 @@ test("GitHub release waits for verification, native bundles, and npm publication
 		publishWorkflow,
 		/release-github:\s*\n\s+needs:\s*\n\s+- version-check\s*\n\s+- verify\s*\n\s+- publish-npm\s*\n\s+- build-native-bundles/,
 	);
-	assert.match(publishWorkflow, /needs\.verify\.result == 'success'/);
-	assert.match(publishWorkflow, /needs\.publish-npm\.result == 'success'/);
-	assert.match(publishWorkflow, /always\(\)/);
+	const releaseGithubJob = publishWorkflow.match(
+		/\n  release-github:[\s\S]*?(?=\n  verify-published-state:)/,
+	);
+	assert.ok(releaseGithubJob, "publish workflow must define the GitHub release job");
+	assert.match(releaseGithubJob[0], /needs\.verify\.result == 'success'/);
+	assert.match(releaseGithubJob[0], /always\(\)/);
+	assert.match(
+		releaseGithubJob[0],
+		/needs\.version-check\.outputs\.should_publish_npm == 'false' \|\|\s+needs\.publish-npm\.result == 'success'/,
+	);
 	assert.match(publishWorkflow, /pattern: native-\*/);
 	assert.doesNotMatch(publishWorkflow, /gh release view "v\$VERSION" >\/dev\/null 2>&1/);
 	assert.match(publishWorkflow, /release_exists=true/);
@@ -118,6 +143,13 @@ test("version reconciliation and post-publish verification cover all release sur
 	assert.match(publishWorkflow, /assets\.length === expected\.size/);
 	assert.match(publishWorkflow, /Number\(asset\.size\) > 0/);
 	assert.match(publishWorkflow, /verify-published-state:/);
+	const verifyPublishedJob = publishWorkflow.match(/\n  verify-published-state:[\s\S]*$/);
+	assert.ok(verifyPublishedJob, "publish workflow must define the published-state verification job");
+	assert.match(verifyPublishedJob[0], /always\(\)/);
+	assert.match(
+		verifyPublishedJob[0],
+		/needs\.version-check\.outputs\.should_publish_npm == 'false' \|\|\s+needs\.publish-npm\.result == 'success'/,
+	);
 	assert.match(publishWorkflow, /gh release download "v\$VERSION"/);
 	assert.match(publishWorkflow, /npm install --prefix "\$consumer".*"@companion-ai\/feynman@\$VERSION"/);
 	assert.match(publishWorkflow, /unzip -t/);

@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 08:30 PDT — intake-sweep-manual-release-provenance-gate
+
+- Objective: Keep manual release recovery from creating an immutable npm package whose provenance the push-only identity policy would reject.
+- Found: `workflow_dispatch` could publish a previously absent version, but npm would correctly attest the certificate trigger as `workflow_dispatch`; post-publish and every later reconciliation would then fail the required `push` identity check.
+- Fixed: Manual runs may reconcile an already-published npm version and complete its GitHub release, but they fail before authorizing npm publication for a new version. The `publish-npm` job independently requires a push event.
+- Verified: The gate is scoped to `version-check`, executes before `should_publish_npm=true`, and the publication job has a second event guard. Adversarial review confirmed manual reconciliation remains fail-closed and found one test-only hardening gap, now fixed by scoping downstream skip-condition assertions to their owning jobs. Focused provenance/workflow tests (`7/7`), full tests (`652/652`), actionlint, and `git diff --check` pass.
+- Next: Push the exact follow-up and require the successor main workflow to verify the complete `0.3.6` identity without republishing.
+
 ### 2026-07-28 08:16 PDT — intake-sweep-0.3.6-release-completion
 
 - Objective: Complete the `0.3.6` npm/GitHub release, reconcile every tracked user issue, and preserve the final development-audit refresh.
@@ -11,7 +19,7 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Failed: npm `11.18.0` does not add `gitHead` when publishing a prebuilt tarball, so the original final verification stopped before testing the installed package and release assets even though npm's signed SLSA provenance binds the package digest to `ccc8030`.
 - Fixed: Release reconciliation now uses `npm audit signatures --include-attestations`, validates the verified SLSA subject digest and source claims, and binds them to the Fulcio certificate's GitHub workflow SAN plus OIDC issuer, workflow/ref, source SHA, push trigger, invocation, public visibility, and repository-subject extensions instead of relying on optional registry `gitHead` metadata.
 - Verified: The live npm attestation resolves only to `ccc8030`; adversarial certificate/source/commit/invocation mismatches fail closed. Focused provenance/workflow tests pass (`7/7`), full tests pass (`652/652`), typecheck, build, architecture check, actionlint, root and website full/production audits, website lint/typecheck/build (`34` pages), and `git diff --check` pass. The post-release dry/real package remains within its release budgets; source, clean installed-consumer, and extracted-runtime verification/audits pass.
-- Next: Push the provenance verifier plus dev-lock refresh, require the successor main workflow to verify the published identity without republishing, then close `#182/#185/#186/#187/#188/#190/#193/#196`.
+- Completed: Commit `d2cce1f` persisted the provenance verifier and dev-lock refresh. Successor run `30373237537` verified the published npm/GitHub identity without republishing; issues `#182/#185/#186/#187/#188/#190/#193/#196` were closed with release receipts, and the two superseded remote branches were deleted.
 
 ### 2026-07-28 07:30 PDT — intake-sweep-root-dev-audit-refresh
 
