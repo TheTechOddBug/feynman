@@ -9,6 +9,7 @@ import {
 	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
 	computeRuntimeTreeHash,
+	readArchiveEntry,
 	RUNTIME_INPUT_FILES,
 	runtimeArchiveMatches,
 	runtimeManifestPackagesMatch,
@@ -181,6 +182,27 @@ test("runtime archive tree hashes normalize tar hardlinks to file contents", asy
 		computeRuntimeArchiveTreeHash(archivePath),
 		computeRuntimeTreeHash(workspace),
 	);
+});
+
+test("runtime archive entries are read without an external tar executable", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-entry-"));
+	const workspace = join(root, "npm");
+	const archivePath = join(root, "runtime-workspace.tgz");
+
+	mkdirSync(workspace, { recursive: true });
+	writeFileSync(join(workspace, "package-lock.json"), '{"lockfileVersion":3}\n');
+	await createDeterministicTarGz(workspace, archivePath);
+
+	const originalPath = process.env.PATH;
+	process.env.PATH = "";
+	try {
+		assert.equal(
+			readArchiveEntry(archivePath, "npm/package-lock.json"),
+			'{"lockfileVersion":3}\n',
+		);
+	} finally {
+		process.env.PATH = originalPath;
+	}
 });
 
 test("runtime input hashes are independent of the checkout root", () => {

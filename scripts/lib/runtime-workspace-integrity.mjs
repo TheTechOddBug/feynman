@@ -8,7 +8,6 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
-import { spawnSync } from "node:child_process";
 import { gunzipSync } from "node:zlib";
 
 export const RUNTIME_INPUT_FILES = Object.freeze([
@@ -312,12 +311,89 @@ export function filesMatch(leftPath, rightPath) {
 }
 
 export function readArchiveEntry(archivePath, entryPath) {
-	const result = spawnSync("tar", ["-xOf", archivePath, entryPath], {
-		encoding: "utf8",
-		maxBuffer: 16 * 1024 * 1024,
-		stdio: ["ignore", "pipe", "ignore"],
-	});
-	return result.status === 0 ? result.stdout : undefined;
+	const tarball = gunzipSync(readFileSync(archivePath));
+	const requestedPath = entryPath.replace(/^\.\//, "").replace(/\/$/, "");
+	const entries = new Map();
+	let offset = 0;
+	let globalPax = {};
+	let nextPax = {};
+	let nextLongPath;
+
+	while (offset + 512 <= tarball.length) {
+		const header = tarball.subarray(offset, offset + 512);
+		if (header.every((byte) => byte === 0)) break;
+
+		const readField = (start, length) =>
+			header.subarray(start, start + length).toString("utf8").replace(/\0.*$/s, "");
+		const sizeSource = readField(124, 12).trim();
+		const size = sizeSource ? Number.parseInt(sizeSource, 8) : 0;
+		if (!Number.isSafeInteger(size) || size < 0) {
+			throw new Error(`Invalid runtime archive entry size at byte ${offset}`);
+		}
+		const type = String.fromCharCode(header[156] || 48);
+		const contentStart = offset + 512;
+		const contentEnd = contentStart + size;
+		if (contentEnd > tarball.length) {
+			throw new Error(`Truncated runtime archive entry at byte ${offset}`);
+		}
+		const content = tarball.subarray(contentStart, contentEnd);
+		const prefix = readField(345, 155);
+		const headerPath = [prefix, readField(0, 100)].filter(Boolean).join("/");
+		const headerLink = readField(157, 100);
+
+		if (type === "x" || type === "g") {
+			const pax = {};
+			let paxOffset = 0;
+			while (paxOffset < content.length) {
+				const space = content.indexOf(0x20, paxOffset);
+				if (space === -1) throw new Error("Invalid PAX record length");
+				const recordLength = Number.parseInt(
+					content.subarray(paxOffset, space).toString("ascii"),
+					10,
+				);
+				if (!Number.isSafeInteger(recordLength) || recordLength <= 0) {
+					throw new Error("Invalid PAX record size");
+				}
+				const recordEnd = paxOffset + recordLength;
+				const record = content.subarray(space + 1, recordEnd - 1).toString("utf8");
+				const equals = record.indexOf("=");
+				if (equals > 0) pax[record.slice(0, equals)] = record.slice(equals + 1);
+				paxOffset = recordEnd;
+			}
+			if (type === "g") globalPax = { ...globalPax, ...pax };
+			else nextPax = pax;
+		} else if (type === "L") {
+			nextLongPath = content.toString("utf8").replace(/\0.*$/s, "");
+		} else {
+			const pax = { ...globalPax, ...nextPax };
+			const archiveEntryPath = (pax.path ?? nextLongPath ?? headerPath)
+				.replace(/^\.\//, "")
+				.replace(/\/$/, "");
+			const linkPath = (pax.linkpath ?? headerLink).replace(/^\.\//, "");
+			nextPax = {};
+			nextLongPath = undefined;
+
+			if (type === "0" || type === "\0") {
+				if (archiveEntryPath === requestedPath) return content.toString("utf8");
+				entries.set(archiveEntryPath, { type: "file", content });
+			} else if (type === "1") {
+				entries.set(archiveEntryPath, { type: "hardlink", target: linkPath });
+			}
+		}
+
+		offset = contentStart + Math.ceil(size / 512) * 512;
+	}
+
+	const resolveEntry = (path, seen = new Set()) => {
+		const entry = entries.get(path);
+		if (!entry) return undefined;
+		if (entry.type === "file") return entry.content;
+		if (seen.has(path)) {
+			throw new Error(`Runtime archive hardlink cycle: ${[...seen, path].join(" -> ")}`);
+		}
+		return resolveEntry(entry.target, new Set([...seen, path]));
+	};
+	return resolveEntry(requestedPath)?.toString("utf8");
 }
 
 export function runtimeArchiveMatches({
