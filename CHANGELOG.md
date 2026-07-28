@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 06:00 PDT — intake-sweep-release-windows-runtime-path
+
+- Objective: Repair the first post-merge `0.3.6` release run without allowing a partially published release.
+- Fixed: Main run `30359204278` passed source/package verification and Linux/macOS consumers, then Windows Node `25` job `90277101520` proved that the publish workflow handed GNU tar the native `D:\...` path of the installed runtime archive. Git Bash interpreted the drive colon as a remote host separator. The release consumer now converts the runtime archive and extraction destination through `cygpath`, matching the already-green PR consumer path.
+- Verified: npm publication and GitHub release jobs remained gated and never started; the failed run was cancelled after the discriminator receipt was retained. Full tests (`650/650`), typecheck, focused workflow tests (`5/5`), actionlint, and `git diff --check` pass. Exact successor Windows consumers and terminal release identity remain pending.
+- Next: Validate and push the workflow-only repair to `main`, require the successor release run to pass every consumer/native/publish job, then verify npm/GitHub assets and close the eight released issues.
+
 ### 2026-07-28 01:49 PDT — intake-sweep-pi-web-access-0-15
 
 - Objective: Resolve the post-cutoff `pi-web-access@0.15.0` research-search release before publishing Feynman `0.3.6`.

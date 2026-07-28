@@ -262,8 +262,13 @@ jobs:
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
           runtime_audit="$RUNNER_TEMP/feynman-runtime-audit"
           mkdir -p "$runtime_audit"
+          runtime_archive="$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz"
+          if command -v cygpath >/dev/null 2>&1; then
+            runtime_archive=$(cygpath -u "$runtime_archive")
+            runtime_audit=$(cygpath -u "$runtime_audit")
+          fi
           tar -xzf \
-            "$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz" \
+            "$runtime_archive" \
             -C "$runtime_audit"
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
