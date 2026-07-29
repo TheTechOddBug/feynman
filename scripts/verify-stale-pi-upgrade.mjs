@@ -15,10 +15,11 @@ import {
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { patchPiCodingAgentShrinkwrapSource } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { runWithTemporaryTreeCleanup } from "./lib/temporary-tree-cleanup.mjs";
+import { normalizeStaleFixturePath } from "./stale-upgrade-paths.mjs";
 
 const binaryArgument = process.argv[2];
 if (!binaryArgument) {
@@ -149,18 +150,17 @@ const persistentBraceExpansionRoot = resolve(
 	"node_modules",
 	"brace-expansion",
 );
-const persistentBraceExpansionRelative = relative(
-	persistentNodeModulesPath,
-	persistentBraceExpansionRoot,
+const persistentBraceExpansionRelative = normalizeStaleFixturePath(
+	relative(persistentNodeModulesPath, persistentBraceExpansionRoot),
 );
 const allowedPersistentMutationPaths = new Set([
-	relative(persistentNodeModulesPath, persistentShrinkwrapPath),
+	normalizeStaleFixturePath(relative(persistentNodeModulesPath, persistentShrinkwrapPath)),
 	persistentBraceExpansionRelative,
 	"pi-otel",
 ]);
 const allowedPersistentMutationPrefixes = [
-	`${persistentBraceExpansionRelative}${sep}`,
-	`pi-otel${sep}`,
+	`${persistentBraceExpansionRelative}/`,
+	"pi-otel/",
 ];
 
 function writeFiles(files) {
@@ -183,7 +183,7 @@ function snapshotTree(rootPath, options = {}) {
 				continue;
 			}
 			if (entry.isSymbolicLink()) {
-				const relativePath = relative(rootPath, entryPath);
+				const relativePath = normalizeStaleFixturePath(relative(rootPath, entryPath));
 				snapshot.set(
 					relativePath,
 					`symlink:${readlinkSync(entryPath)}`,
@@ -210,7 +210,7 @@ function snapshotTree(rootPath, options = {}) {
 				throw new Error(`Unsupported stale Pi fixture entry: ${entryPath}`);
 			}
 			snapshot.set(
-				relative(rootPath, entryPath),
+				normalizeStaleFixturePath(relative(rootPath, entryPath)),
 				createHash("sha256").update(readFileSync(entryPath)).digest("hex"),
 			);
 		}
@@ -232,15 +232,16 @@ function snapshotPersistentFixture(options = {}) {
 			rootStat.isSymbolicLink() ? `symlink:${readlinkSync(packageRoot)}` : "directory",
 		);
 		for (const [path, digest] of snapshotTree(packageRoot, options)) {
-			snapshot.set(`${label}${sep}${path}`, digest);
+			snapshot.set(`${label}/${path}`, digest);
 		}
 	}
 	return snapshot;
 }
 
 function isAllowedPersistentMutation(path) {
-	return allowedPersistentMutationPaths.has(path) ||
-		allowedPersistentMutationPrefixes.some((prefix) => path.startsWith(prefix));
+	const normalizedPath = normalizeStaleFixturePath(path);
+	return allowedPersistentMutationPaths.has(normalizedPath) ||
+		allowedPersistentMutationPrefixes.some((prefix) => normalizedPath.startsWith(prefix));
 }
 
 function assertOnlyAllowedPersistentMutations(before, after, pass) {
