@@ -13,6 +13,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, relative, resolve, sep } from "node:path";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
@@ -371,27 +372,46 @@ runWithTemporaryTreeCleanup(root, () => {
 
 	const candidateBaselines = candidateAppRoots.map((appRoot, index) => {
 		const baselineRuntimeRoot = extractCandidateRuntimeBaseline(appRoot, index);
-		return {
-			appRoot,
+		const requireFromCandidate = createRequire(resolve(appRoot, "package.json"));
+		const directBraceRoot = dirname(
+			requireFromCandidate.resolve("brace-expansion/package.json"),
+		);
+		const baselineRuntimeBraceRoot = resolve(
 			baselineRuntimeRoot,
-			directBraceRoot: resolve(appRoot, "node_modules", "brace-expansion"),
-			runtimeBraceRoot: resolve(appRoot, ".feynman", "npm", "node_modules", "brace-expansion"),
-			baselineRuntimeBraceRoot: resolve(baselineRuntimeRoot, "node_modules", "brace-expansion"),
-			runtimeOtelRoot: resolve(appRoot, ".feynman", "npm", "node_modules", "pi-otel"),
-			baselineRuntimeOtelRoot: resolve(baselineRuntimeRoot, "node_modules", "pi-otel"),
-		};
-	});
-	for (const baseline of candidateBaselines) {
+			"node_modules",
+			"brace-expansion",
+		);
+		const baselineRuntimeOtelRoot = resolve(
+			baselineRuntimeRoot,
+			"node_modules",
+			"pi-otel",
+		);
 		for (const requiredPath of [
-			baseline.directBraceRoot,
-			baseline.baselineRuntimeBraceRoot,
-			baseline.baselineRuntimeOtelRoot,
+			directBraceRoot,
+			baselineRuntimeBraceRoot,
+			baselineRuntimeOtelRoot,
 		]) {
 			if (!existsSync(requiredPath)) {
 				throw new Error(`Feynman's candidate baseline is missing: ${requiredPath}`);
 			}
 		}
-	}
+		return {
+			appRoot,
+			baselineRuntimeRoot,
+			directBraceRoot,
+			directBraceSnapshot: snapshotTree(directBraceRoot),
+			runtimeBraceRoot: resolve(appRoot, ".feynman", "npm", "node_modules", "brace-expansion"),
+			baselineRuntimeBraceRoot,
+			baselineRuntimeBraceSnapshot: snapshotTree(baselineRuntimeBraceRoot),
+			runtimeOtelRoot: resolve(appRoot, ".feynman", "npm", "node_modules", "pi-otel"),
+			baselineRuntimeOtelRoot,
+			baselineRuntimeOtelSnapshot: snapshotTree(baselineRuntimeOtelRoot),
+			baselineRuntimeOtelConfig: readFileSync(
+				resolve(baselineRuntimeOtelRoot, "dist", "config.js"),
+				"utf8",
+			),
+		};
+	});
 
 	// Let the exact candidate initialize its trusted runtime trees before the
 	// stale fixture is staged. This gives the verifier a baseline that catches
@@ -399,14 +419,13 @@ runWithTemporaryTreeCleanup(root, () => {
 	runFeynman("setup");
 	const safeBraceExpansionSnapshots = new Map();
 	for (const baseline of candidateBaselines) {
-		for (const [candidatePath, baselinePath] of [
-			[baseline.directBraceRoot, baseline.directBraceRoot],
-			[baseline.runtimeBraceRoot, baseline.baselineRuntimeBraceRoot],
+		for (const [candidatePath, baselineSnapshot] of [
+			[baseline.directBraceRoot, baseline.directBraceSnapshot],
+			[baseline.runtimeBraceRoot, baseline.baselineRuntimeBraceSnapshot],
 		]) {
 			if (!existsSync(candidatePath)) {
 				throw new Error(`Feynman's candidate did not initialize: ${candidatePath}`);
 			}
-			const baselineSnapshot = snapshotTree(baselinePath);
 			assertSnapshotsEqual(
 				baselineSnapshot,
 				snapshotTree(candidatePath),
@@ -423,16 +442,13 @@ runWithTemporaryTreeCleanup(root, () => {
 	}
 	const trustedOtelRoot = trustedOtelBaseline.runtimeOtelRoot;
 	const trustedOtelRealPath = realpathSync(trustedOtelRoot);
-	const trustedOtelSnapshot = snapshotTree(trustedOtelBaseline.baselineRuntimeOtelRoot);
+	const trustedOtelSnapshot = trustedOtelBaseline.baselineRuntimeOtelSnapshot;
 	assertSnapshotsEqual(
 		trustedOtelSnapshot,
 		snapshotTree(trustedOtelRoot),
 		"Feynman's setup launch changed its trusted pi-otel tree",
 	);
-	const expectedOtelConfig = readFileSync(
-		resolve(trustedOtelBaseline.baselineRuntimeOtelRoot, "dist", "config.js"),
-		"utf8",
-	);
+	const expectedOtelConfig = trustedOtelBaseline.baselineRuntimeOtelConfig;
 
 	for (const packageRoot of [
 		resolve(managedNodeModulesPath, "@earendil-works", "pi-coding-agent"),
