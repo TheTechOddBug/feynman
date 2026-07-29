@@ -158,7 +158,7 @@
     "esbuild": "0.28.1",
     "fast-xml-builder": "1.2.0",
     "protobufjs": "7.6.5",
-    "undici": "$undici"
+    "undici": "8.9.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
