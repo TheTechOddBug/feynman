@@ -17,6 +17,7 @@ import {
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
 import {
@@ -835,6 +836,9 @@ for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegi
 const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
 patchPiBraceExpansionTree(resolve(appRoot, "node_modules"), safeBraceExpansionPath);
 patchPiBraceExpansionTree(workspaceRoot, safeBraceExpansionPath);
+const feynmanUndiciPath = resolve(appRoot, "node_modules", "undici");
+patchPiUndiciProxyTree(resolve(appRoot, "node_modules"), feynmanUndiciPath);
+patchPiUndiciProxyTree(workspaceRoot, feynmanUndiciPath);
 for (const nodeModulesRoot of [
 	resolve(appRoot, "node_modules"),
 	resolve(appRoot, "node_modules", "@companion-ai", "alpha-hub", "node_modules"),

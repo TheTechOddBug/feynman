@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
+import { FEYNMAN_UNDICI_VERSION } from "./lib/pi-undici-proxy-patch.mjs";
 import {
 	computeFileSha256,
 	computeRuntimeArchiveTreeHash,
@@ -11,6 +13,7 @@ import {
 } from "./lib/runtime-workspace-integrity.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
+const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 
 function fail(message) {
 	throw new Error(`[feynman artifact] ${message}`);
@@ -169,6 +172,27 @@ if (
 ) {
 	fail("bundled Pi brace-expansion is not 5.0.8");
 }
+const bundledPiManifest = readJson(
+	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
+	"bundled Pi package manifest",
+);
+if (manifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`package.json does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+if (bundledPiManifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`bundled Pi does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+for (const [label, path] of [
+	["Feynman", packageRequire.resolve("undici/package.json")],
+	[
+		"bundled Pi",
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "node_modules", "undici", "package.json"),
+	],
+]) {
+	if (readJson(path, `${label} Undici manifest`).version !== FEYNMAN_UNDICI_VERSION) {
+		fail(`${label} does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+	}
+}
 
 const archivePath = resolve(packageRoot, ".feynman", "runtime-workspace.tgz");
 const digestPath = resolve(packageRoot, ".feynman", "runtime-workspace.sha256");
@@ -187,12 +211,24 @@ if (
 ) {
 	fail("committed runtime lock does not pin @hono/node-server 2.0.12");
 }
+if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`committed runtime lock does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+if (runtimeLock.packages?.["node_modules/undici"]?.version !== FEYNMAN_UNDICI_VERSION) {
+	fail(`committed runtime lock does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
 for (const [packagePath, entry] of Object.entries(runtimeLock.packages ?? {})) {
 	if (
 		packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion") &&
 		entry?.version !== "5.0.8"
 	) {
 		fail("committed runtime lock does not pin Pi brace-expansion 5.0.8");
+	}
+	if (
+		packagePath.endsWith("/pi-coding-agent/node_modules/undici") &&
+		entry?.version !== FEYNMAN_UNDICI_VERSION
+	) {
+		fail(`committed runtime lock does not pin Pi Undici ${FEYNMAN_UNDICI_VERSION}`);
 	}
 }
 if (readArchivedText(archivePath, "npm/package-lock.json") !== runtimeLockSource) {
@@ -320,12 +356,28 @@ if (
 ) {
 	fail("runtime Pi brace-expansion is not 5.0.8");
 }
+const runtimePiManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/@earendil-works/pi-coding-agent/package.json",
+);
+if (runtimePiManifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`runtime Pi does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+for (const [label, entryPath] of [
+	["runtime", "npm/node_modules/undici/package.json"],
+	["runtime Pi", "npm/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/package.json"],
+]) {
+	if (readArchivedJson(archivePath, entryPath).version !== FEYNMAN_UNDICI_VERSION) {
+		fail(`${label} does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+	}
+}
 
 console.log(JSON.stringify({
 	ok: true,
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
 	piWebAccessVersion: expectedPiWebAccessVersion,
+	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,
 	runtimeArchiveSha256: computeFileSha256(archivePath),
 }));

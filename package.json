@@ -128,7 +128,7 @@
     "posthog-node": "^5.38.2",
     "react-json-view-lite": "^2.5.0",
     "tidytree": "^0.7.0",
-    "undici": "8.5.0"
+    "undici": "8.9.0"
   },
   "overrides": {
     "basic-ftp": "5.3.1",
@@ -157,7 +157,8 @@
     "fast-uri": "3.1.4",
     "esbuild": "0.28.1",
     "fast-xml-builder": "1.2.0",
-    "protobufjs": "7.6.5"
+    "protobufjs": "7.6.5",
+    "undici": "$undici"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

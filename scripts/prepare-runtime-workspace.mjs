@@ -10,6 +10,7 @@ import {
 } from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
@@ -75,6 +76,7 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-trace-base": "2.10.0",
 	"@opentelemetry/sdk-trace-node": "2.10.0",
 	"brace-expansion": "5.0.8",
+	undici: "8.9.0",
 };
 const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",
@@ -83,6 +85,7 @@ const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-tui",
 	"brace-expansion",
 	"typebox",
+	"undici",
 ];
 const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
 	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
@@ -605,6 +608,10 @@ function patchBundledRuntime() {
 		workspaceNodeModulesDir,
 		resolve(appRoot, "node_modules", "brace-expansion"),
 	) || changed;
+	changed = patchPiUndiciProxyTree(
+		workspaceNodeModulesDir,
+		resolve(appRoot, "node_modules", "undici"),
+	) || changed;
 	changed = patchBundledPiInteractiveTheme() || changed;
 	changed = patchBundledPiTui() || changed;
 	changed = patchBundledPiWebAccess() || changed;
@@ -654,6 +661,10 @@ patchMcpSdkManifest(resolve(appRoot, "node_modules"));
 patchPiBraceExpansionTree(
 	resolve(appRoot, "node_modules"),
 	resolve(appRoot, "node_modules", "brace-expansion"),
+);
+patchPiUndiciProxyTree(
+	resolve(appRoot, "node_modules"),
+	resolve(appRoot, "node_modules", "undici"),
 );
 const packageSpecs = readPackageSpecs();
 const refreshRuntimeLock = process.argv.includes("--refresh-lock");

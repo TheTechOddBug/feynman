@@ -67,6 +67,8 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
+	assert.match(runtimeWorkspaceSource, /undici: "8\.9\.0"/);
+	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
 });
 
