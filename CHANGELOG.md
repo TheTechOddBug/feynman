@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-29 01:45 PDT — intake-sweep-0.3.8-windows-native-cleanup
+
+- Objective: Finish the `0.3.8` release after all source and package-consumer gates passed but the Windows native stale-Pi smoke failed.
+- Found: Main run `30432364527` passed source verification, all six Linux/macOS/Windows package consumers, and four native bundles. The Windows native smoke then ran exactly to the verifier's 120-second launch limit; its primary timeout was hidden when immediate temp-tree removal hit a live Windows handle and threw `EPERM`.
+- Fixed: Give Windows native runtime extraction and launch a bounded five-minute pass budget, retry only transient filesystem cleanup errors with capped backoff, preserve a verification error when cleanup also fails, and keep a successful verification red when cleanup cannot complete.
+- Verified locally: Focused cleanup/workflow tests passed `12/12`; full tests passed `659/659`; typecheck, build, architecture check, actionlint, website lint/typecheck/build (`34` pages), full and production audits, package freshness review, and `git diff --check` passed. A clean installed tarball passed budget, artifact, consumer/runtime audit, version/help/package/search, and two-launch stale-Pi gates. A separate exact Pi `0.82.0` user-root reproduction launched twice with all four stale Pi versions and affected core-file hashes unchanged.
+- State: `verified` locally. Next: push the exact successor, then require the complete release workflow and live npm/GitHub `0.3.8` identity before terminal reconciliation.
+
 ### 2026-07-28 21:20 PDT — intake-sweep-stale-pi-editor-upgrade
 
 - Objective: Reproduce and fix issue `#202`, where a standalone `0.3.7` install failed at launch with `Unsupported Pi editor layout: required import patch anchor was not found`.

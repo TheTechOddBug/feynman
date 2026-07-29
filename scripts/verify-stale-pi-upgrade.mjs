@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { runWithTemporaryTreeCleanup } from "./lib/temporary-tree-cleanup.mjs";
 
 const binaryArgument = process.argv[2];
 if (!binaryArgument) {
@@ -94,7 +95,7 @@ function runFeynman(pass) {
 		input: "",
 		encoding: "utf8",
 		shell: process.platform === "win32",
-		timeout: 120_000,
+		timeout: process.platform === "win32" ? 300_000 : 120_000,
 	});
 	if (result.error) {
 		throw result.error;
@@ -113,7 +114,7 @@ function runFeynman(pass) {
 	}
 }
 
-try {
+runWithTemporaryTreeCleanup(root, () => {
 	writeFiles(managedStaleFiles);
 	writeFiles(persistentStaleFiles);
 	mkdirSync(dirname(otelConfigPath), { recursive: true });
@@ -151,6 +152,4 @@ try {
 		throw new Error("Feynman stale-Pi upgrade extension patch was not idempotent");
 	}
 	console.log("Feynman stale Pi 0.80.6 user-package isolation smoke passed twice.");
-} finally {
-	rmSync(root, { recursive: true, force: true });
-}
+});
