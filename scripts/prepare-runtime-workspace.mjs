@@ -3,6 +3,11 @@ import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
+import {
+	patchPiAgentSessionSource,
+	patchPiSessionManagerSource,
+	patchPiTransformMessagesSource,
+} from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
@@ -419,6 +424,53 @@ function patchBundledPiAgentCore() {
 	return patchScopedPiWorkspaceFile("pi-agent-core", "dist/agent-loop.js", patchPiAgentCoreSource);
 }
 
+function patchBundledNestedPiAiTransformMessages() {
+	let changed = false;
+	for (const codingScope of ["@earendil-works", "@mariozechner"]) {
+		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
+			const filePath = resolve(
+				workspaceNodeModulesDir,
+				codingScope,
+				"pi-coding-agent",
+				"node_modules",
+				aiScope,
+				"pi-ai",
+				"dist",
+				"api",
+				"transform-messages.js",
+			);
+			if (!existsSync(filePath)) continue;
+			const source = readFileSync(filePath, "utf8");
+			const patched = patchPiTransformMessagesSource(source);
+			if (patched === source) continue;
+			writeFileSync(filePath, patched, "utf8");
+			changed = true;
+		}
+	}
+	return changed;
+}
+
+function patchBundledPiRuntimeCorrectness() {
+	let changed = false;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/core/agent-session.js",
+		patchPiAgentSessionSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/core/session-manager.js",
+		patchPiSessionManagerSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-ai",
+		"dist/api/transform-messages.js",
+		patchPiTransformMessagesSource,
+	) || changed;
+	changed = patchBundledNestedPiAiTransformMessages() || changed;
+	return changed;
+}
+
 function patchBundledPiTui() {
 	let changed = false;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/tui.js", patchPiTuiSource) || changed;
@@ -546,6 +598,7 @@ function patchBundledRuntime() {
 	let changed = false;
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
+	changed = patchBundledPiRuntimeCorrectness() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
 	changed = patchBundledPiModelRuntime() || changed;
 	changed = patchPiBraceExpansionTree(

@@ -9,6 +9,11 @@ import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
+import {
+	patchPiAgentSessionSource,
+	patchPiSessionManagerSource,
+	patchPiTransformMessagesSource,
+} from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
@@ -82,6 +87,14 @@ const interactiveThemePath = piPackageRoot ? resolve(piPackageRoot, "dist", "mod
 const extensionLoaderPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "extensions", "loader.js") : null;
 const modelRegistryPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-registry.js") : null;
 const modelRuntimePath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-runtime.js") : null;
+const agentSessionPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "agent-session.js") : null;
+const sessionManagerPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "session-manager.js") : null;
+const transformMessagesPath = piAiRoot ? resolve(piAiRoot, "dist", "api", "transform-messages.js") : null;
+const nestedTransformMessagesPaths = piPackageRoot
+	? ["@earendil-works", "@mariozechner"].map((scope) =>
+		resolve(piPackageRoot, "node_modules", scope, "pi-ai", "dist", "api", "transform-messages.js"),
+	)
+	: [];
 const agentLoopPath = piAgentCoreRoot ? resolve(piAgentCoreRoot, "dist", "agent-loop.js") : null;
 const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
 const terminalPath = piTuiRoot ? resolve(piTuiRoot, "dist", "terminal.js") : null;
@@ -96,6 +109,24 @@ function resolveWorkspacePiFile(packageName, ...segments) {
 }
 
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
+const workspaceAgentSessionPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "agent-session.js");
+const workspaceSessionManagerPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "session-manager.js");
+const workspaceTransformMessagesPath = resolveWorkspacePiFile("pi-ai", "dist", "api", "transform-messages.js");
+const workspaceNestedTransformMessagesPaths = ["@earendil-works", "@mariozechner"].flatMap((codingScope) =>
+	["@earendil-works", "@mariozechner"].map((aiScope) =>
+		resolve(
+			workspaceRoot,
+			codingScope,
+			"pi-coding-agent",
+			"node_modules",
+			aiScope,
+			"pi-ai",
+			"dist",
+			"api",
+			"transform-messages.js",
+		),
+	),
+);
 const workspaceTuiPath = resolveWorkspacePiFile("pi-tui", "dist", "tui.js");
 const workspaceEditorPath = resolveWorkspacePiFile("pi-tui", "dist", "components", "editor.js");
 const workspaceInteractiveThemePath = resolveWorkspacePiFile(
@@ -811,6 +842,24 @@ for (const nodeModulesRoot of [
 	resolve(workspaceRoot, "@companion-ai", "alpha-hub", "node_modules"),
 ]) {
 	patchMcpSdkManifest(nodeModulesRoot);
+}
+
+for (const [entryPath, patchSource] of [
+	[agentSessionPath, patchPiAgentSessionSource],
+	[workspaceAgentSessionPath, patchPiAgentSessionSource],
+	[sessionManagerPath, patchPiSessionManagerSource],
+	[workspaceSessionManagerPath, patchPiSessionManagerSource],
+	[transformMessagesPath, patchPiTransformMessagesSource],
+	[workspaceTransformMessagesPath, patchPiTransformMessagesSource],
+	...nestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
+	...workspaceNestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
+]) {
+	if (!entryPath || !existsSync(entryPath)) continue;
+	const source = readFileSync(entryPath, "utf8");
+	const patched = patchSource(source);
+	if (patched !== source) {
+		writeFileSync(entryPath, patched, "utf8");
+	}
 }
 
 for (const entryPath of [agentLoopPath, workspaceAgentLoopPath].filter(Boolean)) {

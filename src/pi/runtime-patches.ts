@@ -5,6 +5,11 @@ import { patchAlphaHubAuthSource } from "../../scripts/lib/alpha-hub-auth-patch.
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../../scripts/lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "../../scripts/lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mjs";
+import {
+	patchPiAgentSessionSource,
+	patchPiSessionManagerSource,
+	patchPiTransformMessagesSource,
+} from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
 import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
@@ -101,6 +106,30 @@ function patchScopedPiPackageFileIfPresent(
 	return changed;
 }
 
+function patchNestedPiPackageFileIfPresent(
+	nodeModulesPath: string,
+	parentPackageName: string,
+	nestedPackageName: string,
+	relativePath: string,
+	patchSource: (source: string) => string,
+	bundledPiVersion: string | undefined,
+): boolean {
+	let changed = false;
+	for (const parentScope of ["@earendil-works", "@mariozechner"]) {
+		const parentRoot = resolve(nodeModulesPath, parentScope, parentPackageName);
+		if (!shouldPatchPiPackage(parentRoot, bundledPiVersion)) continue;
+		for (const nestedScope of ["@earendil-works", "@mariozechner"]) {
+			const nestedRoot = resolve(parentRoot, "node_modules", nestedScope, nestedPackageName);
+			if (!shouldPatchPiPackage(nestedRoot, bundledPiVersion)) continue;
+			changed = patchFileIfPresent(
+				resolve(nestedRoot, ...relativePath.split("/")),
+				patchSource,
+			) || changed;
+		}
+	}
+	return changed;
+}
+
 function patchPiCodingAgentPackageJsonSource(source: string): string {
 	const pkg = JSON.parse(source) as {
 		piConfig?: Record<string, unknown>;
@@ -150,6 +179,35 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			"pi-agent-core",
 			"dist/agent-loop.js",
 			patchPiAgentCoreSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/core/agent-session.js",
+			patchPiAgentSessionSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/core/session-manager.js",
+			patchPiSessionManagerSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-ai",
+			"dist/api/transform-messages.js",
+			patchPiTransformMessagesSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-ai",
+			"dist/api/transform-messages.js",
+			patchPiTransformMessagesSource,
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
