@@ -3,8 +3,17 @@ import { dirname, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
+import {
+	assertPiRuntimeCorrectnessVersion,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+	patchPiAgentSessionSource,
+	patchPiSessionManagerSource,
+	patchPiTransformMessagesSource,
+} from "./lib/pi-runtime-correctness-patch.mjs";
+import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
@@ -70,6 +79,7 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-trace-base": "2.10.0",
 	"@opentelemetry/sdk-trace-node": "2.10.0",
 	"brace-expansion": "5.0.8",
+	undici: "8.9.0",
 };
 const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",
@@ -78,6 +88,7 @@ const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-tui",
 	"brace-expansion",
 	"typebox",
+	"undici",
 ];
 const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
 	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
@@ -397,6 +408,12 @@ function patchScopedPiWorkspaceFile(packageName, relativePath, patchSource) {
 	return changed;
 }
 
+function assertPiPackageVersion(packageRoot, surface) {
+	if (!existsSync(resolve(packageRoot, "package.json"))) return;
+	const version = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version;
+	assertPiRuntimeCorrectnessVersion(version, surface);
+}
+
 function patchPiCodingAgentPackageJsonSource(source) {
 	const pkg = JSON.parse(source);
 	const piConfig = typeof pkg.piConfig === "object" && pkg.piConfig !== null ? pkg.piConfig : {};
@@ -417,6 +434,84 @@ function patchBundledPiCodingAgentPackageJson() {
 
 function patchBundledPiAgentCore() {
 	return patchScopedPiWorkspaceFile("pi-agent-core", "dist/agent-loop.js", patchPiAgentCoreSource);
+}
+
+function patchBundledNestedPiAiTransformMessages() {
+	let changed = false;
+	for (const codingScope of ["@earendil-works", "@mariozechner"]) {
+		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
+			const filePath = resolve(
+				workspaceNodeModulesDir,
+				codingScope,
+				"pi-coding-agent",
+				"node_modules",
+				aiScope,
+				"pi-ai",
+				"dist",
+				"api",
+				"transform-messages.js",
+			);
+			if (!existsSync(filePath)) continue;
+			const source = readFileSync(filePath, "utf8");
+			const patched = patchPiTransformMessagesSource(source);
+			if (patched === source) continue;
+			writeFileSync(filePath, patched, "utf8");
+			changed = true;
+		}
+	}
+	return changed;
+}
+
+function patchBundledPiRuntimeCorrectness() {
+	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		assertPiPackageVersion(
+			resolve(workspaceNodeModulesDir, scope, "pi-coding-agent"),
+			`runtime workspace ${scope}/pi-coding-agent`,
+		);
+		assertPiPackageVersion(
+			resolve(workspaceNodeModulesDir, scope, "pi-ai"),
+			`runtime workspace ${scope}/pi-ai`,
+		);
+		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
+			assertPiPackageVersion(
+				resolve(
+					workspaceNodeModulesDir,
+					scope,
+					"pi-coding-agent",
+					"node_modules",
+					aiScope,
+					"pi-ai",
+				),
+				`runtime workspace nested ${scope}/pi-coding-agent ${aiScope}/pi-ai`,
+			);
+		}
+	}
+	let changed = false;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/core/agent-session.js",
+		patchPiAgentSessionSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/core/session-manager.js",
+		patchPiSessionManagerSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-ai",
+		"dist/api/transform-messages.js",
+		patchPiTransformMessagesSource,
+	) || changed;
+	changed = patchBundledNestedPiAiTransformMessages() || changed;
+	return changed;
+}
+
+function patchBundledPiLlamaUsage() {
+	return patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/extensions/llama/provider.js",
+		patchPiLlamaUsageSource,
+	);
 }
 
 function patchBundledPiTui() {
@@ -546,11 +641,18 @@ function patchBundledRuntime() {
 	let changed = false;
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
+	changed = patchBundledPiRuntimeCorrectness() || changed;
+	changed = patchBundledPiLlamaUsage() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
 	changed = patchBundledPiModelRuntime() || changed;
 	changed = patchPiBraceExpansionTree(
 		workspaceNodeModulesDir,
 		resolve(appRoot, "node_modules", "brace-expansion"),
+	) || changed;
+	changed = patchPiUndiciProxyTree(
+		workspaceNodeModulesDir,
+		resolve(appRoot, "node_modules", "undici"),
+		PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	) || changed;
 	changed = patchBundledPiInteractiveTheme() || changed;
 	changed = patchBundledPiTui() || changed;
@@ -601,6 +703,11 @@ patchMcpSdkManifest(resolve(appRoot, "node_modules"));
 patchPiBraceExpansionTree(
 	resolve(appRoot, "node_modules"),
 	resolve(appRoot, "node_modules", "brace-expansion"),
+);
+patchPiUndiciProxyTree(
+	resolve(appRoot, "node_modules"),
+	resolve(appRoot, "node_modules", "undici"),
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 );
 const packageSpecs = readPackageSpecs();
 const refreshRuntimeLock = process.argv.includes("--refresh-lock");

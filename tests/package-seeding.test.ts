@@ -67,7 +67,20 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
+	assert.match(runtimeWorkspaceSource, /undici: "8\.9\.0"/);
+	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
+});
+
+test("published manifest pins the Undici override for npm 10 consumers", async () => {
+	const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
+		dependencies?: Record<string, string>;
+		overrides?: Record<string, unknown>;
+	};
+
+	assert.equal(manifest.dependencies?.undici, "8.9.0");
+	assert.equal(manifest.overrides?.undici, manifest.dependencies?.undici);
+	assert.doesNotMatch(String(manifest.overrides?.undici), /^\$/);
 });
 
 test("prepare runtime workspace links legacy Pi aliases instead of installing duplicates", async () => {

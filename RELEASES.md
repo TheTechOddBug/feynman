@@ -6,15 +6,35 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
-## v0.3.8 - 2026-07-28
+## v0.3.9 - 2026-07-29
 
 ### Reliability
 
-- Fixed standalone upgrades failing at launch with `Unsupported Pi editor layout` when an older Pi core dependency remained in the user's package directory. Startup now leaves stale Pi core copies untouched while continuing to patch installed extensions, which Pi loads against Feynman's current bundled runtime.
+- Prevented Workbench and other RPC prompts submitted during manual compaction from being acknowledged and then lost. Pi now rejects the prompt before a success acknowledgment with a retryable error.
+- Persisted each completed parallel tool result before slower siblings finish, so successful research evidence survives an abort or restart. Restored sessions and provider requests continue to present results in the assistant's original tool-call order.
+- Replaced eagerly persisted tool results in place when an extension modifies the finalized message, preventing duplicate session entries and duplicate tool-usage accounting.
+- Restored token accounting for the built-in llama.cpp provider by requesting streaming usage from compatible llama-server releases. Existing cached llama.cpp model metadata is repaired in place, so users do not need to delete `models-store.json` or repeat provider setup.
+- Fixed plain HTTP API and MCP traffic behind `HTTP_PROXY` using a `CONNECT` tunnel that compatible proxies reject. HTTP targets now use absolute-form forwarding while HTTPS targets continue to tunnel.
+- Replaced deprecated Windows shell-with-arguments launches in native builds and stale-upgrade verification with explicitly escaped `ComSpec` invocations.
+
+### Package Stack
+
+- Updated Feynman's direct and nested Pi Undici runtime from `8.5.0` to `8.9.0`. The narrow Pi manifest, shrinkwrap, and installed-tree repair can be removed after a supported Pi release requires Undici `8.7.0` or newer.
 
 ### Validation
 
-- Added an installed-package and native-bundle upgrade smoke that stages a Pi `0.80.6` user-package tree, proves its core files remain unchanged, verifies extension patching stays idempotent, and launches Feynman through RPC twice before a release can publish.
+- Strengthened the installed-package and native-bundle stale-Pi gate with representative shrinkwrap metadata and its vulnerable nested dependency, a complete persistent-fixture mutation allowlist, exact security-tree checks, and byte-idempotent second-launch verification.
+- Added real RPC and proxy-server regressions, reopened-session checks while parallel work remains pending, real file-store and concurrent-refresh llama.cpp migration coverage, a mock SSE token-accounting check, and package-artifact mechanism checks for every temporary Pi correctness patch plus exact Pi shrinkwrap dependency, resolved URL, and integrity metadata.
+
+## v0.3.8 - 2026-07-29
+
+### Reliability
+
+- Fixed standalone upgrades failing at launch with `Unsupported Pi editor layout` when an older Pi core dependency remained in the user's package directory. Startup now leaves stale Pi core entrypoints untouched while applying the narrow nested dependency security repair and continuing to patch installed extensions, which Pi loads against Feynman's current bundled runtime.
+
+### Validation
+
+- Added an installed-package and native-bundle upgrade smoke that stages representative Pi `0.80.6` core entrypoints, proves those entrypoints remain unchanged, verifies extension patching stays idempotent, and launches Feynman through RPC twice before a release can publish.
 
 ## v0.3.7 - 2026-07-28
 

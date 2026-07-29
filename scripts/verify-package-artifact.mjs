@@ -1,6 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
+import {
+	assertPiCodingAgentUndiciShrinkwrapSource,
+	FEYNMAN_UNDICI_VERSION,
+} from "./lib/pi-undici-proxy-patch.mjs";
+import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
+import {
+	assertPiRuntimeCorrectnessPatchSource,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+} from "./lib/pi-runtime-correctness-patch.mjs";
 import {
 	computeFileSha256,
 	computeRuntimeArchiveTreeHash,
@@ -11,6 +21,7 @@ import {
 } from "./lib/runtime-workspace-integrity.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
+const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 
 function fail(message) {
 	throw new Error(`[feynman artifact] ${message}`);
@@ -57,6 +68,14 @@ function readArchivedText(archivePath, entryPath) {
 const manifest = readJson(resolve(packageRoot, "package.json"), "package.json");
 const expectedPiVersion = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
 if (typeof expectedPiVersion !== "string") fail("package.json has no exact Pi runtime version");
+if (expectedPiVersion !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+	fail(
+		`Pi runtime correctness patches require ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${expectedPiVersion}`,
+	);
+}
+if (manifest.dependencies?.["@earendil-works/pi-ai"] !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+	fail(`Pi AI correctness patches require ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+}
 
 for (const name of [
 	"@earendil-works/pi-agent-core",
@@ -74,6 +93,63 @@ for (const name of [
 	}
 }
 
+assertPiRuntimeCorrectnessPatchSource(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "agent-session.js"),
+		"bundled Pi AgentSession",
+	),
+	"agentSession",
+	"bundled Pi AgentSession",
+);
+assertPiRuntimeCorrectnessPatchSource(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "session-manager.js"),
+		"bundled Pi SessionManager",
+	),
+	"sessionManager",
+	"bundled Pi SessionManager",
+);
+for (const [label, path] of [
+	[
+		"bundled root Pi AI",
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-ai", "dist", "api", "transform-messages.js"),
+	],
+	[
+		"bundled nested Pi AI",
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-ai",
+			"dist",
+			"api",
+			"transform-messages.js",
+		),
+	],
+]) {
+	assertPiRuntimeCorrectnessPatchSource(readText(path, label), "transformMessages", label);
+}
+if (
+	readJson(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-ai",
+			"package.json",
+		),
+		"bundled nested Pi AI manifest",
+	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
+) {
+	fail(`bundled nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+}
+
 requireMarkers(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "model-runtime.js"),
@@ -81,6 +157,22 @@ requireMarkers(
 	),
 	"bundled Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
+);
+assertPiLlamaUsagePatchSource(
+	readText(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"dist",
+			"extensions",
+			"llama",
+			"provider.js",
+		),
+		"bundled Pi llama.cpp provider",
+	),
+	"bundled Pi llama.cpp provider",
 );
 requireMarkers(
 	readText(
@@ -169,6 +261,32 @@ if (
 ) {
 	fail("bundled Pi brace-expansion is not 5.0.8");
 }
+const bundledPiManifest = readJson(
+	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
+	"bundled Pi package manifest",
+);
+const bundledPiShrinkwrapSource = readText(
+	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "npm-shrinkwrap.json"),
+	"bundled Pi shrinkwrap",
+);
+assertPiCodingAgentUndiciShrinkwrapSource(bundledPiShrinkwrapSource, "bundled Pi shrinkwrap");
+if (manifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`package.json does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+if (bundledPiManifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`bundled Pi does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+for (const [label, path] of [
+	["Feynman", packageRequire.resolve("undici/package.json")],
+	[
+		"bundled Pi",
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "node_modules", "undici", "package.json"),
+	],
+]) {
+	if (readJson(path, `${label} Undici manifest`).version !== FEYNMAN_UNDICI_VERSION) {
+		fail(`${label} does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+	}
+}
 
 const archivePath = resolve(packageRoot, ".feynman", "runtime-workspace.tgz");
 const digestPath = resolve(packageRoot, ".feynman", "runtime-workspace.sha256");
@@ -187,12 +305,24 @@ if (
 ) {
 	fail("committed runtime lock does not pin @hono/node-server 2.0.12");
 }
+if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`committed runtime lock does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+if (runtimeLock.packages?.["node_modules/undici"]?.version !== FEYNMAN_UNDICI_VERSION) {
+	fail(`committed runtime lock does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
 for (const [packagePath, entry] of Object.entries(runtimeLock.packages ?? {})) {
 	if (
 		packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion") &&
 		entry?.version !== "5.0.8"
 	) {
 		fail("committed runtime lock does not pin Pi brace-expansion 5.0.8");
+	}
+	if (
+		packagePath.endsWith("/pi-coding-agent/node_modules/undici") &&
+		entry?.version !== FEYNMAN_UNDICI_VERSION
+	) {
+		fail(`committed runtime lock does not pin Pi Undici ${FEYNMAN_UNDICI_VERSION}`);
 	}
 }
 if (readArchivedText(archivePath, "npm/package-lock.json") !== runtimeLockSource) {
@@ -231,6 +361,47 @@ for (const spec of runtimeManifest.packageSpecs) {
 	}
 }
 
+assertPiRuntimeCorrectnessPatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+	),
+	"agentSession",
+	"runtime Pi AgentSession",
+);
+assertPiRuntimeCorrectnessPatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+	),
+	"sessionManager",
+	"runtime Pi SessionManager",
+);
+for (const [label, entryPath] of [
+	[
+		"runtime root Pi AI",
+		"npm/node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+	],
+	[
+		"runtime nested Pi AI",
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+	],
+]) {
+	assertPiRuntimeCorrectnessPatchSource(
+		readArchivedText(archivePath, entryPath),
+		"transformMessages",
+		label,
+	);
+}
+if (
+	readArchivedJson(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json",
+	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
+) {
+	fail(`runtime nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+}
+
 requireMarkers(
 	readArchivedText(
 		archivePath,
@@ -238,6 +409,13 @@ requireMarkers(
 	),
 	"runtime Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
+);
+assertPiLlamaUsagePatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/provider.js",
+	),
+	"runtime Pi llama.cpp provider",
 );
 requireMarkers(
 	readArchivedText(
@@ -320,12 +498,33 @@ if (
 ) {
 	fail("runtime Pi brace-expansion is not 5.0.8");
 }
+const runtimePiManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/@earendil-works/pi-coding-agent/package.json",
+);
+const runtimePiShrinkwrapSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/@earendil-works/pi-coding-agent/npm-shrinkwrap.json",
+);
+assertPiCodingAgentUndiciShrinkwrapSource(runtimePiShrinkwrapSource, "runtime Pi shrinkwrap");
+if (runtimePiManifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
+	fail(`runtime Pi does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
+}
+for (const [label, entryPath] of [
+	["runtime", "npm/node_modules/undici/package.json"],
+	["runtime Pi", "npm/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/package.json"],
+]) {
+	if (readArchivedJson(archivePath, entryPath).version !== FEYNMAN_UNDICI_VERSION) {
+		fail(`${label} does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
+	}
+}
 
 console.log(JSON.stringify({
 	ok: true,
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
 	piWebAccessVersion: expectedPiWebAccessVersion,
+	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,
 	runtimeArchiveSha256: computeFileSha256(archivePath),
 }));

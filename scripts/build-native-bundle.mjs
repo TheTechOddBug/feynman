@@ -8,6 +8,7 @@ import {
 	createDeterministicTarGz,
 	createDeterministicZip,
 } from "./lib/deterministic-archive.mjs";
+import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 
 const appRoot = resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(readFileSync(resolve(appRoot, "package.json"), "utf8"));
@@ -63,30 +64,13 @@ function resolveBundledNodeVersion() {
 
 const bundledNodeVersion = resolveBundledNodeVersion();
 
-function resolveCommand(command) {
-	if (process.platform === "win32" && command === "npm") {
-		return "npm.cmd";
-	}
-
-	return command;
-}
-
-function spawnOptions(command, options = {}) {
-	if (process.platform === "win32" && command.endsWith(".cmd")) {
-		return {
-			shell: true,
-			...options,
-		};
-	}
-
-	return options;
-}
-
 function run(command, args, options = {}) {
-	const resolvedCommand = resolveCommand(command);
-	const result = spawnSync(resolvedCommand, args, {
+	const resolvedCommand = process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+	const invocation = resolveChildProcessCommand(resolvedCommand, args);
+	const result = spawnSync(invocation.command, invocation.args, {
 		stdio: "inherit",
-		...spawnOptions(resolvedCommand, options),
+		shell: invocation.shell,
+		windowsVerbatimArguments: invocation.windowsVerbatimArguments,
 		...options,
 	});
 	if (result.error) {
@@ -98,11 +82,13 @@ function run(command, args, options = {}) {
 }
 
 function runCapture(command, args, options = {}) {
-	const resolvedCommand = resolveCommand(command);
-	const result = spawnSync(resolvedCommand, args, {
+	const resolvedCommand = process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+	const invocation = resolveChildProcessCommand(resolvedCommand, args);
+	const result = spawnSync(invocation.command, invocation.args, {
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
-		...spawnOptions(resolvedCommand, options),
+		shell: invocation.shell,
+		windowsVerbatimArguments: invocation.windowsVerbatimArguments,
 		...options,
 	});
 	if (result.error) {

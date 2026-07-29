@@ -32,6 +32,7 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 		"@earendil-works/pi-tui",
 		"brace-expansion",
 		"typebox",
+		"undici",
 	]) {
 		const version = rootLock.packages[`node_modules/${packageName}`]?.version;
 		if (version) expected[packageName] = version;
@@ -43,9 +44,13 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 		runtimeLock.packages["node_modules/@hono/node-server"]?.version,
 		"2.0.12",
 	);
+	assert.equal(runtimeLock.packages["node_modules/undici"]?.version, "8.9.0");
 	for (const [packagePath, entry] of Object.entries(runtimeLock.packages)) {
 		if (packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion")) {
 			assert.equal(entry.version, "5.0.8");
+		}
+		if (packagePath.endsWith("/pi-coding-agent/node_modules/undici")) {
+			assert.equal(entry.version, "8.9.0");
 		}
 	}
 });
