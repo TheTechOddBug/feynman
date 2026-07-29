@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-28 21:20 PDT — intake-sweep-stale-pi-editor-upgrade
+
+- Objective: Reproduce and fix issue `#202`, where a standalone `0.3.7` install failed at launch with `Unsupported Pi editor layout: required import patch anchor was not found`.
+- Found: Pi stores user packages under `<agentDir>/npm`. An upgrade can retain Pi `0.80.6` core dependencies there. The exact published `0.3.7` RPC launch failed against the official stale editor, and a one-anchor editor compatibility patch then failed against the same release's ModelRegistry. Pi `0.82.1` already aliases extension peer imports to the current bundled core, so patching each historical core layout is unnecessary and brittle.
+- Fixed: Resolve Feynman's bundled Pi version from package metadata and skip core patchers only for Pi packages with a different explicit version. Security, MCP, and extension patching still covers user roots. Package and native release gates now launch twice with staged stale editor and ModelRegistry files, prove those core files remain byte-identical, and prove extension patching remains idempotent.
+- Verified locally: Fresh official Pi `0.80.6` packages passed two idempotent patch passes (`true`, then `false`) with editor and ModelRegistry hashes unchanged, followed by two clean RPC launches. Focused tests passed `22/22`; full tests passed `655/655`; typecheck, build, architecture check, actionlint, website lint/typecheck/build (`34` pages), root/website/runtime/clean-consumer audits, and `git diff --check` passed. Dry and real packs matched at `111,634,612` bytes / `39,692` entries with SHA-256 `daaf0e114b4e708269629edc99b166f782990f0940105265f6efa2dade0c1376`. The clean installed tarball passed artifact verification and the two-pass stale upgrade smoke with runtime archive SHA-256 `5dee5447b585bab835bcb3dd74b5a832a69b4e7cbea57aa4ca3d75794242d788`; the native macOS arm64 bundle passed the same smoke at SHA-256 `6db6e81d58b91a0b78d043e9532b078341aaae0bf965dfa8c65d158690c1660f`.
+- State: `verified` locally. Next: prove the exact commit in Daytona and required GitHub CI, then merge and verify the `0.3.8` npm/GitHub/native release before closing `#202`.
+
 ### 2026-07-28 14:30 PDT — intake-sweep-global-npm-install
 
 - Objective: Re-run the terminal intake after `0.3.6`, including the documented global npm install path rather than treating a clean project-prefix consumer as equivalent.

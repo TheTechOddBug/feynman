@@ -45,6 +45,12 @@ test("PR and publish workflows require clean package and consumer audits", () =>
 	}
 });
 
+test("package and native release gates exercise persisted Pi user-package upgrades", () => {
+	const staleUpgradeVerifier = /node scripts\/verify-stale-pi-upgrade\.mjs/g;
+	assert.equal((e2eWorkflow.match(staleUpgradeVerifier) ?? []).length, 1);
+	assert.equal((publishWorkflow.match(staleUpgradeVerifier) ?? []).length, 3);
+});
+
 test("package gates exercise the global npm install path", () => {
 	assert.ok(
 		packageManifest.bundleDependencies?.includes("@opentelemetry/api"),

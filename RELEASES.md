@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.8 - 2026-07-28
+
+### Reliability
+
+- Fixed standalone upgrades failing at launch with `Unsupported Pi editor layout` when an older Pi core dependency remained in the user's package directory. Startup now leaves stale Pi core copies untouched while continuing to patch installed extensions, which Pi loads against Feynman's current bundled runtime.
+
+### Validation
+
+- Added an installed-package and native-bundle upgrade smoke that stages a Pi `0.80.6` user-package tree, proves its core files remain unchanged, verifies extension patching stays idempotent, and launches Feynman through RPC twice before a release can publish.
+
 ## v0.3.7 - 2026-07-28
 
 ### Reliability

@@ -265,7 +265,21 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 	writeFileSync(themePath, THEME_SOURCE, "utf8");
 	writeFileSync(
 		packageJsonPath,
-		JSON.stringify({ name: "@earendil-works/pi-coding-agent", piConfig: { configDir: ".pi" } }, null, 2) + "\n",
+		JSON.stringify({
+			name: "@earendil-works/pi-coding-agent",
+			version: "0.82.1",
+			piConfig: { configDir: ".pi" },
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		join(dirname(dirname(agentLoopPath)), "package.json"),
+		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.82.1" }, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		join(dirname(dirname(tuiPath)), "package.json"),
+		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.82.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(modelRegistryPath, MODEL_REGISTRY_SOURCE, "utf8");
@@ -343,7 +357,21 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	writeFileSync(themePath, THEME_SOURCE, "utf8");
 	writeFileSync(
 		packageJsonPath,
-		JSON.stringify({ name: "@mariozechner/pi-coding-agent", piConfig: { configDir: ".pi" } }, null, 2) + "\n",
+		JSON.stringify({
+			name: "@mariozechner/pi-coding-agent",
+			version: "0.82.1",
+			piConfig: { configDir: ".pi" },
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		join(dirname(dirname(agentLoopPath)), "package.json"),
+		JSON.stringify({ name: "@mariozechner/pi-agent-core", version: "0.82.1" }, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		join(dirname(dirname(tuiPath)), "package.json"),
+		JSON.stringify({ name: "@mariozechner/pi-tui", version: "0.82.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
@@ -375,10 +403,17 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
 
-test("patchPiRuntimeNodeModules patches Feynman user and Pi agent package roots", async () => {
+test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while patching extensions", async () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-user-runtime-patches-"));
 	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-user-runtime-home-"));
 	const agentDir = join(homeRoot, ".feynman", "agent");
+	const bundledPiManifestPath = join(
+		appRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"package.json",
+	);
 	const globalSpawnPath = join(
 		homeRoot,
 		".feynman",
@@ -432,18 +467,80 @@ test("patchPiRuntimeNodeModules patches Feynman user and Pi agent package roots"
 		"extensions",
 		"indexer.ts",
 	);
+	const agentEditorPath = join(
+		agentDir,
+		"npm",
+		"node_modules",
+		"@earendil-works",
+		"pi-tui",
+		"dist",
+		"components",
+		"editor.js",
+	);
+	const agentTuiManifestPath = join(
+		agentDir,
+		"npm",
+		"node_modules",
+		"@earendil-works",
+		"pi-tui",
+		"package.json",
+	);
+	const agentCodingManifestPath = join(
+		agentDir,
+		"npm",
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"package.json",
+	);
+	const agentModelRegistryPath = join(
+		agentDir,
+		"npm",
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"dist",
+		"core",
+		"model-registry.js",
+	);
 	await mkdir(dirname(globalSpawnPath), { recursive: true });
 	await mkdir(dirname(agentSpawnPath), { recursive: true });
 	await mkdir(dirname(globalOtelConfigPath), { recursive: true });
 	await mkdir(dirname(agentOtelConfigPath), { recursive: true });
 	await mkdir(dirname(globalSessionSearchPath), { recursive: true });
 	await mkdir(dirname(agentSessionSearchPath), { recursive: true });
+	await mkdir(dirname(bundledPiManifestPath), { recursive: true });
+	await mkdir(dirname(agentEditorPath), { recursive: true });
+	await mkdir(dirname(agentModelRegistryPath), { recursive: true });
 	writeFileSync(globalSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(agentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(globalOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(agentOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(globalSessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 	writeFileSync(agentSessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
+	writeFileSync(
+		bundledPiManifestPath,
+		JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.82.1" }, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		agentTuiManifestPath,
+		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.80.6" }, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(
+		agentCodingManifestPath,
+		JSON.stringify({
+			name: "@earendil-works/pi-coding-agent",
+			version: "0.80.6",
+			piConfig: { configDir: ".pi" },
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	const staleEditorSource = "export class Editor { render() { return []; } }\n";
+	const staleModelRegistrySource = "export class ModelRegistry { getModel() { return undefined; } }\n";
+	writeFileSync(agentEditorPath, staleEditorSource, "utf8");
+	writeFileSync(agentModelRegistryPath, staleModelRegistrySource, "utf8");
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), true);
 
@@ -463,6 +560,12 @@ test("patchPiRuntimeNodeModules patches Feynman user and Pi agent package roots"
 		assert.match(source, /process\.env\.FEYNMAN_SESSION_DIR/);
 		assert.match(source, /process\.env\.PI_SESSION_DIR/);
 	}
+	assert.equal(readFileSync(agentEditorPath, "utf8"), staleEditorSource);
+	assert.equal(readFileSync(agentModelRegistryPath, "utf8"), staleModelRegistrySource);
+	const staleCodingManifest = JSON.parse(readFileSync(agentCodingManifestPath, "utf8")) as {
+		piConfig?: { configDir?: string };
+	};
+	assert.equal(staleCodingManifest.piConfig?.configDir, ".pi");
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
 });
 
