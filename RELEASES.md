@@ -6,15 +6,19 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
-## v0.3.8 - 2026-07-28
+### Validation
+
+- Strengthened the installed-package and native-bundle stale-Pi gate with representative shrinkwrap metadata and its vulnerable nested dependency, a complete persistent-fixture mutation allowlist, exact security-tree checks, and byte-idempotent second-launch verification.
+
+## v0.3.8 - 2026-07-29
 
 ### Reliability
 
-- Fixed standalone upgrades failing at launch with `Unsupported Pi editor layout` when an older Pi core dependency remained in the user's package directory. Startup now leaves stale Pi core copies untouched while continuing to patch installed extensions, which Pi loads against Feynman's current bundled runtime.
+- Fixed standalone upgrades failing at launch with `Unsupported Pi editor layout` when an older Pi core dependency remained in the user's package directory. Startup now leaves stale Pi core entrypoints untouched while applying the narrow nested dependency security repair and continuing to patch installed extensions, which Pi loads against Feynman's current bundled runtime.
 
 ### Validation
 
-- Added an installed-package and native-bundle upgrade smoke that stages a Pi `0.80.6` user-package tree, proves its core files remain unchanged, verifies extension patching stays idempotent, and launches Feynman through RPC twice before a release can publish.
+- Added an installed-package and native-bundle upgrade smoke that stages representative Pi `0.80.6` core entrypoints, proves those entrypoints remain unchanged, verifies extension patching stays idempotent, and launches Feynman through RPC twice before a release can publish.
 
 ## v0.3.7 - 2026-07-28
 
