@@ -72,11 +72,14 @@ export function patchPiCodingAgentUndiciShrinkwrapSource(source) {
 	return JSON.stringify(shrinkwrap, null, 2) + "\n";
 }
 
-export function patchPiUndiciPackageLockSource(source) {
+export function patchPiUndiciPackageLockSource(source, requiredPiVersion) {
 	const lockfile = JSON.parse(source);
 	let changed = false;
 	for (const [packagePath, entry] of Object.entries(lockfile.packages ?? {})) {
 		if (/node_modules\/(?:@[^/]+\/)?pi-coding-agent$/.test(packagePath)) {
+			if (requiredPiVersion && entry?.version !== requiredPiVersion) {
+				continue;
+			}
 			const currentVersion = entry?.dependencies?.undici;
 			assertSupportedUndiciVersion(currentVersion, "package-lock dependency");
 			if (currentVersion !== FEYNMAN_UNDICI_VERSION) {
@@ -86,6 +89,13 @@ export function patchPiUndiciPackageLockSource(source) {
 			continue;
 		}
 		if (!packagePath.endsWith("/pi-coding-agent/node_modules/undici")) {
+			continue;
+		}
+		const piPackagePath = packagePath.slice(0, -"/node_modules/undici".length);
+		if (
+			requiredPiVersion &&
+			lockfile.packages?.[piPackagePath]?.version !== requiredPiVersion
+		) {
 			continue;
 		}
 		assertSupportedUndiciVersion(entry?.version, "package-lock entry");
@@ -106,10 +116,13 @@ export function patchPiUndiciPackageLockSource(source) {
  * Pi both inherit Undici's fixed absolute-form forwarding. Remove this patch
  * after a supported Pi release depends on Undici >=8.7.0.
  */
-export function patchPiUndiciProxyTree(nodeModulesPath, fallbackPackagePath) {
+export function patchPiUndiciProxyTree(nodeModulesPath, fallbackPackagePath, requiredPiVersion) {
 	const piRoots = ["@earendil-works", "@mariozechner"]
 		.map((scope) => resolve(nodeModulesPath, scope, "pi-coding-agent"))
-		.filter((piRoot) => existsSync(resolve(piRoot, "npm-shrinkwrap.json")));
+		.filter((piRoot) =>
+			existsSync(resolve(piRoot, "npm-shrinkwrap.json")) &&
+			(!requiredPiVersion || readPackageVersion(piRoot) === requiredPiVersion)
+		);
 	if (piRoots.length === 0) {
 		return false;
 	}
@@ -154,7 +167,10 @@ export function patchPiUndiciProxyTree(nodeModulesPath, fallbackPackagePath) {
 	const packageLockPath = resolve(nodeModulesPath, "..", "package-lock.json");
 	if (existsSync(packageLockPath)) {
 		const packageLockSource = readFileSync(packageLockPath, "utf8");
-		const patchedPackageLock = patchPiUndiciPackageLockSource(packageLockSource);
+		const patchedPackageLock = patchPiUndiciPackageLockSource(
+			packageLockSource,
+			requiredPiVersion,
+		);
 		if (patchedPackageLock !== packageLockSource) {
 			writeFileSync(packageLockPath, patchedPackageLock, "utf8");
 			changed = true;

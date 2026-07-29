@@ -6,12 +6,14 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../
 import { patchMcpSdkPackageJsonSource } from "../../scripts/lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mjs";
 import {
+	assertPiRuntimeCorrectnessVersion,
 	patchPiAgentSessionSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
 import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
+import { patchPiUndiciProxyTree } from "../../scripts/lib/pi-undici-proxy-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "../../scripts/lib/pi-session-search-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource } from "../../scripts/lib/pi-subagents-patch.mjs";
@@ -149,6 +151,9 @@ function patchPiCodingAgentPackageJsonSource(source: string): string {
 
 export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: string): boolean {
 	const bundledPiVersion = resolveBundledPiVersion(appRoot);
+	if (bundledPiVersion) {
+		assertPiRuntimeCorrectnessVersion(bundledPiVersion, "bundled pi-coding-agent");
+	}
 	const nodeModuleRoots = [
 		resolve(appRoot, "node_modules"),
 		resolve(appRoot, ".feynman", "npm", "node_modules"),
@@ -167,6 +172,11 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 	const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
 	for (const nodeModulesPath of nodeModuleRoots) {
 		changed = patchPiBraceExpansionTree(nodeModulesPath, safeBraceExpansionPath) || changed;
+		changed = patchPiUndiciProxyTree(
+			nodeModulesPath,
+			resolve(appRoot, "node_modules", "undici"),
+			bundledPiVersion,
+		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",

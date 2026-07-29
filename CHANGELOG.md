@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-29 05:18 PDT — intake-sweep-0.3.9-runtime-correctness
+
+- Objective: Close the post-`0.3.8` release-gate findings and current Pi `0.82.1` runtime correctness gaps instead of leaving them as upstream or dependency deferrals.
+- Found: The stale-Pi gate omitted the shrinkwrap-owned security subtree, allowed Windows `.cmd` launches through Node's deprecated shell-with-arguments path, and recorded the prior release date incorrectly. Current Pi also acknowledges then drops a default RPC prompt during manual compaction, delays every parallel tool result behind the slowest sibling before persistence, and pins Undici `8.5.0`, whose `EnvHttpProxyAgent` tunnels plain HTTP proxy traffic.
+- Fixed: Bound stale verification to the exact source/npm/native candidate and pre-launch runtime baselines; require complete core-fixture mutation accounting, exact trusted brace/pi-otel trees, dereferenced second-pass identity, and explicitly escaped `ComSpec` launches. Added removable, exact-version-gated Pi `0.82.1` patches that reject manual-compaction prompts before a success acknowledgment and eagerly persist completed parallel tool results while restoring source order. Extension-modified results now replace that eager entry instead of duplicating session usage. Updated Feynman's direct, nested Pi, committed runtime, and current user/global Pi Undici resolution to `8.9.0` while leaving stale Pi versions untouched.
+- Verified so far: Full tests passed `676/676`; typecheck, build, architecture check, actionlint, website lint/typecheck/build (`34` pages), root/site/runtime/consumer full and production audits, freshness review, source artifact verification, and `git diff --check` passed. Dry and real packs matched at `112,160,436` bytes / `39,704` entries with tarball SHA-256 `18b15a95c923d54add540307989bf09c890527d5771035758d1fe2aef20e3b15`. A clean local/global install passed version/help/package/search, two-launch stale-Pi, reopened-session, real RPC (`112` commands), runtime audit, and artifact gates. The macOS arm64 native bundle passed the same stale-Pi gate at SHA-256 `cdaae2d6fc6625fd41c8cb7b5919c0778723ad69e0a933b91690135c4601efeb`.
+- State: `verified` locally, `unverified` for clean-machine, CI, merge, and release completion. The existing `v0.3.8` GitHub release body was reconciled to the corrected July 29 source notes. Next: prove the exact commit in Daytona and required PR/main CI, then verify npm/GitHub/native `0.3.9` identity.
+
 ### 2026-07-29 01:45 PDT — intake-sweep-0.3.8-windows-native-cleanup
 
 - Objective: Finish the `0.3.8` release after all source and package-consumer gates passed but the Windows native stale-Pi smoke failed.

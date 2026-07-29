@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -567,6 +567,113 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	};
 	assert.equal(staleCodingManifest.piConfig?.configDir, ".pi");
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
+});
+
+test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent roots but skips stale Pi", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-user-undici-patches-"));
+	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-user-undici-home-"));
+	const agentDir = join(homeRoot, ".feynman", "agent");
+	const rootNodeModules = join(appRoot, "node_modules");
+	const globalNodeModules = join(homeRoot, ".feynman", "npm-global", "lib", "node_modules");
+	const agentNodeModules = join(agentDir, "npm", "node_modules");
+	const safeUndiciRoot = join(rootNodeModules, "undici");
+	const safeBraceRoot = join(rootNodeModules, "brace-expansion");
+	mkdirSync(safeUndiciRoot, { recursive: true });
+	mkdirSync(safeBraceRoot, { recursive: true });
+	writeFileSync(
+		join(safeUndiciRoot, "package.json"),
+		JSON.stringify({ name: "undici", version: "8.9.0" }),
+	);
+	writeFileSync(join(safeUndiciRoot, "index.js"), "export const proxyFixed = true;\n");
+	writeFileSync(
+		join(safeBraceRoot, "package.json"),
+		JSON.stringify({ name: "brace-expansion", version: "5.0.8" }),
+	);
+	writeFileSync(join(safeBraceRoot, "index.js"), "export const securityFixed = true;\n");
+
+	const writePiUndiciFixture = (
+		nodeModulesRoot: string,
+		scope: "@earendil-works" | "@mariozechner",
+		version: string,
+	) => {
+		const piRoot = join(nodeModulesRoot, scope, "pi-coding-agent");
+		const nestedUndiciRoot = join(piRoot, "node_modules", "undici");
+		const nestedBraceRoot = join(piRoot, "node_modules", "brace-expansion");
+		mkdirSync(nestedUndiciRoot, { recursive: true });
+		mkdirSync(nestedBraceRoot, { recursive: true });
+		writeFileSync(
+			join(piRoot, "package.json"),
+			JSON.stringify({
+				name: `${scope}/pi-coding-agent`,
+				version,
+				dependencies: { "brace-expansion": "5.0.6", undici: "8.5.0" },
+			}),
+		);
+		writeFileSync(
+			join(piRoot, "npm-shrinkwrap.json"),
+			JSON.stringify({
+				lockfileVersion: 3,
+				packages: {
+					"": { dependencies: { "brace-expansion": "5.0.6", undici: "8.5.0" } },
+					"node_modules/brace-expansion": { version: "5.0.6" },
+					"node_modules/undici": { version: "8.5.0" },
+				},
+			}),
+		);
+		writeFileSync(
+			join(nestedBraceRoot, "package.json"),
+			JSON.stringify({ name: "brace-expansion", version: "5.0.6" }),
+		);
+		writeFileSync(
+			join(nestedUndiciRoot, "package.json"),
+			JSON.stringify({ name: "undici", version: "8.5.0" }),
+		);
+		return nestedUndiciRoot;
+	};
+
+	writePiUndiciFixture(rootNodeModules, "@earendil-works", "0.82.1");
+	const globalUndiciRoot = writePiUndiciFixture(
+		globalNodeModules,
+		"@earendil-works",
+		"0.82.1",
+	);
+	const agentUndiciRoot = writePiUndiciFixture(
+		agentNodeModules,
+		"@earendil-works",
+		"0.82.1",
+	);
+	const staleAgentUndiciRoot = writePiUndiciFixture(
+		agentNodeModules,
+		"@mariozechner",
+		"0.80.6",
+	);
+
+	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), true);
+	assert.equal(JSON.parse(readFileSync(join(globalUndiciRoot, "package.json"), "utf8")).version, "8.9.0");
+	assert.equal(JSON.parse(readFileSync(join(agentUndiciRoot, "package.json"), "utf8")).version, "8.9.0");
+	assert.equal(JSON.parse(readFileSync(join(staleAgentUndiciRoot, "package.json"), "utf8")).version, "8.5.0");
+	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
+});
+
+test("patchPiRuntimeNodeModules fails closed for an unreviewed bundled Pi version", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-pi-patches-"));
+	const manifestPath = join(
+		appRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"package.json",
+	);
+	mkdirSync(dirname(manifestPath), { recursive: true });
+	writeFileSync(
+		manifestPath,
+		JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.83.0" }),
+	);
+
+	assert.throws(
+		() => patchPiRuntimeNodeModules(appRoot),
+		/expected 0\.82\.1, found 0\.83\.0/,
+	);
 });
 
 test("patchPiRuntimeNodeModules is a no-op when Pi agent-core is absent", () => {

@@ -14,10 +14,24 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	]),
 	piAi: Object.freeze(["dist/api/transform-messages.js"]),
 });
+export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.82.1";
+export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
+	agentSession: "Feynman Pi 0.82.1 correctness patch: issues #7150 and #7053",
+	sessionManager: "Feynman Pi 0.82.1 correctness patch: restore eager tool results",
+	transformMessages: "Feynman Pi 0.82.1 correctness patch: order eager tool results",
+});
 
-const AGENT_SESSION_MARKER = "Feynman Pi 0.82.1 correctness patch: issues #7150 and #7053";
-const SESSION_MANAGER_MARKER = "Feynman Pi 0.82.1 correctness patch: restore eager tool results";
-const TRANSFORM_MESSAGES_MARKER = "Feynman Pi 0.82.1 correctness patch: order eager tool results";
+const AGENT_SESSION_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession;
+const SESSION_MANAGER_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager;
+const TRANSFORM_MESSAGES_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages;
+
+export function assertPiRuntimeCorrectnessVersion(version, surface) {
+	if (version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+		throw new Error(
+			`Unsupported Pi runtime correctness patch ${surface}: expected ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${version ?? "missing"}`,
+		);
+	}
+}
 
 function replaceRequired(source, original, replacement, label) {
 	const first = source.indexOf(original);
@@ -68,8 +82,9 @@ const AGENT_SESSION_EAGER_PERSISTENCE = `        // A finalized result must be d
         // Public message_end events remain ordered by the assistant's tool calls.
         if (event.type === "tool_execution_end") {
             const toolResult = createFeynmanToolResultMessage(event);
-            this.sessionManager.appendMessage(toolResult);
+            const entryId = this.sessionManager.appendMessage(toolResult);
             this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {
+                entryId,
                 message: toolResult,
                 serializedPayload: this.sessionManager.isPersisted()
                     ? serializeFeynmanToolResultPayload(toolResult)
@@ -93,7 +108,10 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
                     : eagerlyPersisted
                         ? hasSameFeynmanToolResultPayload(eagerlyPersisted.message, event.message)
                         : false;
-                if (!payloadUnchanged) {
+                if (eagerlyPersisted && !payloadUnchanged) {
+                    this.sessionManager.replaceMessage(eagerlyPersisted.entryId, event.message);
+                }
+                else if (!eagerlyPersisted) {
                     this.sessionManager.appendMessage(event.message);
                 }
             }
@@ -197,6 +215,26 @@ function restoreFeynmanToolResultsInSourceOrder(messages) {
 }
 `;
 
+const SESSION_MANAGER_REPLACE_MESSAGE = `    /**
+     * Replace an eagerly persisted message without appending a second billable entry.
+     * Feynman uses this only when a message_end extension rewrites a finalized tool result.
+     */
+    replaceMessage(entryId, message) {
+        const existing = this.byId.get(entryId);
+        if (!existing || existing.type !== "message") {
+            throw new Error(\`Cannot replace missing session message entry: \${entryId}\`);
+        }
+        const index = this.fileEntries.findIndex((entry) => entry.type === "message" && entry.id === entryId);
+        if (index === -1) {
+            throw new Error(\`Cannot replace unindexed session message entry: \${entryId}\`);
+        }
+        const replacement = { ...existing, message };
+        this.fileEntries[index] = replacement;
+        this.byId.set(entryId, replacement);
+        this._rewriteFile();
+    }
+`;
+
 export function patchPiSessionManagerSource(source) {
 	if (source.includes(SESSION_MANAGER_MARKER)) {
 		return source;
@@ -206,6 +244,12 @@ export function patchPiSessionManagerSource(source) {
 		"/**\n * Build the active, compaction-aware session entry list.\n",
 		`${SESSION_MANAGER_HELPER}\n/**\n * Build the active, compaction-aware session entry list.\n`,
 		"session-manager helper",
+	);
+	patched = replaceRequired(
+		patched,
+		"    /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */\n",
+		`${SESSION_MANAGER_REPLACE_MESSAGE}    /** Append a thinking level change as child of current leaf, then advance leaf. Returns entry id. */\n`,
+		"session-manager message replacement",
 	);
 	patched = replaceRequired(
 		patched,

@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
+	assertPiRuntimeCorrectnessVersion,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
@@ -405,6 +407,12 @@ function patchScopedPiWorkspaceFile(packageName, relativePath, patchSource) {
 	return changed;
 }
 
+function assertPiPackageVersion(packageRoot, surface) {
+	if (!existsSync(resolve(packageRoot, "package.json"))) return;
+	const version = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version;
+	assertPiRuntimeCorrectnessVersion(version, surface);
+}
+
 function patchPiCodingAgentPackageJsonSource(source) {
 	const pkg = JSON.parse(source);
 	const piConfig = typeof pkg.piConfig === "object" && pkg.piConfig !== null ? pkg.piConfig : {};
@@ -454,6 +462,29 @@ function patchBundledNestedPiAiTransformMessages() {
 }
 
 function patchBundledPiRuntimeCorrectness() {
+	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		assertPiPackageVersion(
+			resolve(workspaceNodeModulesDir, scope, "pi-coding-agent"),
+			`runtime workspace ${scope}/pi-coding-agent`,
+		);
+		assertPiPackageVersion(
+			resolve(workspaceNodeModulesDir, scope, "pi-ai"),
+			`runtime workspace ${scope}/pi-ai`,
+		);
+		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
+			assertPiPackageVersion(
+				resolve(
+					workspaceNodeModulesDir,
+					scope,
+					"pi-coding-agent",
+					"node_modules",
+					aiScope,
+					"pi-ai",
+				),
+				`runtime workspace nested ${scope}/pi-coding-agent ${aiScope}/pi-ai`,
+			);
+		}
+	}
 	let changed = false;
 	changed = patchScopedPiWorkspaceFile(
 		"pi-coding-agent",
@@ -611,6 +642,7 @@ function patchBundledRuntime() {
 	changed = patchPiUndiciProxyTree(
 		workspaceNodeModulesDir,
 		resolve(appRoot, "node_modules", "undici"),
+		PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	) || changed;
 	changed = patchBundledPiInteractiveTheme() || changed;
 	changed = patchBundledPiTui() || changed;
@@ -665,6 +697,7 @@ patchPiBraceExpansionTree(
 patchPiUndiciProxyTree(
 	resolve(appRoot, "node_modules"),
 	resolve(appRoot, "node_modules", "undici"),
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 );
 const packageSpecs = readPackageSpecs();
 const refreshRuntimeLock = process.argv.includes("--refresh-lock");

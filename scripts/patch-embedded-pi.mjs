@@ -10,6 +10,8 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./l
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
+	assertPiRuntimeCorrectnessVersion,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
@@ -128,6 +130,36 @@ const workspaceNestedTransformMessagesPaths = ["@earendil-works", "@mariozechner
 		),
 	),
 );
+
+function assertPiPackageVersion(packageRoot, surface) {
+	if (!packageRoot || !existsSync(resolve(packageRoot, "package.json"))) return;
+	const version = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version;
+	assertPiRuntimeCorrectnessVersion(version, surface);
+}
+
+function shouldPatchPiRuntimeCorrectnessFile(entryPath) {
+	let current = dirname(entryPath);
+	while (current !== dirname(current)) {
+		const manifestPath = resolve(current, "package.json");
+		if (existsSync(manifestPath)) {
+			const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+			if (
+				typeof manifest.name === "string" &&
+				(manifest.name.endsWith("/pi-coding-agent") || manifest.name.endsWith("/pi-ai"))
+			) {
+				return manifest.version === PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION;
+			}
+		}
+		current = dirname(current);
+	}
+	return false;
+}
+
+assertPiPackageVersion(piPackageRoot, "bundled pi-coding-agent");
+assertPiPackageVersion(piAiRoot, "bundled pi-ai");
+for (const entryPath of nestedTransformMessagesPaths) {
+	assertPiPackageVersion(resolve(entryPath, "..", "..", ".."), "bundled nested pi-ai");
+}
 const workspaceTuiPath = resolveWorkspacePiFile("pi-tui", "dist", "tui.js");
 const workspaceEditorPath = resolveWorkspacePiFile("pi-tui", "dist", "components", "editor.js");
 const workspaceInteractiveThemePath = resolveWorkspacePiFile(
@@ -837,8 +869,16 @@ const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion
 patchPiBraceExpansionTree(resolve(appRoot, "node_modules"), safeBraceExpansionPath);
 patchPiBraceExpansionTree(workspaceRoot, safeBraceExpansionPath);
 const feynmanUndiciPath = resolve(appRoot, "node_modules", "undici");
-patchPiUndiciProxyTree(resolve(appRoot, "node_modules"), feynmanUndiciPath);
-patchPiUndiciProxyTree(workspaceRoot, feynmanUndiciPath);
+patchPiUndiciProxyTree(
+	resolve(appRoot, "node_modules"),
+	feynmanUndiciPath,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+);
+patchPiUndiciProxyTree(
+	workspaceRoot,
+	feynmanUndiciPath,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+);
 for (const nodeModulesRoot of [
 	resolve(appRoot, "node_modules"),
 	resolve(appRoot, "node_modules", "@companion-ai", "alpha-hub", "node_modules"),
@@ -858,7 +898,11 @@ for (const [entryPath, patchSource] of [
 	...nestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
 	...workspaceNestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
 ]) {
-	if (!entryPath || !existsSync(entryPath)) continue;
+	if (
+		!entryPath ||
+		!existsSync(entryPath) ||
+		!shouldPatchPiRuntimeCorrectnessFile(entryPath)
+	) continue;
 	const source = readFileSync(entryPath, "utf8");
 	const patched = patchSource(source);
 	if (patched !== source) {

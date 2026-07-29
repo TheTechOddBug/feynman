@@ -73,6 +73,44 @@ test("Pi Undici patch updates the owning package lock", () => {
 	assert.equal(entry.inBundle, true);
 });
 
+test("Pi Undici package-lock repair skips stale Pi versions", () => {
+	const source = JSON.stringify({
+		packages: {
+			"node_modules/@earendil-works/pi-coding-agent": {
+				version: "0.82.1",
+				dependencies: { undici: upstreamVersion },
+			},
+			"node_modules/@earendil-works/pi-coding-agent/node_modules/undici": {
+				version: upstreamVersion,
+			},
+			"node_modules/@mariozechner/pi-coding-agent": {
+				version: "0.80.6",
+				dependencies: { undici: upstreamVersion },
+			},
+			"node_modules/@mariozechner/pi-coding-agent/node_modules/undici": {
+				version: upstreamVersion,
+			},
+		},
+	});
+	const patched = JSON.parse(patchPiUndiciPackageLockSource(source, "0.82.1"));
+	assert.equal(
+		patched.packages["node_modules/@earendil-works/pi-coding-agent"].dependencies.undici,
+		FEYNMAN_UNDICI_VERSION,
+	);
+	assert.equal(
+		patched.packages["node_modules/@earendil-works/pi-coding-agent/node_modules/undici"].version,
+		FEYNMAN_UNDICI_VERSION,
+	);
+	assert.equal(
+		patched.packages["node_modules/@mariozechner/pi-coding-agent"].dependencies.undici,
+		upstreamVersion,
+	);
+	assert.equal(
+		patched.packages["node_modules/@mariozechner/pi-coding-agent/node_modules/undici"].version,
+		upstreamVersion,
+	);
+});
+
 test("Pi Undici patch replaces the nested package tree and is idempotent", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-pi-undici-"));
 	const nodeModules = join(root, "node_modules");

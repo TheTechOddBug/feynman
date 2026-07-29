@@ -4,6 +4,10 @@ import { resolve } from "node:path";
 
 import { FEYNMAN_UNDICI_VERSION } from "./lib/pi-undici-proxy-patch.mjs";
 import {
+	PI_RUNTIME_CORRECTNESS_PATCH_MARKERS,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+} from "./lib/pi-runtime-correctness-patch.mjs";
+import {
 	computeFileSha256,
 	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
@@ -60,6 +64,14 @@ function readArchivedText(archivePath, entryPath) {
 const manifest = readJson(resolve(packageRoot, "package.json"), "package.json");
 const expectedPiVersion = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
 if (typeof expectedPiVersion !== "string") fail("package.json has no exact Pi runtime version");
+if (expectedPiVersion !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+	fail(
+		`Pi runtime correctness patches require ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${expectedPiVersion}`,
+	);
+}
+if (manifest.dependencies?.["@earendil-works/pi-ai"] !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+	fail(`Pi AI correctness patches require ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+}
 
 for (const name of [
 	"@earendil-works/pi-agent-core",
@@ -75,6 +87,67 @@ for (const name of [
 	if (installed !== expected) {
 		fail(`${name} version mismatch: expected ${expected}, found ${installed}`);
 	}
+}
+
+requireMarkers(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "agent-session.js"),
+		"bundled Pi AgentSession",
+	),
+	"bundled Pi AgentSession",
+	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession, "replaceMessage(eagerlyPersisted.entryId, event.message)"],
+);
+requireMarkers(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "session-manager.js"),
+		"bundled Pi SessionManager",
+	),
+	"bundled Pi SessionManager",
+	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager, "replaceMessage(entryId, message)"],
+);
+for (const [label, path] of [
+	[
+		"bundled root Pi AI",
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-ai", "dist", "api", "transform-messages.js"),
+	],
+	[
+		"bundled nested Pi AI",
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-ai",
+			"dist",
+			"api",
+			"transform-messages.js",
+		),
+	],
+]) {
+	requireMarkers(
+		readText(path, label),
+		label,
+		[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages, "flushFeynmanToolResults"],
+	);
+}
+if (
+	readJson(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-ai",
+			"package.json",
+		),
+		"bundled nested Pi AI manifest",
+	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
+) {
+	fail(`bundled nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
 }
 
 requireMarkers(
@@ -265,6 +338,47 @@ for (const spec of runtimeManifest.packageSpecs) {
 	if (archived.version !== version) {
 		fail(`runtime archive ${name} version mismatch: expected ${version}, found ${archived.version}`);
 	}
+}
+
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+	),
+	"runtime Pi AgentSession",
+	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession, "replaceMessage(eagerlyPersisted.entryId, event.message)"],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+	),
+	"runtime Pi SessionManager",
+	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager, "replaceMessage(entryId, message)"],
+);
+for (const [label, entryPath] of [
+	[
+		"runtime root Pi AI",
+		"npm/node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+	],
+	[
+		"runtime nested Pi AI",
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
+	],
+]) {
+	requireMarkers(
+		readArchivedText(archivePath, entryPath),
+		label,
+		[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages, "flushFeynmanToolResults"],
+	);
+}
+if (
+	readArchivedJson(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json",
+	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
+) {
+	fail(`runtime nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
 }
 
 requireMarkers(
