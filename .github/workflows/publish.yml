@@ -272,6 +272,7 @@ jobs:
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
+          node scripts/verify-stale-pi-upgrade.mjs "$bin"
           runtime_audit="$RUNNER_TEMP/feynman-runtime-audit"
           mkdir -p "$runtime_audit"
           runtime_archive="$consumer/node_modules/@companion-ai/feynman/.feynman/runtime-workspace.tgz"
@@ -484,6 +485,7 @@ jobs:
           tar -xzf "dist/release/feynman-${VERSION}-${{ matrix.id }}.tar.gz" -C "$tmp"
           "$tmp/feynman-${VERSION}-${{ matrix.id }}/feynman" --help >/tmp/feynman-help.out
           head -20 /tmp/feynman-help.out
+          node scripts/verify-stale-pi-upgrade.mjs "$tmp/feynman-${VERSION}-${{ matrix.id }}/feynman"
       - name: Smoke native bundle (Windows)
         if: matrix.id == 'win32-x64'
         shell: pwsh
@@ -496,6 +498,10 @@ jobs:
           & (Join-Path $bundleRoot "feynman.cmd") --help | Select-Object -First 20
           if ($LASTEXITCODE -ne 0) {
             throw "Windows native launcher failed --help: $LASTEXITCODE"
+          }
+          node scripts/verify-stale-pi-upgrade.mjs (Join-Path $bundleRoot "feynman.cmd")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows native launcher failed stale-Pi upgrade smoke: $LASTEXITCODE"
           }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

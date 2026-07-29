@@ -240,6 +240,7 @@ jobs:
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" search status
+          node scripts/verify-stale-pi-upgrade.mjs "$bin"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           test -z "$(git status --porcelain --untracked-files=all)"

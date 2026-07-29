@@ -42,16 +42,59 @@ function patchPackageFiles(
 	return changed;
 }
 
+function readPackageVersion(packageRoot: string): string | undefined {
+	const packageJsonPath = resolve(packageRoot, "package.json");
+	if (!existsSync(packageJsonPath)) {
+		return undefined;
+	}
+	try {
+		const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+		return typeof pkg.version === "string" && pkg.version.length > 0 ? pkg.version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function resolveBundledPiVersion(appRoot: string): string | undefined {
+	let fallbackVersion: string | undefined;
+	for (const nodeModulesPath of [
+		resolve(appRoot, "node_modules"),
+		resolve(appRoot, ".feynman", "npm", "node_modules"),
+	]) {
+		for (const scope of ["@earendil-works", "@mariozechner"]) {
+			const packageRoot = resolve(nodeModulesPath, scope, "pi-coding-agent");
+			const version = readPackageVersion(packageRoot);
+			if (version) {
+				fallbackVersion ??= version;
+				if (existsSync(resolve(packageRoot, "dist", "cli.js"))) {
+					return version;
+				}
+			}
+		}
+	}
+	return fallbackVersion;
+}
+
+function shouldPatchPiPackage(packageRoot: string, bundledPiVersion: string | undefined): boolean {
+	const installedVersion = readPackageVersion(packageRoot);
+	return !bundledPiVersion || !installedVersion || installedVersion === bundledPiVersion;
+}
+
 function patchScopedPiPackageFileIfPresent(
 	nodeModulesPath: string,
 	packageName: string,
 	relativePath: string,
 	patchSource: (source: string) => string,
+	bundledPiVersion: string | undefined,
 ): boolean {
 	let changed = false;
 	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		const packageRoot = resolve(nodeModulesPath, scope, packageName);
+		if (!shouldPatchPiPackage(packageRoot, bundledPiVersion)) {
+			continue;
+		}
 		changed = patchFileIfPresent(
-			resolve(nodeModulesPath, scope, packageName, ...relativePath.split("/")),
+			resolve(packageRoot, ...relativePath.split("/")),
 			patchSource,
 		) || changed;
 	}
@@ -76,6 +119,7 @@ function patchPiCodingAgentPackageJsonSource(source: string): string {
 }
 
 export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: string): boolean {
+	const bundledPiVersion = resolveBundledPiVersion(appRoot);
 	const nodeModuleRoots = [
 		resolve(appRoot, "node_modules"),
 		resolve(appRoot, ".feynman", "npm", "node_modules"),
@@ -99,42 +143,49 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			"pi-coding-agent",
 			"package.json",
 			patchPiCodingAgentPackageJsonSource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-agent-core",
 			"dist/agent-loop.js",
 			patchPiAgentCoreSource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-tui",
 			"dist/tui.js",
 			patchPiTuiSource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-tui",
 			"dist/components/editor.js",
 			patchPiEditorSource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
 			"dist/modes/interactive/theme/theme.js",
 			patchPiInteractiveThemeSource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
 			"dist/core/model-registry.js",
 			patchPiModelRegistrySource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
 			"dist/core/model-runtime.js",
 			patchPiModelRegistrySource,
+			bundledPiVersion,
 		) || changed;
 		changed = patchFileIfPresent(
 			resolve(nodeModulesPath, "@modelcontextprotocol", "sdk", "package.json"),
