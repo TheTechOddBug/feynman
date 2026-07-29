@@ -20,6 +20,63 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	sessionManager: "Feynman Pi 0.82.1 correctness patch: restore eager tool results",
 	transformMessages: "Feynman Pi 0.82.1 correctness patch: order eager tool results",
 });
+export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
+	agentSession: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession,
+		'const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"',
+		"const entryId = this.sessionManager.appendMessage(toolResult);",
+		"this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {",
+		"await this._emitExtensionEvent(event);",
+		"event.message.toolCallId = feynmanToolResultIdBeforeExtensions;",
+		"const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;",
+		"this.sessionManager.replaceMessage(eagerlyPersisted.entryId, event.message);",
+		"if (this._compactionAbortController !== undefined && !this.isStreaming) {",
+		'throw new Error("Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.");',
+	]),
+	sessionManager: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager,
+		"function restoreFeynmanToolResultsInSourceOrder(messages) {",
+		"activeBatch.results.set(message.toolCallId, message);",
+		"restored.push(toolResult);",
+		"replaceMessage(entryId, message) {",
+		`this.byId.set(entryId, replacement);
+        this._rewriteFile();`,
+		"const messages = restoreFeynmanToolResultsInSourceOrder(buildContextEntries(entries, leafId, byId).flatMap(sessionEntryToContextMessages));",
+	]),
+	transformMessages: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages,
+		"let pendingToolResults = new Map();",
+		"const flushFeynmanToolResults = () => {",
+		"const toolResult = pendingToolResults.get(toolCall.id);",
+		"result.push(toolResult ?? {",
+		"pendingToolResults.set(msg.toolCallId, msg);",
+		`if (msg.role === "assistant") {
+            flushFeynmanToolResults();`,
+		`else if (msg.role === "user") {
+            flushFeynmanToolResults();`,
+		`    }
+    flushFeynmanToolResults();
+`,
+	]),
+});
+
+const PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS = Object.freeze({
+	agentSession: Object.freeze([
+		"const entryId = this.sessionManager.appendMessage(toolResult);",
+		"await this._emitExtensionEvent(event);",
+		"event.message.toolCallId = feynmanToolResultIdBeforeExtensions;",
+		"const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;",
+		"this.sessionManager.replaceMessage(eagerlyPersisted.entryId, event.message);",
+	]),
+	sessionManager: Object.freeze([
+		"function restoreFeynmanToolResultsInSourceOrder(messages) {",
+		"const messages = restoreFeynmanToolResultsInSourceOrder(buildContextEntries(entries, leafId, byId).flatMap(sessionEntryToContextMessages));",
+	]),
+	transformMessages: Object.freeze([
+		"const flushFeynmanToolResults = () => {",
+		"pendingToolResults.set(msg.toolCallId, msg);",
+	]),
+});
 
 const AGENT_SESSION_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession;
 const SESSION_MANAGER_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager;
@@ -30,6 +87,27 @@ export function assertPiRuntimeCorrectnessVersion(version, surface) {
 		throw new Error(
 			`Unsupported Pi runtime correctness patch ${surface}: expected ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${version ?? "missing"}`,
 		);
+	}
+}
+
+export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = target) {
+	const required = PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS[target];
+	const ordered = PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS[target];
+	if (!required || !ordered) {
+		throw new Error(`Unknown Pi runtime correctness target: ${target}`);
+	}
+	for (const fragment of required) {
+		if (!source.includes(fragment)) {
+			throw new Error(`Incomplete Pi runtime correctness patch ${surface}: missing ${fragment}`);
+		}
+	}
+	let previousIndex = -1;
+	for (const fragment of ordered) {
+		const index = source.indexOf(fragment);
+		if (index <= previousIndex) {
+			throw new Error(`Incomplete Pi runtime correctness patch ${surface}: out of order ${fragment}`);
+		}
+		previousIndex = index;
 	}
 }
 
@@ -78,7 +156,7 @@ function serializeFeynmanToolResultPayload(message) {
 }
 `;
 
-const AGENT_SESSION_EAGER_PERSISTENCE = `        // A finalized result must be durable before a parallel sibling settles.
+const AGENT_SESSION_LEGACY_EAGER_PERSISTENCE = `        // A finalized result must be durable before a parallel sibling settles.
         // Public message_end events remain ordered by the assistant's tool calls.
         if (event.type === "tool_execution_end") {
             const toolResult = createFeynmanToolResultMessage(event);
@@ -93,6 +171,37 @@ const AGENT_SESSION_EAGER_PERSISTENCE = `        // A finalized result must be d
         }
 `;
 
+const AGENT_SESSION_EAGER_PERSISTENCE = `        // A finalized result must be durable before a parallel sibling settles.
+        // Persist before extension dispatch so a completed tool survives a blocked handler.
+        // Public message_end events remain ordered by the assistant's tool calls.
+        if (event.type === "tool_execution_end") {
+            const toolResult = createFeynmanToolResultMessage(event);
+            const entryId = this.sessionManager.appendMessage(toolResult);
+            this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {
+                entryId,
+                message: toolResult,
+                serializedPayload: this.sessionManager.isPersisted()
+                    ? serializeFeynmanToolResultPayload(toolResult)
+                    : undefined,
+            });
+        }
+`;
+
+const AGENT_SESSION_EXTENSION_BOUNDARY = `        const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"
+            ? event.message.toolCallId
+            : undefined;
+${AGENT_SESSION_EAGER_PERSISTENCE}        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+        // Tool result identity is protocol-bound to the assistant's original call.
+        // Preserve it when an extension returns a same-role replacement with another ID.
+        if (feynmanToolResultIdBeforeExtensions !== undefined &&
+            event.type === "message_end" &&
+            event.message.role === "toolResult" &&
+            event.message.toolCallId !== feynmanToolResultIdBeforeExtensions) {
+            event.message.toolCallId = feynmanToolResultIdBeforeExtensions;
+        }
+`;
+
 const ORIGINAL_MESSAGE_PERSISTENCE = `            else if (event.message.role === "user" ||
                 event.message.role === "assistant" ||
                 event.message.role === "toolResult") {
@@ -101,8 +210,9 @@ const ORIGINAL_MESSAGE_PERSISTENCE = `            else if (event.message.role ==
             }`;
 
 const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role === "toolResult") {
-                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(event.message.toolCallId);
-                this._feynmanEagerlyPersistedToolResults.delete(event.message.toolCallId);
+                const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;
+                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(eagerToolCallId);
+                this._feynmanEagerlyPersistedToolResults.delete(eagerToolCallId);
                 const payloadUnchanged = eagerlyPersisted?.serializedPayload !== undefined
                     ? eagerlyPersisted.serializedPayload === serializeFeynmanToolResultPayload(event.message)
                     : eagerlyPersisted
@@ -130,7 +240,30 @@ const MANUAL_COMPACTION_GUARD = `            // Manual compaction rebuilds agent
 
 export function patchPiAgentSessionSource(source) {
 	if (source.includes(AGENT_SESSION_MARKER)) {
-		return source;
+		try {
+			assertPiRuntimeCorrectnessPatchSource(source, "agentSession");
+			return source;
+		} catch {
+			let upgraded = replaceRequired(
+				source,
+				`        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+${AGENT_SESSION_LEGACY_EAGER_PERSISTENCE}`,
+				AGENT_SESSION_EXTENSION_BOUNDARY,
+				"legacy agent-session extension boundary",
+			);
+			upgraded = replaceRequired(
+				upgraded,
+				`                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(event.message.toolCallId);
+                this._feynmanEagerlyPersistedToolResults.delete(event.message.toolCallId);`,
+				`                const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;
+                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(eagerToolCallId);
+                this._feynmanEagerlyPersistedToolResults.delete(eagerToolCallId);`,
+				"legacy agent-session eager result lookup",
+			);
+			assertPiRuntimeCorrectnessPatchSource(upgraded, "agentSession");
+			return upgraded;
+		}
 	}
 
 	let patched = replaceRequired(
@@ -153,9 +286,9 @@ export function patchPiAgentSessionSource(source) {
 	);
 	patched = replaceRequired(
 		patched,
-		"        // Notify all listeners\n",
-		`${AGENT_SESSION_EAGER_PERSISTENCE}        // Notify all listeners\n`,
-		"agent-session event persistence",
+		"        // Emit to extensions first\n        await this._emitExtensionEvent(event);\n",
+		AGENT_SESSION_EXTENSION_BOUNDARY,
+		"agent-session extension boundary",
 	);
 	patched = replaceRequired(
 		patched,
@@ -169,6 +302,7 @@ export function patchPiAgentSessionSource(source) {
 		`${MANUAL_COMPACTION_GUARD}            // Emit input event for extension interception (before skill/template expansion)\n`,
 		"agent-session prompt preflight",
 	);
+	assertPiRuntimeCorrectnessPatchSource(patched, "agentSession");
 	return patched;
 }
 
@@ -237,6 +371,7 @@ const SESSION_MANAGER_REPLACE_MESSAGE = `    /**
 
 export function patchPiSessionManagerSource(source) {
 	if (source.includes(SESSION_MANAGER_MARKER)) {
+		assertPiRuntimeCorrectnessPatchSource(source, "sessionManager");
 		return source;
 	}
 	let patched = replaceRequired(
@@ -257,6 +392,7 @@ export function patchPiSessionManagerSource(source) {
 		"    const messages = restoreFeynmanToolResultsInSourceOrder(buildContextEntries(entries, leafId, byId).flatMap(sessionEntryToContextMessages));\n",
 		"session-manager context restoration",
 	);
+	assertPiRuntimeCorrectnessPatchSource(patched, "sessionManager");
 	return patched;
 }
 
@@ -386,12 +522,15 @@ const PATCHED_TRANSFORM_SECOND_PASS = `    // ${TRANSFORM_MESSAGES_MARKER}
 
 export function patchPiTransformMessagesSource(source) {
 	if (source.includes(TRANSFORM_MESSAGES_MARKER)) {
+		assertPiRuntimeCorrectnessPatchSource(source, "transformMessages");
 		return source;
 	}
-	return replaceRequired(
+	const patched = replaceRequired(
 		source,
 		ORIGINAL_TRANSFORM_SECOND_PASS,
 		PATCHED_TRANSFORM_SECOND_PASS,
 		"transform-messages second pass",
 	);
+	assertPiRuntimeCorrectnessPatchSource(patched, "transformMessages");
+	return patched;
 }

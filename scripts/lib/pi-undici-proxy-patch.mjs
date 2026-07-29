@@ -72,6 +72,20 @@ export function patchPiCodingAgentUndiciShrinkwrapSource(source) {
 	return JSON.stringify(shrinkwrap, null, 2) + "\n";
 }
 
+export function assertPiCodingAgentUndiciShrinkwrapSource(source, surface) {
+	const shrinkwrap = JSON.parse(source);
+	const dependencyVersion = shrinkwrap.packages?.[""]?.dependencies?.undici;
+	const entry = shrinkwrap.packages?.["node_modules/undici"];
+	if (
+		dependencyVersion !== FEYNMAN_UNDICI_VERSION ||
+		!lockEntryMatches(entry)
+	) {
+		throw new Error(
+			`Incomplete Pi Undici metadata ${surface}: expected exact ${FEYNMAN_UNDICI_VERSION} dependency, resolved URL, and integrity`,
+		);
+	}
+}
+
 export function patchPiUndiciPackageLockSource(source, requiredPiVersion) {
 	const lockfile = JSON.parse(source);
 	let changed = false;

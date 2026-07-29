@@ -10,6 +10,7 @@ import {
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
+import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
@@ -505,6 +506,14 @@ function patchBundledPiRuntimeCorrectness() {
 	return changed;
 }
 
+function patchBundledPiLlamaUsage() {
+	return patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/extensions/llama/provider.js",
+		patchPiLlamaUsageSource,
+	);
+}
+
 function patchBundledPiTui() {
 	let changed = false;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/tui.js", patchPiTuiSource) || changed;
@@ -633,6 +642,7 @@ function patchBundledRuntime() {
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
 	changed = patchBundledPiRuntimeCorrectness() || changed;
+	changed = patchBundledPiLlamaUsage() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
 	changed = patchBundledPiModelRuntime() || changed;
 	changed = patchPiBraceExpansionTree(

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+	assertPiCodingAgentUndiciShrinkwrapSource,
 	FEYNMAN_UNDICI_VERSION,
 	patchPiCodingAgentUndiciPackageJsonSource,
 	patchPiCodingAgentUndiciShrinkwrapSource,
@@ -40,6 +41,23 @@ test("Pi Undici patch updates the direct dependency and shrinkwrap", () => {
 	assert.equal(shrinkwrap.packages[""].dependencies.undici, FEYNMAN_UNDICI_VERSION);
 	assert.equal(shrinkwrap.packages["node_modules/undici"].version, FEYNMAN_UNDICI_VERSION);
 	assert.match(shrinkwrap.packages["node_modules/undici"].integrity, /^sha512-/);
+	const exactShrinkwrap = JSON.stringify(shrinkwrap);
+	assert.doesNotThrow(() =>
+		assertPiCodingAgentUndiciShrinkwrapSource(exactShrinkwrap, "test"),
+	);
+	for (const corrupted of [
+		exactShrinkwrap.replace(FEYNMAN_UNDICI_VERSION, upstreamVersion),
+		exactShrinkwrap.replace(
+			`undici-${FEYNMAN_UNDICI_VERSION}.tgz`,
+			"undici-wrong.tgz",
+		),
+		exactShrinkwrap.replace(/sha512-[^"]+/, "sha512-invalid"),
+	]) {
+		assert.throws(
+			() => assertPiCodingAgentUndiciShrinkwrapSource(corrupted, "test"),
+			/Incomplete Pi Undici metadata/,
+		);
+	}
 
 	assert.throws(
 		() => patchPiCodingAgentUndiciPackageJsonSource(piPackageJson("8.6.0")),

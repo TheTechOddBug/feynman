@@ -2,9 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
-import { FEYNMAN_UNDICI_VERSION } from "./lib/pi-undici-proxy-patch.mjs";
 import {
-	PI_RUNTIME_CORRECTNESS_PATCH_MARKERS,
+	assertPiCodingAgentUndiciShrinkwrapSource,
+	FEYNMAN_UNDICI_VERSION,
+} from "./lib/pi-undici-proxy-patch.mjs";
+import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
+import {
+	assertPiRuntimeCorrectnessPatchSource,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 } from "./lib/pi-runtime-correctness-patch.mjs";
 import {
@@ -89,21 +93,21 @@ for (const name of [
 	}
 }
 
-requireMarkers(
+assertPiRuntimeCorrectnessPatchSource(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "agent-session.js"),
 		"bundled Pi AgentSession",
 	),
+	"agentSession",
 	"bundled Pi AgentSession",
-	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession, "replaceMessage(eagerlyPersisted.entryId, event.message)"],
 );
-requireMarkers(
+assertPiRuntimeCorrectnessPatchSource(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "session-manager.js"),
 		"bundled Pi SessionManager",
 	),
+	"sessionManager",
 	"bundled Pi SessionManager",
-	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager, "replaceMessage(entryId, message)"],
 );
 for (const [label, path] of [
 	[
@@ -126,11 +130,7 @@ for (const [label, path] of [
 		),
 	],
 ]) {
-	requireMarkers(
-		readText(path, label),
-		label,
-		[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages, "flushFeynmanToolResults"],
-	);
+	assertPiRuntimeCorrectnessPatchSource(readText(path, label), "transformMessages", label);
 }
 if (
 	readJson(
@@ -157,6 +157,22 @@ requireMarkers(
 	),
 	"bundled Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
+);
+assertPiLlamaUsagePatchSource(
+	readText(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"dist",
+			"extensions",
+			"llama",
+			"provider.js",
+		),
+		"bundled Pi llama.cpp provider",
+	),
+	"bundled Pi llama.cpp provider",
 );
 requireMarkers(
 	readText(
@@ -249,6 +265,11 @@ const bundledPiManifest = readJson(
 	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
 	"bundled Pi package manifest",
 );
+const bundledPiShrinkwrapSource = readText(
+	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "npm-shrinkwrap.json"),
+	"bundled Pi shrinkwrap",
+);
+assertPiCodingAgentUndiciShrinkwrapSource(bundledPiShrinkwrapSource, "bundled Pi shrinkwrap");
 if (manifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`package.json does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
 }
@@ -340,21 +361,21 @@ for (const spec of runtimeManifest.packageSpecs) {
 	}
 }
 
-requireMarkers(
+assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(
 		archivePath,
 		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
 	),
+	"agentSession",
 	"runtime Pi AgentSession",
-	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession, "replaceMessage(eagerlyPersisted.entryId, event.message)"],
 );
-requireMarkers(
+assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(
 		archivePath,
 		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
 	),
+	"sessionManager",
 	"runtime Pi SessionManager",
-	[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager, "replaceMessage(entryId, message)"],
 );
 for (const [label, entryPath] of [
 	[
@@ -366,10 +387,10 @@ for (const [label, entryPath] of [
 		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/transform-messages.js",
 	],
 ]) {
-	requireMarkers(
+	assertPiRuntimeCorrectnessPatchSource(
 		readArchivedText(archivePath, entryPath),
+		"transformMessages",
 		label,
-		[PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages, "flushFeynmanToolResults"],
 	);
 }
 if (
@@ -388,6 +409,13 @@ requireMarkers(
 	),
 	"runtime Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
+);
+assertPiLlamaUsagePatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/extensions/llama/provider.js",
+	),
+	"runtime Pi llama.cpp provider",
 );
 requireMarkers(
 	readArchivedText(
@@ -474,6 +502,11 @@ const runtimePiManifest = readArchivedJson(
 	archivePath,
 	"npm/node_modules/@earendil-works/pi-coding-agent/package.json",
 );
+const runtimePiShrinkwrapSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/@earendil-works/pi-coding-agent/npm-shrinkwrap.json",
+);
+assertPiCodingAgentUndiciShrinkwrapSource(runtimePiShrinkwrapSource, "runtime Pi shrinkwrap");
 if (runtimePiManifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`runtime Pi does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
 }

@@ -11,6 +11,7 @@ import {
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
+import { patchPiLlamaUsageSource } from "../../scripts/lib/pi-llama-usage-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
 import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiUndiciProxyTree } from "../../scripts/lib/pi-undici-proxy-patch.mjs";
@@ -203,6 +204,13 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			"pi-coding-agent",
 			"dist/core/session-manager.js",
 			patchPiSessionManagerSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/extensions/llama/provider.js",
+			patchPiLlamaUsageSource,
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(

@@ -13,6 +13,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 - Prevented Workbench and other RPC prompts submitted during manual compaction from being acknowledged and then lost. Pi now rejects the prompt before a success acknowledgment with a retryable error.
 - Persisted each completed parallel tool result before slower siblings finish, so successful research evidence survives an abort or restart. Restored sessions and provider requests continue to present results in the assistant's original tool-call order.
 - Replaced eagerly persisted tool results in place when an extension modifies the finalized message, preventing duplicate session entries and duplicate tool-usage accounting.
+- Restored token accounting for the built-in llama.cpp provider by requesting streaming usage from compatible llama-server releases. Existing cached llama.cpp model metadata is repaired in place, so users do not need to delete `models-store.json` or repeat provider setup.
 - Fixed plain HTTP API and MCP traffic behind `HTTP_PROXY` using a `CONNECT` tunnel that compatible proxies reject. HTTP targets now use absolute-form forwarding while HTTPS targets continue to tunnel.
 - Replaced deprecated Windows shell-with-arguments launches in native builds and stale-upgrade verification with explicitly escaped `ComSpec` invocations.
 
@@ -23,7 +24,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 ### Validation
 
 - Strengthened the installed-package and native-bundle stale-Pi gate with representative shrinkwrap metadata and its vulnerable nested dependency, a complete persistent-fixture mutation allowlist, exact security-tree checks, and byte-idempotent second-launch verification.
-- Added real RPC and proxy-server regressions, reopened-session checks while parallel work remains pending, and exact package-artifact markers for every temporary Pi correctness patch.
+- Added real RPC and proxy-server regressions, reopened-session checks while parallel work remains pending, real file-store and concurrent-refresh llama.cpp migration coverage, a mock SSE token-accounting check, and package-artifact mechanism checks for every temporary Pi correctness patch plus exact Pi shrinkwrap dependency, resolved URL, and integrity metadata.
 
 ## v0.3.8 - 2026-07-29
 

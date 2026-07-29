@@ -18,6 +18,7 @@ export const RUNTIME_INPUT_FILES = Object.freeze([
 	".feynman/settings.json",
 	"scripts/lib/pi-agent-core-patch.mjs",
 	"scripts/lib/pi-runtime-correctness-patch.mjs",
+	"scripts/lib/pi-llama-usage-patch.mjs",
 	"scripts/lib/pi-extension-loader-patch.mjs",
 	"scripts/lib/pi-tui-patch.mjs",
 	"scripts/lib/pi-web-access-patch.mjs",

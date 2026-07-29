@@ -9,7 +9,9 @@ import { pathToFileURL } from "node:url";
 import { Type } from "typebox";
 
 import {
+	assertPiRuntimeCorrectnessPatchSource,
 	assertPiRuntimeCorrectnessVersion,
+	PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
 	patchPiSessionManagerSource,
@@ -91,6 +93,7 @@ test("Pi 0.82.1 correctness patch is applied, idempotent, and documents its remo
 	assert.match(agentSessionSource, /issues #7150 and #7053/);
 	assert.match(agentSessionSource, /Cannot submit a prompt while compaction is in progress/);
 	assert.match(agentSessionSource, /_feynmanEagerlyPersistedToolResults/);
+	assert.match(agentSessionSource, /feynmanToolResultIdBeforeExtensions/);
 	assert.match(agentSessionSource, /replaceMessage\(eagerlyPersisted\.entryId, event\.message\)/);
 	assert.match(sessionManagerSource, /restore eager tool results/);
 	assert.match(sessionManagerSource, /restoreFeynmanToolResultsInSourceOrder/);
@@ -105,6 +108,29 @@ test("Pi 0.82.1 correctness patch is applied, idempotent, and documents its remo
 	assert.equal(patchPiSessionManagerSource(sessionManagerSource), sessionManagerSource);
 	assert.equal(patchPiTransformMessagesSource(transformMessagesSource), transformMessagesSource);
 	assert.equal(patchPiTransformMessagesSource(nestedTransformMessagesSource), nestedTransformMessagesSource);
+	for (const [target, source] of [
+		["agentSession", agentSessionSource],
+		["sessionManager", sessionManagerSource],
+		["transformMessages", transformMessagesSource],
+	] as const) {
+		assert.doesNotThrow(() => assertPiRuntimeCorrectnessPatchSource(source, target));
+		for (const fragment of PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS[target]) {
+			assert.throws(
+				() => assertPiRuntimeCorrectnessPatchSource(source.replace(fragment, ""), target),
+				/Incomplete Pi runtime correctness patch/,
+			);
+		}
+	}
+	const appendFragment = "const entryId = this.sessionManager.appendMessage(toolResult);";
+	const extensionFragment = "await this._emitExtensionEvent(event);";
+	const reorderedAgentSession = agentSessionSource
+		.replace(appendFragment, "__FEYNMAN_APPEND__")
+		.replace(extensionFragment, appendFragment)
+		.replace("__FEYNMAN_APPEND__", extensionFragment);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(reorderedAgentSession, "agentSession"),
+		/out of order/,
+	);
 	assert.throws(
 		() => patchPiAgentSessionSource("export class AgentSession {}\n"),
 		/Unsupported Pi 0\.82\.1 agent-session import layout/,
@@ -116,6 +142,73 @@ test("Pi 0.82.1 correctness patch is applied, idempotent, and documents its remo
 		() => assertPiRuntimeCorrectnessVersion("0.83.0", "test"),
 		/expected 0\.82\.1, found 0\.83\.0/,
 	);
+});
+
+test("Pi 0.82.1 correctness patch migrates the pre-review eager persistence layout", () => {
+	patchPiRuntimeNodeModules(appRoot);
+	const current = readFileSync(agentSessionPath, "utf8");
+	const currentBoundary = `        const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"
+            ? event.message.toolCallId
+            : undefined;
+        // A finalized result must be durable before a parallel sibling settles.
+        // Persist before extension dispatch so a completed tool survives a blocked handler.
+        // Public message_end events remain ordered by the assistant's tool calls.
+        if (event.type === "tool_execution_end") {
+            const toolResult = createFeynmanToolResultMessage(event);
+            const entryId = this.sessionManager.appendMessage(toolResult);
+            this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {
+                entryId,
+                message: toolResult,
+                serializedPayload: this.sessionManager.isPersisted()
+                    ? serializeFeynmanToolResultPayload(toolResult)
+                    : undefined,
+            });
+        }
+        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+        // Tool result identity is protocol-bound to the assistant's original call.
+        // Preserve it when an extension returns a same-role replacement with another ID.
+        if (feynmanToolResultIdBeforeExtensions !== undefined &&
+            event.type === "message_end" &&
+            event.message.role === "toolResult" &&
+            event.message.toolCallId !== feynmanToolResultIdBeforeExtensions) {
+            event.message.toolCallId = feynmanToolResultIdBeforeExtensions;
+        }
+`;
+	const legacyBoundary = `        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+        // A finalized result must be durable before a parallel sibling settles.
+        // Public message_end events remain ordered by the assistant's tool calls.
+        if (event.type === "tool_execution_end") {
+            const toolResult = createFeynmanToolResultMessage(event);
+            const entryId = this.sessionManager.appendMessage(toolResult);
+            this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {
+                entryId,
+                message: toolResult,
+                serializedPayload: this.sessionManager.isPersisted()
+                    ? serializeFeynmanToolResultPayload(toolResult)
+                    : undefined,
+            });
+        }
+`;
+	const currentLookup = `                const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;
+                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(eagerToolCallId);
+                this._feynmanEagerlyPersistedToolResults.delete(eagerToolCallId);`;
+	const legacyLookup = `                const eagerlyPersisted = this._feynmanEagerlyPersistedToolResults.get(event.message.toolCallId);
+                this._feynmanEagerlyPersistedToolResults.delete(event.message.toolCallId);`;
+	const legacy = current
+		.replace(currentBoundary, legacyBoundary)
+		.replace(currentLookup, legacyLookup);
+	assert.notEqual(legacy, current);
+	assert.doesNotMatch(legacy, /feynmanToolResultIdBeforeExtensions/);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(legacy, "agentSession"),
+		/Incomplete Pi runtime correctness patch/,
+	);
+
+	const migrated = patchPiAgentSessionSource(legacy);
+	assert.equal(migrated, current);
+	assert.equal(patchPiAgentSessionSource(migrated), migrated);
 });
 
 test("manual compaction rejects a prompt before RPC preflight can ACK it", async () => {
@@ -317,6 +410,10 @@ test("completed parallel results persist before a slow sibling and restore in to
 	disposeSession = () => session.dispose();
 	const extensionRunner = (session as unknown as {
 		_extensionRunner: {
+			emit: (event: {
+				type: string;
+				toolCallId?: string;
+			}) => Promise<void>;
 			emitMessageEnd: (event: {
 				message: {
 					role: string;
@@ -326,6 +423,22 @@ test("completed parallel results persist before a slow sibling and restore in to
 			}) => Promise<unknown>;
 		};
 	})._extensionRunner;
+	const emitExtensionEvent = extensionRunner.emit.bind(extensionRunner);
+	let enterFastExtension: (() => void) | undefined;
+	const fastExtensionEntered = new Promise<void>((resolveEntered) => {
+		enterFastExtension = resolveEntered;
+	});
+	let releaseFastExtension: (() => void) | undefined;
+	const fastExtensionGate = new Promise<void>((resolveGate) => {
+		releaseFastExtension = resolveGate;
+	});
+	extensionRunner.emit = async (event) => {
+		if (event.type === "tool_execution_end" && event.toolCallId === "fast-call") {
+			enterFastExtension?.();
+			await fastExtensionGate;
+		}
+		await emitExtensionEvent(event);
+	};
 	const emitMessageEnd = extensionRunner.emitMessageEnd.bind(extensionRunner);
 	extensionRunner.emitMessageEnd = async (event) => {
 		const upstreamReplacement = await emitMessageEnd(event);
@@ -335,6 +448,7 @@ test("completed parallel results persist before a slow sibling and restore in to
 		}
 		return {
 			...message,
+			toolCallId: "rewritten-fast-call",
 			content: [{ type: "text", text: "extension-modified fast result" }],
 			usage: replacementFastUsage,
 		};
@@ -365,6 +479,19 @@ test("completed parallel results persist before a slow sibling and restore in to
 
 	const prompt = session.prompt("run both tools");
 	try {
+		await fastExtensionEntered;
+		const blockedSessionFile = sessionManager.getSessionFile();
+		assert.ok(blockedSessionFile);
+		const reopenedWhileExtensionBlocked = SessionManager.open(blockedSessionFile);
+		const resultsWhileExtensionBlocked = reopenedWhileExtensionBlocked
+			.getBranch()
+			.flatMap((entry) =>
+				entry.type === "message" && entry.message.role === "toolResult"
+					? [entry.message.toolCallId]
+					: [],
+			);
+		assert.deepEqual(resultsWhileExtensionBlocked, ["fast-call"]);
+		releaseFastExtension?.();
 		await fastEnded;
 		const persistedWhileSlow = sessionManager
 			.getBranch()
@@ -372,11 +499,11 @@ test("completed parallel results persist before a slow sibling and restore in to
 				entry.type === "message" && entry.message.role === "toolResult"
 					? [entry.message.toolCallId]
 					: [],
-				);
+			);
 		assert.deepEqual(persistedWhileSlow, ["fast-call"]);
-		const sessionFile = sessionManager.getSessionFile();
-		assert.ok(sessionFile);
-		const reopenedWhileSlow = SessionManager.open(sessionFile);
+		const pendingSessionFile = sessionManager.getSessionFile();
+		assert.ok(pendingSessionFile);
+		const reopenedWhileSlow = SessionManager.open(pendingSessionFile);
 		const reopenedPendingResults = reopenedWhileSlow
 			.getBranch()
 			.flatMap((entry) =>
@@ -385,8 +512,8 @@ test("completed parallel results persist before a slow sibling and restore in to
 					: [],
 			);
 		assert.deepEqual(reopenedPendingResults, ["fast-call"]);
-	}
-	finally {
+	} finally {
+		releaseFastExtension?.();
 		releaseSlow?.();
 		await prompt;
 	}

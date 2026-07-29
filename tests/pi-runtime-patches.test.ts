@@ -237,6 +237,39 @@ export class ModelRuntime {
 }
 `;
 
+const LLAMA_PROVIDER_SOURCE = `
+const LLAMA_PROVIDER_ID = "llama.cpp";
+function toPiModel(model, serverUrl) {
+    return {
+        ...model,
+        baseUrl: serverUrl,
+        compat: {
+            supportsUsageInStreaming: false,
+        },
+    };
+}
+export function createLlamaProvider() {
+    let models = [];
+	    return {
+	        refreshModels: async (context) => {
+	            const stored = await context.store.read();
+	            if (stored) {
+	                models = stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
+	            }
+	            if (!context.allowNetwork || context.signal?.aborted || context.credential?.type !== "api_key")
+	                return;
+	            const serverUrl = credentialServerUrl(context.credential);
+	            if (!serverUrl)
+	                return;
+	            const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });
+	            setCatalog(catalog, serverUrl);
+	            if (!context.signal?.aborted)
+	                await context.store.write({ models, checkedAt: Date.now() });
+	        },
+	    };
+	}
+`.replaceAll("\t", "");
+
 test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-runtime-patches-"));
 	const agentLoopPath = join(appRoot, "node_modules", "@earendil-works", "pi-agent-core", "dist", "agent-loop.js");
@@ -599,8 +632,10 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 		const piRoot = join(nodeModulesRoot, scope, "pi-coding-agent");
 		const nestedUndiciRoot = join(piRoot, "node_modules", "undici");
 		const nestedBraceRoot = join(piRoot, "node_modules", "brace-expansion");
+		const llamaProviderPath = join(piRoot, "dist", "extensions", "llama", "provider.js");
 		mkdirSync(nestedUndiciRoot, { recursive: true });
 		mkdirSync(nestedBraceRoot, { recursive: true });
+		mkdirSync(dirname(llamaProviderPath), { recursive: true });
 		writeFileSync(
 			join(piRoot, "package.json"),
 			JSON.stringify({
@@ -628,30 +663,44 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 			join(nestedUndiciRoot, "package.json"),
 			JSON.stringify({ name: "undici", version: "8.5.0" }),
 		);
-		return nestedUndiciRoot;
+		writeFileSync(llamaProviderPath, LLAMA_PROVIDER_SOURCE);
+		return { llamaProviderPath, nestedUndiciRoot };
 	};
 
 	writePiUndiciFixture(rootNodeModules, "@earendil-works", "0.82.1");
-	const globalUndiciRoot = writePiUndiciFixture(
+	const globalPi = writePiUndiciFixture(
 		globalNodeModules,
 		"@earendil-works",
 		"0.82.1",
 	);
-	const agentUndiciRoot = writePiUndiciFixture(
+	const agentPi = writePiUndiciFixture(
 		agentNodeModules,
 		"@earendil-works",
 		"0.82.1",
 	);
-	const staleAgentUndiciRoot = writePiUndiciFixture(
+	const staleAgentPi = writePiUndiciFixture(
 		agentNodeModules,
 		"@mariozechner",
 		"0.80.6",
 	);
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), true);
-	assert.equal(JSON.parse(readFileSync(join(globalUndiciRoot, "package.json"), "utf8")).version, "8.9.0");
-	assert.equal(JSON.parse(readFileSync(join(agentUndiciRoot, "package.json"), "utf8")).version, "8.9.0");
-	assert.equal(JSON.parse(readFileSync(join(staleAgentUndiciRoot, "package.json"), "utf8")).version, "8.5.0");
+	assert.equal(
+		JSON.parse(readFileSync(join(globalPi.nestedUndiciRoot, "package.json"), "utf8")).version,
+		"8.9.0",
+	);
+	assert.equal(
+		JSON.parse(readFileSync(join(agentPi.nestedUndiciRoot, "package.json"), "utf8")).version,
+		"8.9.0",
+	);
+	assert.equal(
+		JSON.parse(readFileSync(join(staleAgentPi.nestedUndiciRoot, "package.json"), "utf8")).version,
+		"8.5.0",
+	);
+	for (const providerPath of [globalPi.llamaProviderPath, agentPi.llamaProviderPath]) {
+		assert.match(readFileSync(providerPath, "utf8"), /Feynman Pi 0\.82\.1 llama\.cpp streaming usage patch/);
+	}
+	assert.equal(readFileSync(staleAgentPi.llamaProviderPath, "utf8"), LLAMA_PROVIDER_SOURCE);
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
 });
 

@@ -16,6 +16,7 @@ import {
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
+import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
@@ -92,6 +93,9 @@ const modelRegistryPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core",
 const modelRuntimePath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-runtime.js") : null;
 const agentSessionPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "agent-session.js") : null;
 const sessionManagerPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "session-manager.js") : null;
+const llamaProviderPath = piPackageRoot
+	? resolve(piPackageRoot, "dist", "extensions", "llama", "provider.js")
+	: null;
 const transformMessagesPath = piAiRoot ? resolve(piAiRoot, "dist", "api", "transform-messages.js") : null;
 const nestedTransformMessagesPaths = piPackageRoot
 	? ["@earendil-works", "@mariozechner"].map((scope) =>
@@ -114,6 +118,13 @@ function resolveWorkspacePiFile(packageName, ...segments) {
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
 const workspaceAgentSessionPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "agent-session.js");
 const workspaceSessionManagerPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "session-manager.js");
+const workspaceLlamaProviderPath = resolveWorkspacePiFile(
+	"pi-coding-agent",
+	"dist",
+	"extensions",
+	"llama",
+	"provider.js",
+);
 const workspaceTransformMessagesPath = resolveWorkspacePiFile("pi-ai", "dist", "api", "transform-messages.js");
 const workspaceNestedTransformMessagesPaths = ["@earendil-works", "@mariozechner"].flatMap((codingScope) =>
 	["@earendil-works", "@mariozechner"].map((aiScope) =>
@@ -917,6 +928,17 @@ for (const entryPath of [agentLoopPath, workspaceAgentLoopPath].filter(Boolean))
 
 	const source = readFileSync(entryPath, "utf8");
 	const patched = patchPiAgentCoreSource(source);
+	if (patched !== source) {
+		writeFileSync(entryPath, patched, "utf8");
+	}
+}
+
+for (const entryPath of [llamaProviderPath, workspaceLlamaProviderPath].filter(Boolean)) {
+	if (!existsSync(entryPath) || !shouldPatchPiRuntimeCorrectnessFile(entryPath)) {
+		continue;
+	}
+	const source = readFileSync(entryPath, "utf8");
+	const patched = patchPiLlamaUsageSource(source);
 	if (patched !== source) {
 		writeFileSync(entryPath, patched, "utf8");
 	}
