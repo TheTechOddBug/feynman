@@ -67,7 +67,7 @@ export function patchPiPackageLockSource(source) {
 }
 
 /**
- * Pi 0.82.1 still shrinkwraps vulnerable brace-expansion 5.0.7. Replace only
+ * Pi 0.83.0 still shrinkwraps vulnerable brace-expansion 5.0.7. Replace only
  * that nested package with the verified 5.0.8 tree and update Pi's published
  * shrinkwrap metadata. Remove this patch after Pi ships brace-expansion >=5.0.8.
  */

@@ -286,6 +286,7 @@ jobs:
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -369,6 +370,7 @@ jobs:
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
 
   publish-npm:
     needs:
@@ -708,6 +710,7 @@ jobs:
           "$bin" --help >/dev/null
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
           global_prefix="$RUNNER_TEMP/published-global"
           npm install --global --prefix "$global_prefix" --omit=dev --no-audit \
             "@companion-ai/feynman@$VERSION"

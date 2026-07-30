@@ -21,6 +21,7 @@ import {
 } from "@companion-ai/alpha-hub/lib";
 import { getValidToken as getValidAlphaToken } from "@companion-ai/alpha-hub/lib/auth";
 import { createAgentSession, SessionManager, SettingsManager, type AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { contentText, type AssistantMessage } from "@earendil-works/pi-ai";
 
 import { verifyAlphaAuthStatus } from "./alpha-auth-status.js";
 import { syncBundledAssets } from "./bootstrap/sync.js";
@@ -625,6 +626,26 @@ export async function resolveRankSynthesisModelSpec(authPath: string, explicitMo
 	return (await chooseRecommendedModel(authPath))?.spec;
 }
 
+export function resolveRankSynthesisTerminalText(message: AssistantMessage | undefined): string {
+	if (!message) {
+		throw new Error("Model synthesis ended without a terminal assistant response.");
+	}
+	if (message.stopReason === "error") {
+		const detail = message.errorMessage?.trim();
+		throw new Error(detail ? `Model synthesis provider failed: ${detail}` : "Model synthesis provider failed.");
+	}
+	if (message.stopReason === "aborted") {
+		throw new Error("Model synthesis was aborted before completion.");
+	}
+	if (message.stopReason === "length") {
+		throw new Error("Model synthesis hit the output token limit before completion.");
+	}
+	if (message.stopReason === "pending" || message.stopReason === "toolUse") {
+		throw new Error(`Model synthesis ended with non-terminal stop reason: ${message.stopReason}.`);
+	}
+	return contentText(message.content).trim();
+}
+
 function createRankModelSynthesizer(options: {
 	authPath: string;
 	agentDir: string;
@@ -676,10 +697,10 @@ function createRankModelSynthesizer(options: {
 			noTools: "all",
 			tools: [],
 		});
-		let text = "";
+		let terminalAssistantMessage: AssistantMessage | undefined;
 		const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-			if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-				text += event.assistantMessageEvent.delta;
+			if (event.type === "message_end" && event.message.role === "assistant") {
+				terminalAssistantMessage = event.message;
 			}
 		});
 		const timeoutMs = parsePositiveInteger(process.env.FEYNMAN_RANK_SYNTHESIS_TIMEOUT_MS, 180_000);
@@ -695,7 +716,7 @@ function createRankModelSynthesizer(options: {
 				}),
 			]);
 			const response = {
-				text: text.trim(),
+				text: resolveRankSynthesisTerminalText(terminalAssistantMessage),
 				model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,
 				modelSelection,
 			};

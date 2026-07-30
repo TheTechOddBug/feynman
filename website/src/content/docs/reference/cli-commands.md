@@ -70,7 +70,7 @@ PaperRank writes a ranked brief, normalized paper/score JSONL, a score audit, ci
 | `feynman model logout [id]` | Clear stored auth for a model provider |
 | `feynman model set <provider/model>` | Set the default non-Pro model for all sessions |
 
-These commands manage your model provider configuration. The `model set` command updates `~/.feynman/agent/settings.json` with the new default. It accepts either `provider/model-name` or `provider:model-name`; run `feynman model list` first and choose a non-Pro model ID from that output. Running `feynman model login google` or `feynman model login amazon-bedrock` routes directly into the relevant API-key setup flow instead of requiring the interactive picker.
+These commands manage your model provider configuration. The `model set` command updates `~/.feynman/agent/settings.json` with the new default. It accepts either `provider/model-name` or `provider:model-name`; run `feynman model list` first and choose a non-Pro model ID from that output. For `feynman model login openrouter` over SSH or another headless session, paste the browser's final redirect URL or authorization code into Feynman when the loopback callback is unavailable, or set `OPENROUTER_API_KEY` before launch to use API-key authentication without OAuth. Running `feynman model login google` or `feynman model login amazon-bedrock` routes directly into the relevant API-key setup flow instead of requiring the interactive picker.
 
 ## AlphaXiv commands
 

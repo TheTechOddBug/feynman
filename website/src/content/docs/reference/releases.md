@@ -9,6 +9,25 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.10 - 2026-07-30
+
+### Runtime
+
+- Updated the bundled Pi runtime train from `0.82.1` to `0.83.0`, including Pi's provider, session, package-install, headless OpenRouter sign-in, and extension model-scope improvements.
+- Migrated Feynman's bundled extension runtime to Pi's TypeBox `1.3.7` contract. Extension authors must replace removed `Type.Base`, `Type.Awaited`, `Type.Promise`, `Type.AsyncIterator`, `Type.Iterator`, `Type.Options`, and `Value.Mutate` APIs before upgrading.
+
+### Reliability
+
+- Retained Feynman's fail-closed manual-compaction and eager parallel-result durability repairs because the owning upstream Pi issues remain open, and bound every Pi package plus artifact verification to the coordinated `0.83.0` train.
+- Adopted Pi's native llama.cpp streaming-usage fix while preserving Feynman's automatic repair of older cached model metadata, so upgrades retain token accounting without deleting `models-store.json`.
+- Reapplied the narrow Pi shrinkwrap repairs for `brace-expansion` `5.0.8` and Undici `8.9.0`; upstream Pi `0.83.0` still ships the affected `5.0.7` and `8.5.0` copies.
+- PaperRank model synthesis now rejects terminal provider errors and output-token truncation even when a failed stream contains partial text, so incomplete output cannot be labeled or written as a generated synthesis.
+- Restored Feynman's 15 built-in research tools to `/tools` and `/capabilities` when Pi reports their source as the top-level `research-tools.ts` extension, including on Windows paths.
+
+### Validation
+
+- Added mixed-version and older/newer Pi rejection coverage, installed-package checks for all 15 Feynman tools and 9 extension commands, compilation of every installed tool schema, nullable-array and malformed-argument validation through Pi's TypeBox 1.3 runtime path, cached llama.cpp migration and streaming accounting checks, and exact runtime-lock and package-artifact verification.
+
 ## v0.3.9 - 2026-07-29
 
 ### Reliability

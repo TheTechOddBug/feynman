@@ -84,6 +84,11 @@ for (const name of [
 	"@earendil-works/pi-tui",
 ]) {
 	const expected = manifest.dependencies?.[name];
+	if (expected !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+		fail(
+			`${name} must be pinned to Pi ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${expected ?? "missing"}`,
+		);
+	}
 	const installed = readJson(
 		resolve(packageRoot, "node_modules", ...name.split("/"), "package.json"),
 		`${name} package manifest`,
@@ -92,6 +97,20 @@ for (const name of [
 		fail(`${name} version mismatch: expected ${expected}, found ${installed}`);
 	}
 }
+requireMarkers(
+	readText(
+		resolve(packageRoot, "scripts", "verify-installed-runtime.mjs"),
+		"installed runtime verifier",
+	),
+	"installed runtime verifier",
+	[
+		"EXPECTED_FEYNMAN_COMMANDS",
+		"EXPECTED_FEYNMAN_TOOLS",
+		'message: "/tools"',
+		"nullable-typebox-probe",
+		"malformed-typebox-probe",
+	],
+);
 
 assertPiRuntimeCorrectnessPatchSource(
 	readText(

@@ -29,7 +29,7 @@ The non-Pro model you choose here becomes the default for all sessions. You can 
 
 ## Stage 2: Authentication
 
-Depending on your chosen provider, setup prompts you for an API key or walks you through OAuth login. For providers that support Pi OAuth (like Anthropic and OpenAI), Feynman opens a browser window to complete the sign-in flow. Your credentials are stored securely in the Pi auth storage at `~/.feynman/`.
+Depending on your chosen provider, setup prompts you for an API key or walks you through OAuth login. For providers that support Pi OAuth (like Anthropic, OpenAI, and OpenRouter), Feynman opens a browser window to complete the sign-in flow. In a remote or headless OpenRouter session where the loopback callback is unavailable, paste the browser's final redirect URL or authorization code into Feynman's prompt. You can also set `OPENROUTER_API_KEY` before launching Feynman to use an OpenRouter API key without OAuth. Stored credentials live in the Pi auth storage at `~/.feynman/`.
 
 For API key providers, you are prompted to paste your key directly:
 

@@ -51,6 +51,12 @@ test("package and native release gates exercise persisted Pi user-package upgrad
 	assert.equal((publishWorkflow.match(staleUpgradeVerifier) ?? []).length, 3);
 });
 
+test("installed package gates verify Feynman commands, tools, and TypeBox schemas", () => {
+	const installedRuntimeVerifier = /scripts\/verify-installed-runtime\.mjs/g;
+	assert.equal((e2eWorkflow.match(installedRuntimeVerifier) ?? []).length, 2);
+	assert.equal((publishWorkflow.match(installedRuntimeVerifier) ?? []).length, 3);
+});
+
 test("package gates exercise the global npm install path", () => {
 	assert.ok(
 		packageManifest.bundleDependencies?.includes("@opentelemetry/api"),

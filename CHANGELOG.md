@@ -4,6 +4,22 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-07-30 02:02 PDT — intake-sweep-0.3.10-release-candidate
+
+- Fixed: PaperRank now reads only Pi's finalized assistant message and rejects provider errors, aborts, output-limit truncation, and other non-completion stop reasons before generated synthesis is written. Pi's top-level `cli` extension source classification no longer hides Feynman's 15 built-in research tools.
+- Hardened: Installed-package verification now inventories 9 Feynman commands and 15 tools over RPC, compiles all 15 installed schemas, exercises a genuinely nullable array through Pi's TypeBox tool path, and proves malformed arguments fail before tool execution.
+- Verified locally: focused release gates passed `10/10`; full tests passed `688/688`; typecheck, build, architecture check, website lint/typecheck/build, `git diff --check`, root/site/runtime/consumer audits, mixed-Pi rejection, stale-Pi upgrade, package-artifact verification, dry/real pack, package budget, clean consumer install, and global install all passed. The real tarball is 112,476,954 bytes with 39,700 files; runtime archive SHA-256 is `ec22f6bae0eadbe56012818ebc4fa9c42345159adbd8a2c540efd436f3a26bb7`.
+- Verified user paths: the installed runtime exposed all 9 commands and 15 tools, rejected malformed TypeBox input, completed a real authenticated `openai/gpt-5.5` prompt, and generated a real PaperRank synthesis artifact from the fixture source.
+- State: `verified` locally and `unverified` for exact-SHA Daytona, PR CI, merge, and published `0.3.10` reconciliation. Next: commit and push the exact candidate, run Daytona, merge only green CI, then verify npm provenance and GitHub/native assets.
+
+### 2026-07-29 16:07 PDT — intake-sweep-0.3.10-pi-0.83
+
+- Objective: Continue the terminal intake from released `0.3.9` and adopt the new coordinated Pi runtime rather than leave a fixable dependency migration deferred.
+- Found: Pi `0.83.0` was published from upstream commit `845d6ff1` during this sweep. Its TypeBox `1.3.7` change requires an explicit compatibility pass; its llama.cpp source now requests streaming usage, but old `models-store.json` entries still preserve the false capability. Upstream issues `#7150` and `#7053` remain open, and Pi's shrinkwrap still carries vulnerable `brace-expansion@5.0.7` plus proxy-broken Undici `8.5.0`.
+- Fixed: Moved all four Pi packages, root/runtime locks, fallback pins, correctness gates, declarations, artifact checks, and fixtures to exact `0.83.0`. Retained the compaction-loss and eager parallel-result repairs, rebased llama.cpp handling to keep only the serialized cached-metadata migration on top of Pi's upstream usage fix, and reapplied the exact `brace-expansion@5.0.8` and Undici `8.9.0` repairs. Mixed Pi trains and unreviewed older/newer versions now fail closed.
+- Verified so far: Focused runtime, llama.cpp, TypeBox-compatible extension/model, package, audit, integrity, and release-workflow tests passed `92/92`; root and generated-runtime production audits, typecheck, architecture check, and `git diff --check` passed. npm metadata and the official `v0.83.0` tag/release all resolve the four-package train to `845d6ff1`.
+- State: `verified` for the focused migration and `unverified` for the full source/site/package/native/clean-machine/CI/release ladder. Next: complete cumulative validation, exact-SHA Daytona proof, PR CI, merge, and `0.3.10` npm/GitHub/native release reconciliation.
+
 ### 2026-07-29 05:18 PDT — intake-sweep-0.3.9-runtime-correctness
 
 - Objective: Close the post-`0.3.8` release-gate findings and current Pi `0.82.1` runtime correctness gaps instead of leaving them as upstream or dependency deferrals.

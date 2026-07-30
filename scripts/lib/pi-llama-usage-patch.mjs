@@ -1,9 +1,8 @@
-export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.82.1";
+export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.83.0";
 export const PI_LLAMA_USAGE_PATCH_MARKER =
-	"Feynman Pi 0.82.1 llama.cpp streaming usage patch";
+	"Feynman Pi 0.83.0 llama.cpp cached usage migration";
 
-const STATIC_USAGE_ORIGINAL = "            supportsUsageInStreaming: false,";
-const STATIC_USAGE_PATCHED = `            supportsUsageInStreaming: true,`;
+const STATIC_USAGE_REQUIRED = "            supportsUsageInStreaming: true,";
 const MODEL_FACTORY_ANCHOR = "function toPiModel(model, serverUrl) {";
 const MODEL_STATE_ORIGINAL = "    let models = [];\n";
 const MODEL_STATE_PATCHED =
@@ -80,7 +79,7 @@ const STORED_MODELS_PATCHED = `        refreshModels: (context) => {
 export const PI_LLAMA_USAGE_REQUIRED_FRAGMENTS = Object.freeze([
 	PI_LLAMA_USAGE_PATCH_MARKER,
 	REPAIR_HELPER.trimEnd(),
-	STATIC_USAGE_PATCHED,
+	STATIC_USAGE_REQUIRED,
 	MODEL_STATE_PATCHED.trimEnd(),
 	STORED_MODELS_PATCHED,
 ]);
@@ -88,7 +87,7 @@ export const PI_LLAMA_USAGE_REQUIRED_FRAGMENTS = Object.freeze([
 const ORDERED_FRAGMENTS = Object.freeze([
 	REPAIR_HELPER.trimEnd(),
 	MODEL_FACTORY_ANCHOR,
-	STATIC_USAGE_PATCHED,
+	STATIC_USAGE_REQUIRED,
 	MODEL_STATE_PATCHED.trimEnd(),
 	STORED_MODELS_PATCHED,
 ]);
@@ -123,13 +122,22 @@ export function assertPiLlamaUsagePatchSource(source, surface = "llama.cpp provi
 		}
 		previousIndex = index;
 	}
+	const staticUsageIndex = source.indexOf(STATIC_USAGE_REQUIRED);
+	if (
+		staticUsageIndex === -1 ||
+		source.indexOf(STATIC_USAGE_REQUIRED, staticUsageIndex + STATIC_USAGE_REQUIRED.length) !== -1
+	) {
+		throw new Error(
+			`Incomplete Pi llama.cpp usage patch ${surface}: expected exactly one upstream streaming usage capability`,
+		);
+	}
 }
 
 /**
- * Pi 0.82.1 does not request usage in llama.cpp streaming responses, and
- * existing models-store.json entries preserve that false capability even
- * after source patching. Remove this patch after a supported Pi release
- * includes PR #7258 and repairs or invalidates stale llama.cpp model metadata.
+ * Pi 0.83.0 includes PR #7258 for newly discovered llama.cpp models, but
+ * existing models-store.json entries preserve the old false capability.
+ * Remove this patch after a supported Pi release repairs or invalidates stale
+ * llama.cpp model metadata.
  */
 export function patchPiLlamaUsageSource(source) {
 	if (source.includes(PI_LLAMA_USAGE_PATCH_MARKER)) {
@@ -153,17 +161,20 @@ export function patchPiLlamaUsageSource(source) {
 			return upgraded;
 		}
 	}
+	const staticUsageIndex = source.indexOf(STATIC_USAGE_REQUIRED);
+	if (
+		staticUsageIndex === -1 ||
+		source.indexOf(STATIC_USAGE_REQUIRED, staticUsageIndex + STATIC_USAGE_REQUIRED.length) !== -1
+	) {
+		throw new Error(
+			`Unsupported Pi ${PI_LLAMA_USAGE_REQUIRED_VERSION} llama.cpp layout: upstream streaming usage capability was not found exactly once`,
+		);
+	}
 	let patched = replaceRequired(
 		source,
 		MODEL_FACTORY_ANCHOR,
 		`${REPAIR_HELPER}${MODEL_FACTORY_ANCHOR}`,
 		"model factory anchor was not found",
-	);
-	patched = replaceRequired(
-		patched,
-		STATIC_USAGE_ORIGINAL,
-		STATIC_USAGE_PATCHED,
-		"streaming usage capability anchor was not found",
 	);
 	patched = replaceRequired(
 		patched,

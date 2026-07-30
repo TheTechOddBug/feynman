@@ -162,10 +162,14 @@ test("Feynman tool browser omits generic scheduler and process package tools", a
 	};
 	const repoRoot = "/tmp/feynman";
 	const localSourceInfo = {
-		source: "local",
-		path: `${repoRoot}/extensions/research-tools/alpha.ts`,
-		scope: "project",
+		source: "cli",
+		path: `${repoRoot}/extensions/research-tools.ts`,
+		scope: "temporary",
 		origin: "top-level",
+	};
+	const windowsLocalSourceInfo = {
+		...localSourceInfo,
+		path: "C:\\feynman\\extensions\\research-tools.ts",
 	};
 	const packageSourceInfo = (source: string) => ({
 		source,
@@ -182,6 +186,12 @@ test("Feynman tool browser omits generic scheduler and process package tools", a
 				description: "search papers",
 				parameters: { properties: { query: {} } },
 				sourceInfo: localSourceInfo,
+			},
+			{
+				name: "hf_dataset_info",
+				description: "inspect datasets",
+				parameters: { properties: { dataset: {} } },
+				sourceInfo: windowsLocalSourceInfo,
 			},
 			{
 				name: "web_search",
@@ -234,7 +244,8 @@ test("Feynman tool browser omits generic scheduler and process package tools", a
 	await registered.get("tools")?.handler([], ctx);
 
 	const toolItems = selectedItems[0] ?? [];
-	assert.ok(toolItems.some((item) => item.startsWith("alpha_search ")));
+	assert.ok(toolItems.some((item) => item.startsWith("alpha_search ") && item.endsWith("[extension]")));
+	assert.ok(toolItems.some((item) => item.startsWith("hf_dataset_info ") && item.endsWith("[extension]")));
 	assert.ok(toolItems.some((item) => item.startsWith("web_search ")));
 	assert.ok(toolItems.some((item) => item.startsWith("document_parse ")));
 	assert.ok(toolItems.some((item) => item.startsWith("subagent ")));

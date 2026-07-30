@@ -64,6 +64,7 @@ To add another provider, authenticate it first:
 
 ```bash
 feynman model login anthropic
+feynman model login openrouter
 feynman model login google
 feynman model login amazon-bedrock
 ```
@@ -75,7 +76,7 @@ feynman model list
 feynman model set <provider>/<non-pro-model-id>
 ```
 
-The `model set` command accepts both `provider/model` and `provider:model` formats. Feynman rejects Pro-class model IDs here and in `--model`; choose a non-Pro model for defaults and per-session overrides. `feynman model login google` opens the API-key flow directly, while `feynman model login amazon-bedrock` verifies the AWS credential chain that Pi uses for Bedrock access.
+The `model set` command accepts both `provider/model` and `provider:model` formats. Feynman rejects Pro-class model IDs here and in `--model`; choose a non-Pro model for defaults and per-session overrides. `feynman model login openrouter` opens the OAuth authorization page. If a remote or headless session cannot receive the loopback callback, copy the browser's final redirect URL or authorization code back into Feynman's prompt to finish sign-in. As an alternative, set `OPENROUTER_API_KEY` before launching Feynman to use API-key authentication without the OAuth flow. `feynman model login google` opens the API-key flow directly, while `feynman model login amazon-bedrock` verifies the AWS credential chain that Pi uses for Bedrock access.
 
 ## Web search configuration
 
