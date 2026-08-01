@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
 	createAgentSession,
@@ -16,9 +17,12 @@ import {
 	registerFauxProvider,
 	streamSimple,
 } from "@earendil-works/pi-ai/compat";
-import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
+import {
+	observeChildProcessClose,
+	terminateChildProcessTree,
+} from "./lib/child-process-cleanup.mjs";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 
 const EXPECTED_FEYNMAN_COMMANDS = Object.freeze([
@@ -51,7 +55,7 @@ const EXPECTED_FEYNMAN_TOOLS = Object.freeze([
 ]);
 
 const packageRoot = resolve(import.meta.dirname, "..");
-const binaryPath = resolve(process.argv[2] ?? resolve(packageRoot, "bin", "feynman.js"));
+const defaultBinaryPath = resolve(process.argv[2] ?? resolve(packageRoot, "bin", "feynman.js"));
 
 function normalizedPath(path) {
 	return `${path ?? ""}`.replaceAll("\\", "/");
@@ -64,7 +68,11 @@ function namesFromToolOptions(options) {
 		.sort();
 }
 
-async function verifyRpcSurface() {
+export async function verifyRpcSurface(options = {}) {
+	const binaryPath = resolve(options.binaryPath ?? defaultBinaryPath);
+	const spawnProcess = options.spawnProcess ?? spawn;
+	const terminateProcessTree = options.terminateProcessTree ?? terminateChildProcessTree;
+	const verificationTimeoutMs = options.timeoutMs ?? 45 * 60_000;
 	const home = mkdtempSync(resolve(tmpdir(), "feynman-installed-rpc-"));
 	const invocation = resolveChildProcessCommand(binaryPath, ["--mode", "rpc"]);
 	let stderr = "";
@@ -77,8 +85,9 @@ async function verifyRpcSurface() {
 
 	try {
 		await new Promise((resolvePromise, rejectPromise) => {
-			const child = spawn(invocation.command, invocation.args, {
+			const child = spawnProcess(invocation.command, invocation.args, {
 				cwd: home,
+				detached: process.platform !== "win32",
 				env: {
 					...process.env,
 					DO_NOT_TRACK: "1",
@@ -90,18 +99,42 @@ async function verifyRpcSurface() {
 				windowsVerbatimArguments: invocation.windowsVerbatimArguments,
 				stdio: ["pipe", "pipe", "pipe"],
 			});
-			const timeout = setTimeout(() => {
-				child.kill();
-				rejectPromise(
+			const closePromise = observeChildProcessClose(child);
+			let settling = false;
+			let timeout;
+			const fail = async (failure) => {
+				if (settling) return;
+				settling = true;
+				clearTimeout(timeout);
+				const primaryError =
+					failure instanceof Error ? failure : new Error(String(failure));
+				try {
+					await terminateProcessTree(child, { closePromise });
+					rejectPromise(primaryError);
+				} catch (cleanupError) {
+					const aggregate = new AggregateError(
+						[primaryError, cleanupError],
+						`${primaryError.message}; installed RPC cleanup also failed`,
+					);
+					aggregate.cause = primaryError;
+					rejectPromise(aggregate);
+				}
+			};
+			timeout = setTimeout(() => {
+				void fail(
 					new Error(
 						`Installed RPC verification timed out. commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified}\n${stderr}`,
 					),
 				);
-			}, 45 * 60_000);
-			const fail = (error) => {
-				clearTimeout(timeout);
-				child.kill();
-				rejectPromise(error);
+			}, verificationTimeoutMs);
+
+			const writeRecord = (record) => {
+				if (settling) return;
+				try {
+					child.stdin.write(`${JSON.stringify(record)}\n`);
+				} catch (error) {
+					void fail(error);
+				}
 			};
 
 			const finishInput = () => {
@@ -113,7 +146,11 @@ async function verifyRpcSurface() {
 					promptAccepted
 				) {
 					stdinEnded = true;
-					child.stdin.end();
+					try {
+						child.stdin.end();
+					} catch (error) {
+						void fail(error);
+					}
 				}
 			};
 			const handleRecord = (record) => {
@@ -146,16 +183,16 @@ async function verifyRpcSurface() {
 					assert.deepEqual(namesFromToolOptions(options), [...EXPECTED_FEYNMAN_TOOLS]);
 					const alphaGetPaper = options.find((option) =>
 						option.startsWith("alpha_get_paper — "),
-					);
-					assert.ok(alphaGetPaper, "RPC /tools omitted alpha_get_paper");
-					toolsVerified = true;
-					child.stdin.write(`${JSON.stringify({
-						type: "extension_ui_response",
-						id: record.id,
-						value: alphaGetPaper,
-					})}\n`);
-					return;
-				}
+						);
+						assert.ok(alphaGetPaper, "RPC /tools omitted alpha_get_paper");
+						toolsVerified = true;
+						writeRecord({
+							type: "extension_ui_response",
+							id: record.id,
+							value: alphaGetPaper,
+						});
+						return;
+					}
 				if (
 					record.type === "extension_ui_request" &&
 					record.method === "notify" &&
@@ -197,15 +234,36 @@ async function verifyRpcSurface() {
 					try {
 						handleRecord(JSON.parse(line));
 					} catch (error) {
-						fail(error);
+						void fail(error);
 						return;
 					}
 				}
 			});
+			child.stdin.once("error", (error) => {
+				void fail(error);
+			});
 			child.once("error", (error) => {
-				fail(error);
+				void fail(error);
 			});
 			child.once("exit", (code, signal) => {
+				if (settling) return;
+				if (
+					code !== 0 ||
+					signal ||
+					!commandsVerified ||
+					!toolsVerified ||
+					!schemaSummaryVerified ||
+					!promptAccepted
+				) {
+					void fail(
+						new Error(
+							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
+						),
+					);
+				}
+			});
+			child.once("close", (code, signal) => {
+				if (settling) return;
 				clearTimeout(timeout);
 				if (
 					code !== 0 ||
@@ -215,32 +273,33 @@ async function verifyRpcSurface() {
 					!schemaSummaryVerified ||
 					!promptAccepted
 				) {
-					rejectPromise(
+					void fail(
 						new Error(
 							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
 						),
 					);
 					return;
 				}
+				settling = true;
 				resolvePromise();
 			});
 
-			child.stdin.write(`${JSON.stringify({
+			writeRecord({
 				id: "feynman-command-inventory",
 				type: "get_commands",
-			})}\n`);
-			child.stdin.write(`${JSON.stringify({
+			});
+			writeRecord({
 				id: "feynman-tool-browser",
 				type: "prompt",
 				message: "/tools",
-			})}\n`);
+			});
 		});
 	} finally {
 		rmSync(home, { recursive: true, force: true });
 	}
 }
 
-async function verifyInstalledSchemas() {
+export async function verifyInstalledSchemas() {
 	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-schemas-"));
 	const extensionPath = resolve(packageRoot, "extensions", "research-tools.ts");
 	const settingsManager = SettingsManager.inMemory({
@@ -304,12 +363,10 @@ async function verifyInstalledSchemas() {
 				.sort(),
 			[...EXPECTED_FEYNMAN_COMMANDS],
 		);
+		const alphaGetPaper = installedTools.find((tool) => tool.name === "alpha_get_paper");
+		assert.ok(alphaGetPaper, "Installed extension omitted alpha_get_paper");
 		let observedArguments;
 		let executeCalls = 0;
-		const nullableArraySchema = Type.Object({
-			values: Type.Union([Type.Array(Type.String()), Type.Null()]),
-		});
-		assert.equal(Compile(nullableArraySchema).Check({ values: null }), true);
 		const probeLoader = new DefaultResourceLoader({
 			cwd: root,
 			agentDir: root,
@@ -325,15 +382,15 @@ async function verifyInstalledSchemas() {
 			fauxAssistantMessage(
 				fauxToolCall(
 					"feynman_typebox_probe",
-					{ values: null },
-					{ id: "nullable-typebox-probe" },
+					{ paper: "2401.00001", sections: ["methodology", "results"] },
+					{ id: "valid-typebox-probe" },
 				),
 				{ stopReason: "toolUse" },
 			),
 			fauxAssistantMessage(
 				fauxToolCall(
 					"feynman_typebox_probe",
-					{},
+					{ paper: "2401.00001", sections: null },
 					{ id: "malformed-typebox-probe" },
 				),
 				{ stopReason: "toolUse" },
@@ -359,8 +416,8 @@ async function verifyInstalledSchemas() {
 			customTools: [{
 				name: "feynman_typebox_probe",
 				label: "Feynman TypeBox Probe",
-				description: "Validates the installed nullable-array tool schema.",
-				parameters: nullableArraySchema,
+				description: "Validates the installed alpha_get_paper schema.",
+				parameters: alphaGetPaper.parameters,
 				execute: async (_toolCallId, parameters) => {
 					executeCalls += 1;
 					observedArguments = parameters;
@@ -378,11 +435,14 @@ async function verifyInstalledSchemas() {
 		const toolResult = probeSession.messages.find(
 			(message) =>
 				message.role === "toolResult" &&
-				message.toolCallId === "nullable-typebox-probe",
+				message.toolCallId === "valid-typebox-probe",
 		);
 		assert.ok(toolResult, "Pi did not emit the installed schema probe result");
 		assert.equal(toolResult.isError, false);
-		assert.equal(observedArguments?.values, null);
+		assert.deepEqual(observedArguments, {
+			paper: "2401.00001",
+			sections: ["methodology", "results"],
+		});
 		const malformedResult = probeSession.messages.find(
 			(message) =>
 				message.role === "toolResult" &&
@@ -399,13 +459,31 @@ async function verifyInstalledSchemas() {
 	}
 }
 
-await verifyRpcSurface();
-await verifyInstalledSchemas();
-console.log(JSON.stringify({
-	binary: binaryPath,
-	commands: EXPECTED_FEYNMAN_COMMANDS.length,
-	tools: EXPECTED_FEYNMAN_TOOLS.length,
-	typeboxSchemas: EXPECTED_FEYNMAN_TOOLS.length,
-	typeboxNullableArray: "passed",
-	typeboxMalformedArguments: "rejected",
-}));
+async function main() {
+	await verifyRpcSurface();
+	await verifyInstalledSchemas();
+	console.log(JSON.stringify({
+		binary: defaultBinaryPath,
+		commands: EXPECTED_FEYNMAN_COMMANDS.length,
+		tools: EXPECTED_FEYNMAN_TOOLS.length,
+		typeboxSchemas: EXPECTED_FEYNMAN_TOOLS.length,
+		typeboxOptionalArray: "passed",
+		typeboxMalformedArguments: "rejected",
+	}));
+}
+
+export function isDirectExecution(
+	entryPath = process.argv[1],
+	modulePath = fileURLToPath(import.meta.url),
+) {
+	if (!entryPath) return false;
+	try {
+		return realpathSync(entryPath) === realpathSync(modulePath);
+	} catch {
+		return resolve(entryPath) === resolve(modulePath);
+	}
+}
+
+if (isDirectExecution()) {
+	await main();
+}

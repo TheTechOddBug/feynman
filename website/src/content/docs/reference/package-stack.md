@@ -60,7 +60,7 @@ feynman packages install session-search
 
 ## Updating packages
 
-Update all installed packages to their latest versions:
+Reconcile all installed packages with their configured versions:
 
 ```bash
 feynman update
@@ -72,6 +72,6 @@ Update a specific package:
 feynman update pi-subagents
 ```
 
-Running `feynman update` without arguments updates everything. Pass a specific package name to update just that one. Updates are safe and preserve your configuration.
+Running `feynman update` without arguments updates unpinned packages to their current registry versions and repairs stale exact-pinned core packages to the versions shipped by Feynman. Semver ranges and registry tags remain unpinned selectors and are preserved during installation. Pass a specific package name to reconcile just that one. Updates are safe and preserve your configuration.
 
 This command updates Pi packages inside Feynman's environment. To upgrade the standalone Feynman app itself, rerun the installer from the [Installation guide](/docs/getting-started/installation).

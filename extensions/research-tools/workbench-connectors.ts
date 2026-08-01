@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { migratedWorkbenchDataPath } from "../../src/workbench/data-root.js";
 import { authorizationHeaderForConnector } from "../../src/workbench/oauth-store.js";

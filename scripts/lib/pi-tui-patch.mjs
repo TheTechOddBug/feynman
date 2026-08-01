@@ -470,3 +470,28 @@ export function patchPiInteractiveThemeSource(source) {
 	}
 	return patched;
 }
+
+const INTERACTIVE_UPDATE_NOTICE_SOURCE = `    showPackageUpdateNotification(packages) {
+        const action = theme.fg("accent", \`\${APP_NAME} update --extensions\`);`;
+const INTERACTIVE_UPDATE_NOTICE_PATCHED_SOURCE = `    showPackageUpdateNotification(packages) {
+        // Feynman: package update notices use the full update command.
+        const action = theme.fg("accent", \`\${APP_NAME} update\`);`;
+
+export function patchPiInteractiveUpdateNoticeSource(source) {
+	if (
+		source.includes(INTERACTIVE_UPDATE_NOTICE_PATCHED_SOURCE) &&
+		!source.includes(INTERACTIVE_UPDATE_NOTICE_SOURCE)
+	) {
+		return source;
+	}
+	const firstAnchor = source.indexOf(INTERACTIVE_UPDATE_NOTICE_SOURCE);
+	if (
+		firstAnchor === -1 ||
+		source.indexOf(INTERACTIVE_UPDATE_NOTICE_SOURCE, firstAnchor + INTERACTIVE_UPDATE_NOTICE_SOURCE.length) !== -1
+	) {
+		throw new Error(
+			"Unsupported Pi interactive update notice layout: required unique package-update anchor was not found",
+		);
+	}
+	return source.replace(INTERACTIVE_UPDATE_NOTICE_SOURCE, INTERACTIVE_UPDATE_NOTICE_PATCHED_SOURCE);
+}

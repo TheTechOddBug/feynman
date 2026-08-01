@@ -9,6 +9,110 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
+function Get-SubstMappings {
+  $output = @(& subst.exe 2>&1)
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not enumerate subst mappings (exit $LASTEXITCODE)."
+  }
+
+  return @(
+    $output |
+      ForEach-Object { $_.ToString().Trim() } |
+      Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+      Sort-Object
+  )
+}
+
+function Mount-OccupiedTestDrive {
+  param([string]$TargetPath)
+
+  for ($code = [int][char]"Z"; $code -ge [int][char]"D"; $code -= 1) {
+    $letter = ([char]$code).ToString()
+    $drive = "${letter}:"
+    if (Get-PSDrive -Name $letter -PSProvider FileSystem -ErrorAction SilentlyContinue) {
+      continue
+    }
+
+    & subst.exe $drive $TargetPath 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      $driveRoot = "$drive\"
+      if (Test-Path -LiteralPath $driveRoot) {
+        return $driveRoot
+      }
+      & subst.exe $drive /D 2>$null | Out-Null
+    }
+  }
+
+  throw "Could not allocate a subst drive to verify occupied-drive fallback."
+}
+
+function Dismount-OccupiedTestDrive {
+  param([string]$DriveRoot)
+
+  if (-not $DriveRoot) {
+    return
+  }
+
+  $drive = $DriveRoot.Substring(0, 2)
+  $lastExitCode = $null
+  for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+    & subst.exe $drive /D 2>$null | Out-Null
+    $lastExitCode = $LASTEXITCODE
+    if ($lastExitCode -eq 0 -or -not (Test-Path -LiteralPath $DriveRoot)) {
+      return
+    }
+    if ($attempt -lt 5) {
+      Start-Sleep -Milliseconds (100 * $attempt)
+    }
+  }
+
+  throw "Could not remove occupied-drive fixture $drive (exit $lastExitCode)."
+}
+
+function Remove-TestPathWithRetry {
+  param([string]$Path)
+
+  if (-not $Path) {
+    return
+  }
+
+  $lastError = $null
+  for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+    try {
+      if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+      }
+      if (-not (Test-Path -LiteralPath $Path)) {
+        return
+      }
+      $lastError = New-Object System.IO.IOException -ArgumentList (
+        "Path still exists after cleanup attempt ${attempt}: $Path"
+      )
+    } catch {
+      $lastError = $_
+    }
+    if ($attempt -lt 5) {
+      Start-Sleep -Milliseconds (100 * $attempt)
+    }
+  }
+
+  throw $lastError
+}
+
+function Restore-ProcessEnvironmentVariable {
+  param(
+    [string]$Name,
+    [AllowNull()]
+    [string]$Value
+  )
+
+  if ($null -eq $Value) {
+    Remove-Item -Path "Env:$Name" -ErrorAction SilentlyContinue
+  } else {
+    Set-Item -Path "Env:$Name" -Value $Value
+  }
+}
+
 $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
 if ((Get-Item -LiteralPath $archive).Length -eq 0) {
   throw "Native archive is empty: $archive"
@@ -24,15 +128,99 @@ $serverScript = Join-Path $testRoot "serve-feynman-archive.mjs"
 $portFile = Join-Path $testRoot "archive-port.txt"
 $checksumFile = Join-Path $testRoot "SHA256SUMS"
 $serverJob = $null
-
-New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
-$archiveName = Split-Path -Leaf $archive
-$servedArchive = Join-Path $testRoot $archiveName
-Copy-Item -LiteralPath $archive -Destination $servedArchive
-$activeArchiveSha256 = (Get-FileHash -LiteralPath $servedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
-"$activeArchiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
+$originalTemp = $env:TEMP
+$originalTmp = $env:TMP
+$originalLocalAppData = $env:LOCALAPPDATA
+$originalFeynmanHome = $env:FEYNMAN_HOME
+$originalInstallBaseUrl = $env:FEYNMAN_INSTALL_BASE_URL
+$originalNoProxy = $env:NO_PROXY
+$originalPath = $env:PATH
+$originalSubstMappings = @(Get-SubstMappings)
+$occupiedDriveRoot = $null
+$verificationError = $null
 
 try {
+  New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+  $longTempRoot = Join-Path $testRoot ("long-temp-" + ("x" * 96))
+  New-Item -ItemType Directory -Path $longTempRoot -Force | Out-Null
+  if ($longTempRoot.Length -lt 120) {
+    throw "Windows installer verifier did not create a sufficiently long TEMP path."
+  }
+  $env:TEMP = $longTempRoot
+  $env:TMP = $longTempRoot
+  $env:LOCALAPPDATA = Join-Path $testRoot "LocalAppData"
+  $env:FEYNMAN_HOME = Join-Path $testRoot "FeynmanHome"
+  New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+  $occupiedDriveRoot = Mount-OccupiedTestDrive -TargetPath $testRoot
+  $expectedSubstMappings = @(Get-SubstMappings)
+
+  function Assert-NoInstallerStagingLeaks {
+    if (
+      -not [string]::Equals(
+        $env:TEMP,
+        $longTempRoot,
+        [System.StringComparison]::OrdinalIgnoreCase
+      ) -or
+      -not [string]::Equals(
+        $env:TMP,
+        $longTempRoot,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    ) {
+      throw "Installer did not restore the verifier's long TEMP/TMP values."
+    }
+
+    $actualMappings = @(Get-SubstMappings)
+    $expectedMappingText = ($expectedSubstMappings | Sort-Object) -join "`n"
+    $actualMappingText = ($actualMappings | Sort-Object) -join "`n"
+    if (-not [string]::Equals($actualMappingText, $expectedMappingText, [System.StringComparison]::Ordinal)) {
+      throw "Installer leaked or removed a subst mapping. Expected '$expectedMappingText'; found '$actualMappingText'."
+    }
+
+    if (-not (Test-Path -LiteralPath $occupiedDriveRoot)) {
+      throw "Installer removed the occupied subst drive instead of selecting another free drive."
+    }
+
+    $stageLeaks = @(
+      Get-ChildItem `
+        -LiteralPath $env:LOCALAPPDATA `
+        -Directory `
+        -Filter "feynman-stage-*" `
+        -ErrorAction SilentlyContinue
+    )
+    if ($stageLeaks.Count -ne 0) {
+      throw "Installer leaked same-volume staging roots: $($stageLeaks.FullName -join ', ')"
+    }
+  }
+
+  $archiveName = Split-Path -Leaf $archive
+  $servedArchive = Join-Path $testRoot $archiveName
+  Copy-Item -LiteralPath $archive -Destination $servedArchive
+  $activeArchiveSha256 = (Get-FileHash -LiteralPath $servedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+  "$activeArchiveSha256  $archiveName" | Set-Content -LiteralPath $checksumFile -Encoding ASCII
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($servedArchive)
+  try {
+    $longestEntry = $zip.Entries |
+      Where-Object { -not [string]::IsNullOrEmpty($_.Name) } |
+      Sort-Object { $_.FullName.Length } -Descending |
+      Select-Object -First 1
+    if (-not $longestEntry) {
+      throw "Native archive contains no files"
+    }
+    $shortDriveRootLength = 3
+    $extractDirectoryLength = "extract".Length
+    $longestExtractedPathLength = `
+      $shortDriveRootLength +
+      $extractDirectoryLength +
+      1 +
+      $longestEntry.FullName.Replace("/", "\").Length
+    if ($longestExtractedPathLength -ge 260) {
+      throw "Native archive exceeds the short-drive Windows MAX_PATH safety budget: $longestExtractedPathLength characters"
+    }
+  } finally {
+    $zip.Dispose()
+  }
   @'
 import { createReadStream, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -140,8 +328,6 @@ server.listen(0, "127.0.0.1", () => {
     throw "Local archive server did not become ready"
   }
 
-  $env:LOCALAPPDATA = Join-Path $testRoot "LocalAppData"
-  $env:FEYNMAN_HOME = Join-Path $testRoot "FeynmanHome"
   $env:FEYNMAN_INSTALL_BASE_URL = $baseUrl
   $env:NO_PROXY = "127.0.0.1,localhost"
 
@@ -230,6 +416,7 @@ server.listen(0, "127.0.0.1", () => {
   }
 
   & $installer -Version $Version
+  Assert-NoInstallerStagingLeaks
   Assert-InstalledCandidate
   $env:PATH = "$installBinDir;$env:PATH"
   Assert-BareRestrictedLauncher
@@ -238,6 +425,7 @@ server.listen(0, "127.0.0.1", () => {
   "must be removed" | Set-Content -LiteralPath $replacementSentinel
 
   & $installer -Version $Version
+  Assert-NoInstallerStagingLeaks
 
   if (Test-Path -LiteralPath $replacementSentinel) {
     throw "Exact-candidate replacement retained the old bundle"
@@ -280,12 +468,69 @@ exit 0
 "@ | Set-Content -LiteralPath (Join-Path $fixtureBundleDir "feynman.ps1") -Encoding UTF8
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   [System.IO.Compression.ZipFile]::CreateFromDirectory($fixtureRoot, $fixtureArchive)
+  $fixtureZip = [System.IO.Compression.ZipFile]::Open(
+    $fixtureArchive,
+    [System.IO.Compression.ZipArchiveMode]::Update
+  )
+  try {
+    $reportedAwsEntryName = "feynman-$Version-win32-x64/app/.feynman/npm/node_modules/@aws-sdk/core/dist-es/submodules/client/middleware-recursion-detection/getRecursionDetectionPlugin.browser.js"
+    $longEntryPrefix = "feynman-$Version-win32-x64/app/.feynman/npm/node_modules/path-budget/"
+    $longEntrySuffix = ".js"
+    $maximumExtractedPathLength = 259
+    $maximumArchiveEntryLength = `
+      $maximumExtractedPathLength -
+      $shortDriveRootLength -
+      $extractDirectoryLength -
+      1
+    $longEntryPaddingLength = `
+      $maximumArchiveEntryLength -
+      $longEntryPrefix.Length -
+      $longEntrySuffix.Length
+    if ($longEntryPaddingLength -le 0) {
+      throw "Long-path fixture prefix leaves no room inside the Windows MAX_PATH boundary."
+    }
+    $longEntryName = `
+      $longEntryPrefix +
+      ("x" * $longEntryPaddingLength) +
+      $longEntrySuffix
+    $longFixtureExtractedPathLength = `
+      $shortDriveRootLength +
+      $extractDirectoryLength +
+      1 +
+      $longEntryName.Replace("/", "\").Length
+    if ($longFixtureExtractedPathLength -ne $maximumExtractedPathLength) {
+      throw "Long-path fixture did not reach the calculated Windows MAX_PATH boundary: $longFixtureExtractedPathLength"
+    }
+    foreach ($fixtureEntryName in @($reportedAwsEntryName, $longEntryName)) {
+      $fixtureEntry = $fixtureZip.CreateEntry($fixtureEntryName)
+      $fixtureEntryStream = $fixtureEntry.Open()
+      try {
+        $fixtureEntryStream.WriteByte(0)
+      } finally {
+        $fixtureEntryStream.Dispose()
+      }
+    }
+  } finally {
+    $fixtureZip.Dispose()
+  }
   Copy-Item -LiteralPath $fixtureArchive -Destination $servedArchive -Force
   $activeArchiveSha256 = (
     Get-FileHash -LiteralPath $servedArchive -Algorithm SHA256
   ).Hash.ToLowerInvariant()
   "$activeArchiveSha256  $archiveName" |
     Set-Content -LiteralPath $checksumFile -Encoding ASCII
+
+  & $installer -Version $Version
+  Assert-NoInstallerStagingLeaks
+  Assert-InstalledCandidate
+  $installedReportedAwsFixture = Join-Path $installRoot ($reportedAwsEntryName.Replace("/", "\"))
+  if (-not (Test-Path -LiteralPath $installedReportedAwsFixture)) {
+    throw "Successful compact replacement did not install the reported AWS fixture entry."
+  }
+  $installedLongFixture = Join-Path $installRoot ($longEntryName.Replace("/", "\"))
+  if (-not (Test-Path -LiteralPath $installedLongFixture)) {
+    throw "Successful compact replacement did not install the MAX_PATH boundary fixture entry."
+  }
 
   $duplicateSentinel = Join-Path $bundleDir "duplicate-checksum-must-preserve.sentinel"
   "must remain" | Set-Content -LiteralPath $duplicateSentinel
@@ -301,6 +546,7 @@ exit 0
     } catch {
       $duplicateRejected = $_.Exception.Message -match "multiple checksum entries"
     }
+    Assert-NoInstallerStagingLeaks
     if (-not $duplicateRejected) {
       throw "Installer did not reject duplicate checksum entries"
     }
@@ -321,6 +567,7 @@ exit 0
   } finally {
     Remove-Item Env:FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_BACKUP -ErrorAction SilentlyContinue
   }
+  Assert-NoInstallerStagingLeaks
   if (-not $backupFailureRejected) {
     throw "Installer did not surface the injected bundle-backup failure"
   }
@@ -338,6 +585,7 @@ exit 0
   } catch {
     $checksumRejected = $_.Exception.Message -match "SHA-256 mismatch"
   }
+  Assert-NoInstallerStagingLeaks
   if (-not $checksumRejected) {
     throw "Installer did not reject a corrupted archive checksum"
   }
@@ -364,6 +612,7 @@ CALL "$previousBundleDir\feynman.cmd" %*
   } finally {
     Remove-Item Env:FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP -ErrorAction SilentlyContinue
   }
+  Assert-NoInstallerStagingLeaks
   if (-not $upgradeFailureRejected) {
     throw "Installer did not surface the injected upgrade failure"
   }
@@ -384,11 +633,88 @@ CALL "$previousBundleDir\feynman.cmd" %*
       throw "Restored launcher version mismatch after injected failure: $launcher"
     }
   }
+} catch {
+  $verificationError = $_
+  throw
 } finally {
-  if ($serverJob) {
-    Stop-Job -Job $serverJob -ErrorAction SilentlyContinue
-    Receive-Job -Job $serverJob -ErrorAction SilentlyContinue
-    Remove-Job -Job $serverJob -Force -ErrorAction SilentlyContinue
+  $cleanupError = $null
+  $environmentVariables = @(
+    [PSCustomObject]@{ Name = "TEMP"; Value = $originalTemp }
+    [PSCustomObject]@{ Name = "TMP"; Value = $originalTmp }
+    [PSCustomObject]@{ Name = "LOCALAPPDATA"; Value = $originalLocalAppData }
+    [PSCustomObject]@{ Name = "FEYNMAN_HOME"; Value = $originalFeynmanHome }
+    [PSCustomObject]@{ Name = "FEYNMAN_INSTALL_BASE_URL"; Value = $originalInstallBaseUrl }
+    [PSCustomObject]@{ Name = "NO_PROXY"; Value = $originalNoProxy }
+    [PSCustomObject]@{ Name = "PATH"; Value = $originalPath }
+  )
+  foreach ($environmentVariable in $environmentVariables) {
+    try {
+      Restore-ProcessEnvironmentVariable `
+        -Name $environmentVariable.Name `
+        -Value $environmentVariable.Value
+    } catch {
+      if (-not $cleanupError) {
+        $cleanupError = $_
+      }
+    }
   }
-  Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
+  try {
+    if ($serverJob) {
+      Stop-Job -Job $serverJob -ErrorAction SilentlyContinue
+      Receive-Job -Job $serverJob -ErrorAction SilentlyContinue
+      Remove-Job -Job $serverJob -Force -ErrorAction SilentlyContinue
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  try {
+    if ($occupiedDriveRoot) {
+      Get-ChildItem -LiteralPath $occupiedDriveRoot -Force -ErrorAction Stop |
+        ForEach-Object { Remove-TestPathWithRetry -Path $_.FullName }
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  $occupiedDriveDismounted = -not $occupiedDriveRoot
+  try {
+    Dismount-OccupiedTestDrive -DriveRoot $occupiedDriveRoot
+    $occupiedDriveDismounted = $true
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  try {
+    $remainingSubstMappings = @(Get-SubstMappings)
+    $originalMappingText = ($originalSubstMappings | Sort-Object) -join "`n"
+    $remainingMappingText = ($remainingSubstMappings | Sort-Object) -join "`n"
+    if (-not [string]::Equals($remainingMappingText, $originalMappingText, [System.StringComparison]::Ordinal)) {
+      throw "Verifier leaked a subst mapping. Before '$originalMappingText'; after '$remainingMappingText'."
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  try {
+    if ($occupiedDriveDismounted) {
+      Remove-TestPathWithRetry -Path $testRoot
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+
+  if ($cleanupError) {
+    if ($verificationError) {
+      Write-Warning "Windows installer verifier cleanup also failed: $($cleanupError.Exception.Message)"
+    } else {
+      throw $cleanupError
+    }
+  }
 }

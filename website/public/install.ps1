@@ -84,6 +84,130 @@ function Get-ArchSuffix {
   throw "Unsupported architecture: $envArch"
 }
 
+function New-SameVolumeStagingRoot {
+  param([string]$InstallRoot)
+
+  $installFullPath = [System.IO.Path]::GetFullPath($InstallRoot)
+  $installVolumeRoot = [System.IO.Path]::GetPathRoot($installFullPath)
+  $stagingParent = [System.IO.Path]::GetFullPath($env:LOCALAPPDATA)
+  $stagingVolumeRoot = [System.IO.Path]::GetPathRoot($stagingParent)
+  if (
+    [string]::IsNullOrWhiteSpace($installVolumeRoot) -or
+    -not [string]::Equals(
+      $installVolumeRoot,
+      $stagingVolumeRoot,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  ) {
+    throw "Installer staging must be on the same volume as $InstallRoot."
+  }
+
+  for ($attempt = 1; $attempt -le 32; $attempt += 1) {
+    $name = "feynman-stage-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12)
+    $candidate = Join-Path $stagingParent $name
+    try {
+      $created = New-Item -ItemType Directory -Path $candidate -ErrorAction Stop
+      return $created.FullName
+    } catch {
+      if (-not (Test-Path -LiteralPath $candidate)) {
+        throw
+      }
+    }
+  }
+
+  throw "Could not allocate a unique same-volume installer staging directory."
+}
+
+function Mount-ShortStagingDrive {
+  param([string]$TargetPath)
+
+  for ($code = [int][char]"Z"; $code -ge [int][char]"D"; $code -= 1) {
+    $letter = ([char]$code).ToString()
+    $drive = "${letter}:"
+    if (Get-PSDrive -Name $letter -PSProvider FileSystem -ErrorAction SilentlyContinue) {
+      continue
+    }
+
+    & subst.exe $drive $TargetPath 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      $driveRoot = "$drive\"
+      if (Test-Path -LiteralPath $driveRoot) {
+        return $driveRoot
+      }
+      & subst.exe $drive /D 2>$null | Out-Null
+    }
+  }
+
+  throw "Could not allocate a temporary drive for safe Windows ZIP extraction."
+}
+
+function Dismount-ShortStagingDrive {
+  param([string]$DriveRoot)
+
+  if (-not $DriveRoot) {
+    return
+  }
+
+  $drive = $DriveRoot.Substring(0, 2)
+  $lastExitCode = $null
+  for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+    & subst.exe $drive /D 2>$null | Out-Null
+    $lastExitCode = $LASTEXITCODE
+    if ($lastExitCode -eq 0 -or -not (Test-Path -LiteralPath $DriveRoot)) {
+      return
+    }
+    if ($attempt -lt 5) {
+      Start-Sleep -Milliseconds (100 * $attempt)
+    }
+  }
+
+  throw "Could not remove temporary staging drive $drive (exit $lastExitCode)."
+}
+
+function Remove-PathWithRetry {
+  param([string]$Path)
+
+  if (-not $Path) {
+    return
+  }
+
+  $lastError = $null
+  for ($attempt = 1; $attempt -le 5; $attempt += 1) {
+    try {
+      if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+      }
+      if (-not (Test-Path -LiteralPath $Path)) {
+        return
+      }
+      $lastError = New-Object System.IO.IOException -ArgumentList (
+        "Path still exists after cleanup attempt ${attempt}: $Path"
+      )
+    } catch {
+      $lastError = $_
+    }
+    if ($attempt -lt 5) {
+      Start-Sleep -Milliseconds (100 * $attempt)
+    }
+  }
+
+  throw $lastError
+}
+
+function Restore-ProcessEnvironmentVariable {
+  param(
+    [string]$Name,
+    [AllowNull()]
+    [string]$Value
+  )
+
+  if ($null -eq $Value) {
+    Remove-Item -Path "Env:$Name" -ErrorAction SilentlyContinue
+  } else {
+    Set-Item -Path "Env:$Name" -Value $Value
+  }
+}
+
 $archSuffix = Get-ArchSuffix
 $assetTarget = "win32-$archSuffix"
 $release = Resolve-ReleaseMetadata -RequestedVersion $Version -AssetTarget $assetTarget -BundleExtension "zip"
@@ -97,14 +221,35 @@ $installRoot = Join-Path $env:LOCALAPPDATA "Programs\feynman"
 $installBinDir = Join-Path $installRoot "bin"
 $bundleDir = Join-Path $installRoot $bundleName
 
-$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("feynman-install-" + [System.Guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $tmpDir | Out-Null
+$originalTemp = $env:TEMP
+$originalTmp = $env:TMP
+$stagingPhysicalRoot = $null
+$shortStagingRoot = $null
+$extractRoot = $null
+$primaryError = $null
 
 try {
-  $archivePath = Join-Path $tmpDir $archiveName
-  $checksumsPath = Join-Path $tmpDir "SHA256SUMS"
-  $extractRoot = Join-Path $tmpDir "extract"
+  $stagingPhysicalRoot = New-SameVolumeStagingRoot -InstallRoot $installRoot
+  $shortStagingRoot = Mount-ShortStagingDrive -TargetPath $stagingPhysicalRoot
+  $shortTempRoot = Join-Path $shortStagingRoot "tmp"
+  $workRoot = Join-Path $shortStagingRoot "work"
+  $extractRoot = Join-Path $shortStagingRoot "extract"
+  foreach ($directory in @($shortTempRoot, $workRoot, $extractRoot)) {
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+  }
+  $env:TEMP = $shortTempRoot
+  $env:TMP = $shortTempRoot
+
+  # The native ZIP contains valid paths up to 241 characters before a
+  # destination prefix is added. Extract through the temporary DOS drive so
+  # every path passed to the legacy Windows APIs stays below MAX_PATH. The
+  # backing directory lives beside LOCALAPPDATA on the install volume so the
+  # final directory swaps remain same-volume atomic renames.
+  $archivePath = Join-Path $workRoot $archiveName
+  $checksumsPath = Join-Path $workRoot "SHA256SUMS"
   $extractedBundleDir = Join-Path $extractRoot $bundleName
+  $physicalExtractRoot = Join-Path $stagingPhysicalRoot "extract"
+  $extractedBundlePhysicalDir = Join-Path $physicalExtractRoot $bundleName
   Write-Host "==> Downloading $archiveName"
   try {
     Invoke-WebRequest `
@@ -150,8 +295,25 @@ Workarounds:
   }
 
   Write-Host "==> Extracting $archiveName"
-  New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
   Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+  try {
+    $longestEntry = $archive.Entries |
+      Where-Object { -not [string]::IsNullOrEmpty($_.Name) } |
+      Sort-Object { $_.FullName.Length } -Descending |
+      Select-Object -First 1
+    if (-not $longestEntry) {
+      throw "Downloaded archive contained no files."
+    }
+    $longestExtractedPath = Join-Path `
+      $extractRoot `
+      ($longestEntry.FullName.Replace("/", "\"))
+    if ($longestExtractedPath.Length -ge 260) {
+      throw "Downloaded archive exceeds the Windows MAX_PATH extraction budget: $($longestExtractedPath.Length) characters."
+    }
+  } finally {
+    $archive.Dispose()
+  }
   [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractRoot)
   if (-not (Test-Path $extractedBundleDir)) {
     throw "Downloaded archive did not contain the expected $bundleName directory."
@@ -199,7 +361,8 @@ Workarounds:
   }
 
   New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
-  $stagedBinDir = Join-Path $tmpDir "bin"
+  $stagedBinDir = Join-Path $shortStagingRoot "candidate-bin"
+  $stagedBinPhysicalDir = Join-Path $stagingPhysicalRoot "candidate-bin"
   New-Item -ItemType Directory -Path $stagedBinDir -Force | Out-Null
   $shimCandidate = Join-Path $stagedBinDir "feynman.cmd"
   @"
@@ -207,8 +370,12 @@ Workarounds:
 CALL "$bundleDir\feynman.cmd" %*
 "@ | Set-Content -Path $shimCandidate -Encoding ASCII
 
-  $backupBundleDir = Join-Path $tmpDir "previous-bundle"
-  $backupBinDir = Join-Path $tmpDir "previous-bin"
+  $backupBundleDir = Join-Path $stagingPhysicalRoot "previous-bundle"
+  $backupBundleShortDir = Join-Path $shortStagingRoot "previous-bundle"
+  $backupBinDir = Join-Path $stagingPhysicalRoot "previous-bin"
+  $backupBinShortDir = Join-Path $shortStagingRoot "previous-bin"
+  $failedCandidateDir = Join-Path $stagingPhysicalRoot "failed-candidate"
+  $failedCandidateBinDir = Join-Path $stagingPhysicalRoot "failed-candidate-bin"
   $hadPreviousBundle = Test-Path -LiteralPath $bundleDir
   $hadPreviousBin = Test-Path -LiteralPath $installBinDir
   $backupBundleMoved = $false
@@ -227,20 +394,20 @@ CALL "$bundleDir\feynman.cmd" %*
       Move-Item -LiteralPath $installBinDir -Destination $backupBinDir
       $backupBinMoved = $true
     }
-    Move-Item -LiteralPath $extractedBundleDir -Destination $bundleDir
+    Move-Item -LiteralPath $extractedBundlePhysicalDir -Destination $bundleDir
     $candidateBundleInstalled = $true
     Write-Host "==> Linking feynman into $installBinDir"
     if ($env:FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP -eq "1") {
       throw "Injected installer failure after bundle swap."
     }
-    Move-Item -LiteralPath $stagedBinDir -Destination $installBinDir
+    Move-Item -LiteralPath $stagedBinPhysicalDir -Destination $installBinDir
     $candidateBinInstalled = $true
   } catch {
     if ($candidateBundleInstalled -and (Test-Path -LiteralPath $bundleDir)) {
-      Remove-Item -LiteralPath $bundleDir -Recurse -Force
+      Move-Item -LiteralPath $bundleDir -Destination $failedCandidateDir
     }
     if ($candidateBinInstalled -and (Test-Path -LiteralPath $installBinDir)) {
-      Remove-Item -LiteralPath $installBinDir -Recurse -Force
+      Move-Item -LiteralPath $installBinDir -Destination $failedCandidateBinDir
     }
     if ($backupBundleMoved -and (Test-Path -LiteralPath $backupBundleDir)) {
       Move-Item -LiteralPath $backupBundleDir -Destination $bundleDir
@@ -250,15 +417,17 @@ CALL "$bundleDir\feynman.cmd" %*
     }
     throw
   }
-  if (Test-Path -LiteralPath $backupBundleDir) {
-    Remove-Item -LiteralPath $backupBundleDir -Recurse -Force
-  }
-  if (Test-Path -LiteralPath $backupBinDir) {
-    Remove-Item -LiteralPath $backupBinDir -Recurse -Force
-  }
+  Remove-PathWithRetry -Path $backupBundleShortDir
+  Remove-PathWithRetry -Path $backupBinShortDir
+  $staleBundleIndex = 0
   Get-ChildItem -LiteralPath $installRoot -Directory -Filter "feynman-*" |
     Where-Object { $_.FullName -ne $bundleDir } |
-    Remove-Item -Recurse -Force
+    ForEach-Object {
+      $staleBundleIndex += 1
+      Move-Item `
+        -LiteralPath $_.FullName `
+        -Destination (Join-Path $stagingPhysicalRoot "stale-bundle-$staleBundleIndex")
+    }
 
   $currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
   $alreadyOnPath = $false
@@ -303,8 +472,57 @@ CALL "$bundleDir\feynman.cmd" %*
   }
 
   Write-Host "Feynman $resolvedVersion installed successfully."
+} catch {
+  $primaryError = $_
+  throw
 } finally {
-  if (Test-Path $tmpDir) {
-    Remove-Item -Recurse -Force $tmpDir
+  $cleanupError = $null
+  try {
+    Restore-ProcessEnvironmentVariable -Name "TEMP" -Value $originalTemp
+  } catch {
+    $cleanupError = $_
+  }
+  try {
+    Restore-ProcessEnvironmentVariable -Name "TMP" -Value $originalTmp
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  try {
+    if ($shortStagingRoot) {
+      Get-ChildItem -LiteralPath $shortStagingRoot -Force -ErrorAction Stop |
+        ForEach-Object { Remove-PathWithRetry -Path $_.FullName }
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  $driveDismounted = -not $shortStagingRoot
+  try {
+    Dismount-ShortStagingDrive -DriveRoot $shortStagingRoot
+    $driveDismounted = $true
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+  try {
+    if ($driveDismounted) {
+      Remove-PathWithRetry -Path $stagingPhysicalRoot
+    }
+  } catch {
+    if (-not $cleanupError) {
+      $cleanupError = $_
+    }
+  }
+
+  if ($cleanupError) {
+    if ($primaryError) {
+      Write-Warning "Installer cleanup also failed: $($cleanupError.Exception.Message)"
+    } else {
+      throw $cleanupError
+    }
   }
 }

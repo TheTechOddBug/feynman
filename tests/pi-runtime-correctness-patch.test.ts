@@ -228,7 +228,9 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 					"@earendil-works/pi-ai": "0.83.0",
 					"@earendil-works/pi-coding-agent": "0.83.0",
 					"@earendil-works/pi-tui": "0.83.0",
+					"brace-expansion": "5.0.9",
 				},
+				overrides: { "brace-expansion": "5.0.9" },
 			}),
 		);
 		const result = spawnSync(

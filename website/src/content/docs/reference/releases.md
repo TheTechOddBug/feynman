@@ -9,24 +9,28 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.10 - 2026-07-30
+## v0.3.10 - 2026-08-01
 
 ### Runtime
 
 - Updated the bundled Pi runtime train from `0.82.1` to `0.83.0`, including Pi's provider, session, package-install, headless OpenRouter sign-in, and extension model-scope improvements.
 - Migrated Feynman's bundled extension runtime to Pi's TypeBox `1.3.7` contract. Extension authors must replace removed `Type.Base`, `Type.Awaited`, `Type.Promise`, `Type.AsyncIterator`, `Type.Iterator`, `Type.Options`, and `Value.Mutate` APIs before upgrading.
+- Updated `pi-web-access` to `0.17.1` for bounded streamed fetches, Gemini-compatible provider schemas, and current search/extraction fixes, and updated `pi-subagents` to `0.38.0` for startup retries and bounded progress snapshots.
 
 ### Reliability
 
 - Retained Feynman's fail-closed manual-compaction and eager parallel-result durability repairs because the owning upstream Pi issues remain open, and bound every Pi package plus artifact verification to the coordinated `0.83.0` train.
 - Adopted Pi's native llama.cpp streaming-usage fix while preserving Feynman's automatic repair of older cached model metadata, so upgrades retain token accounting without deleting `models-store.json`.
-- Reapplied the narrow Pi shrinkwrap repairs for `brace-expansion` `5.0.8` and Undici `8.9.0`; upstream Pi `0.83.0` still ships the affected `5.0.7` and `8.5.0` copies.
+- Reapplied the narrow Pi shrinkwrap repairs for `brace-expansion` `5.0.9` and Undici `8.9.0`; upstream Pi `0.83.0` still ships the affected `5.0.7` and `8.5.0` copies.
+- Fixed `feynman update` writing user-package upgrades to a shadow npm prefix while Pi continued loading an older managed copy. Updates now target the resolved package root, reconcile stale exact-pinned core packages against Feynman's configured versions, preserve range and registry-tag selectors as unpinned sources, verify that attempted updates actually completed, and accept names such as `feynman update pi-subagents`; the in-app notice now points to that supported command.
+- Fixed the Windows one-line installer failing on valid long archive entries. Extraction and rollback cleanup now run through a unique short temporary drive on the install volume while preserving the transactional replacement boundary.
+- CLI analytics, log, and trace sends now make one attempt before opening a silent per-process circuit breaker, rather than printing PostHog transport errors into research output. The bundled Pi tracer also performs a silent status-checked HTTP preflight and skips exporter startup when Feynman's collector is blocked or returns an error. Set `FEYNMAN_DEBUG=1` for the single CLI diagnostic notice or `FEYNMAN_TELEMETRY=off` to disable telemetry explicitly.
 - PaperRank model synthesis now rejects terminal provider errors and output-token truncation even when a failed stream contains partial text, so incomplete output cannot be labeled or written as a generated synthesis.
 - Restored Feynman's 15 built-in research tools to `/tools` and `/capabilities` when Pi reports their source as the top-level `research-tools.ts` extension, including on Windows paths.
 
 ### Validation
 
-- Added mixed-version and older/newer Pi rejection coverage, installed-package checks for all 15 Feynman tools and 9 extension commands, compilation of every installed tool schema, nullable-array and malformed-argument validation through Pi's TypeBox 1.3 runtime path, cached llama.cpp migration and streaming accounting checks, and exact runtime-lock and package-artifact verification.
+- Added mixed-version and older/newer Pi rejection coverage, installed-package checks for all 15 Feynman tools and 9 extension commands, compilation of every installed tool schema, optional-array and malformed-null rejection through Pi's TypeBox 1.3 runtime path, managed/global package-update checks, long-path Windows installer fixtures, cached llama.cpp migration and streaming accounting checks, and exact runtime-lock and package-artifact verification.
 
 ## v0.3.9 - 2026-07-29
 

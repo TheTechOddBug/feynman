@@ -4,14 +4,30 @@ import { dirname, resolve } from "node:path";
 
 import { trace, SpanStatusCode, type Attributes, type Span } from "@opentelemetry/api";
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import {
+	OTLPExporterBase,
+	createOtlpNetworkExportDelegate,
+	type IExporterTransport,
+} from "@opentelemetry/otlp-exporter-base";
+import { createOtlpHttpExporterMetrics } from "@opentelemetry/otlp-exporter-base/node-http";
+import {
+	JsonLogsSerializer,
+	LogsExporterMetricsHelper,
+	ProtobufTraceSerializer,
+	TraceExporterMetricsHelper,
+	type IExporterMetricsHelper,
+	type ISerializer,
+} from "@opentelemetry/otlp-transformer";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+	BatchLogRecordProcessor,
+	LoggerProvider,
+	type ReadableLogRecord,
+} from "@opentelemetry/sdk-logs";
+import { BatchSpanProcessor, type ReadableSpan } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
-import { PostHog } from "posthog-node";
+import { PostHog, type PostHogOptions } from "posthog-node";
 
 import { getFeynmanHome, getFeynmanStateDir } from "../config/paths.js";
 
@@ -75,6 +91,160 @@ let loggerProvider: LoggerProvider | undefined;
 let activeConfig: PostHogTelemetryConfig | undefined;
 let telemetryInitialized = false;
 let telemetryStartWarningPrinted = false;
+let telemetryTransportFailed = false;
+
+type PostHogFetch = NonNullable<PostHogOptions["fetch"]>;
+type TelemetryFetch = (
+	url: string | URL,
+	init?: RequestInit,
+) => Promise<Response>;
+
+export type TelemetryTransportCircuitBreaker = {
+	tryStart(): boolean;
+	completeSuccess(): void;
+	completeFailure(error: unknown): void;
+	isOpen(): boolean;
+};
+
+export function createTelemetryTransportCircuitBreaker(
+	onTransportFailure: (error: unknown) => void,
+): TelemetryTransportCircuitBreaker {
+	let circuitOpen = false;
+	return {
+		tryStart() {
+			return !circuitOpen;
+		},
+		completeSuccess() {},
+		completeFailure(error) {
+			if (circuitOpen) return;
+			circuitOpen = true;
+			onTransportFailure(error);
+		},
+		isOpen() {
+			return circuitOpen;
+		},
+	};
+}
+
+function successfulTelemetryDropResponse(): Response {
+	return new Response(null, { status: 204 });
+}
+
+export function createTelemetryCircuitBreakerFetch(
+	fetchImpl: PostHogFetch,
+	onTransportFailure: (error: unknown) => void,
+	circuit = createTelemetryTransportCircuitBreaker(onTransportFailure),
+): PostHogFetch {
+	return async (url, options) => {
+		if (!circuit.tryStart()) {
+			return successfulTelemetryDropResponse();
+		}
+
+		try {
+			const response = await fetchImpl(url, options);
+			if (response.status >= 200 && response.status < 400) {
+				circuit.completeSuccess();
+				return response;
+			}
+
+			circuit.completeFailure(new Error(`PostHog transport returned HTTP ${response.status}`));
+			return successfulTelemetryDropResponse();
+		} catch (error) {
+			circuit.completeFailure(error);
+			return successfulTelemetryDropResponse();
+		}
+	};
+}
+
+export function createOneShotOtlpTransport(options: {
+	url: string;
+	headers: Record<string, string>;
+	contentType: string;
+	fetchImpl: TelemetryFetch;
+	circuit: TelemetryTransportCircuitBreaker;
+}): IExporterTransport {
+	return {
+		async send(data, timeoutMillis) {
+			if (!options.circuit.tryStart()) {
+				return { status: "success" };
+			}
+
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), timeoutMillis);
+			timeout.unref?.();
+			try {
+				const response = await options.fetchImpl(options.url, {
+					method: "POST",
+					headers: {
+						...options.headers,
+						"Content-Type": options.contentType,
+					},
+					body: Buffer.from(data),
+					signal: controller.signal,
+				});
+				if (response.status < 200 || response.status >= 400) {
+					throw new Error(`OTLP transport returned HTTP ${response.status}`);
+				}
+
+				options.circuit.completeSuccess();
+				return { status: "success" };
+			} catch (error) {
+				// The exporter reports success after opening the shared circuit so
+				// OpenTelemetry processors do not relay optional telemetry failures
+				// through their global error handler.
+				options.circuit.completeFailure(error);
+				return { status: "success" };
+			} finally {
+				clearTimeout(timeout);
+			}
+		},
+		shutdown() {},
+	};
+}
+
+function createOneShotOtlpExporter<Internal, ResponsePayload>(options: {
+	url: string;
+	headers: Record<string, string>;
+	contentType: string;
+	fetchImpl: TelemetryFetch;
+	circuit: TelemetryTransportCircuitBreaker;
+	timeoutMillis: number;
+	componentType: string;
+	serializer: ISerializer<Internal, ResponsePayload>;
+	metricsHelper: IExporterMetricsHelper<Internal>;
+}): OTLPExporterBase<Internal> {
+	const metrics = createOtlpHttpExporterMetrics(
+		options.componentType,
+		options.metricsHelper,
+		options.url,
+		undefined,
+	);
+	const transport = createOneShotOtlpTransport(options);
+	return new OTLPExporterBase(
+		createOtlpNetworkExportDelegate(
+			{
+				timeoutMillis: options.timeoutMillis,
+				concurrencyLimit: 1,
+				compression: "none",
+			},
+			options.serializer,
+			metrics,
+			transport,
+		),
+	);
+}
+
+function disableTelemetryAfterTransportFailure(error: unknown): void {
+	if (telemetryTransportFailed) return;
+	telemetryTransportFailed = true;
+	activeConfig = undefined;
+	if (process.env.FEYNMAN_DEBUG === "1" && !telemetryStartWarningPrinted) {
+		telemetryStartWarningPrinted = true;
+		process.stderr.write(
+			`[feynman] Telemetry disabled for this session after a transport failure (${error instanceof Error ? error.message : "unknown error"}).\n`,
+		);
+	}
+}
 
 function isTelemetryDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
 	const setting = env.FEYNMAN_TELEMETRY ?? env.FEYNMAN_POSTHOG_TELEMETRY;
@@ -249,9 +419,12 @@ export function initializePostHogTelemetry(options: {
 	appVersion?: string;
 	serviceName?: string;
 	home?: string;
+	posthogFetch?: PostHogFetch;
+	otlpFetch?: TelemetryFetch;
 } = {}): PostHogTelemetryConfig | undefined {
 	if (telemetryInitialized) return activeConfig;
 	telemetryInitialized = true;
+	telemetryTransportFailed = false;
 
 	const config = resolvePostHogTelemetryConfig(options);
 	activeConfig = config;
@@ -262,14 +435,25 @@ export function initializePostHogTelemetry(options: {
 			[ATTR_SERVICE_NAME]: config.serviceName,
 			...(config.appVersion ? { [ATTR_SERVICE_VERSION]: config.appVersion } : {}),
 		});
+		const circuit = createTelemetryTransportCircuitBreaker(disableTelemetryAfterTransportFailure);
+		const defaultTelemetryFetch: TelemetryFetch = (url, fetchOptions) =>
+			fetch(url, fetchOptions);
+		const otlpFetch = options.otlpFetch ?? defaultTelemetryFetch;
 
 		tracerProvider = new NodeTracerProvider({
 			resource,
 			spanProcessors: [
 				new BatchSpanProcessor(
-					new OTLPTraceExporter({
+					createOneShotOtlpExporter<ReadableSpan[], unknown>({
 						url: `${config.host}/i/v1/traces`,
 						headers: { Authorization: `Bearer ${config.projectToken}` },
+						contentType: "application/x-protobuf",
+						fetchImpl: otlpFetch,
+						circuit,
+						timeoutMillis: 750,
+						componentType: "otlp_http_span_exporter",
+						serializer: ProtobufTraceSerializer,
+						metricsHelper: TraceExporterMetricsHelper,
 					}),
 					{ scheduledDelayMillis: 250, exportTimeoutMillis: 3000 },
 				),
@@ -281,9 +465,16 @@ export function initializePostHogTelemetry(options: {
 			resource,
 			processors: [
 				new BatchLogRecordProcessor({
-					exporter: new OTLPLogExporter({
+					exporter: createOneShotOtlpExporter<ReadableLogRecord[], unknown>({
 						url: `${config.host}/i/v1/logs`,
 						headers: { Authorization: `Bearer ${config.projectToken}` },
+						contentType: "application/json",
+						fetchImpl: otlpFetch,
+						circuit,
+						timeoutMillis: 750,
+						componentType: "otlp_http_log_exporter",
+						serializer: JsonLogsSerializer,
+						metricsHelper: LogsExporterMetricsHelper,
 					}),
 					scheduledDelayMillis: 250,
 					exportTimeoutMillis: 3000,
@@ -292,12 +483,20 @@ export function initializePostHogTelemetry(options: {
 		});
 		logs.setGlobalLoggerProvider(loggerProvider);
 
+		const defaultPostHogFetch: PostHogFetch = (url, fetchOptions) =>
+			fetch(url, fetchOptions as RequestInit);
 		posthogClient = new PostHog(config.projectToken, {
 			host: config.host,
 			flushAt: 1,
 			flushInterval: 0,
 			isServer: false,
 			disableGeoip: true,
+			fetchRetryCount: 0,
+			fetch: createTelemetryCircuitBreakerFetch(
+				options.posthogFetch ?? defaultPostHogFetch,
+				disableTelemetryAfterTransportFailure,
+				circuit,
+			),
 		});
 		posthogClient.on("error", () => {
 			if (process.env.FEYNMAN_DEBUG === "1" && !telemetryStartWarningPrinted) {
@@ -429,6 +628,7 @@ export async function shutdownPostHogTelemetry(): Promise<void> {
 	loggerProvider = undefined;
 	activeConfig = undefined;
 	telemetryInitialized = false;
+	telemetryTransportFailed = false;
 
 	await Promise.allSettled([
 		client?.shutdown(3000),

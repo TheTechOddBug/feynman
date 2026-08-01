@@ -9,12 +9,21 @@ const UNPINNED_CORE_PACKAGE_SOURCES = [
 	"npm:pi-otel",
 ] as const;
 
-export const CORE_PACKAGE_SOURCES = [
+const PREVIOUS_CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub@0.1.3",
 	"npm:pi-subagents@0.37.2",
 	"npm:pi-btw@0.4.1",
 	"npm:pi-docparser@3.0.1",
 	"npm:pi-web-access@0.15.0",
+	"npm:pi-otel@0.1.0",
+] as const;
+
+export const CORE_PACKAGE_SOURCES = [
+	"npm:@companion-ai/alpha-hub@0.1.3",
+	"npm:pi-subagents@0.38.0",
+	"npm:pi-btw@0.4.1",
+	"npm:pi-docparser@3.0.1",
+	"npm:pi-web-access@0.17.1",
 	"npm:pi-otel@0.1.0",
 ] as const;
 
@@ -45,8 +54,7 @@ const LEGACY_CORE_WITH_PI_OTEL_PACKAGE_SOURCES = [
 	"npm:pi-otel",
 ] as const;
 
-const LEGACY_PINNED_CORE_PACKAGE_SOURCES = [
-	...CORE_PACKAGE_SOURCES,
+const LEGACY_ADJACENT_PACKAGE_SOURCES = [
 	"npm:pi-markdown-preview",
 	"npm:@walterra/pi-charts",
 	"npm:pi-mermaid",
@@ -58,6 +66,16 @@ const LEGACY_PINNED_CORE_PACKAGE_SOURCES = [
 	"npm:@tmustier/pi-ralph-wiggum",
 ] as const;
 
+const LEGACY_PINNED_CORE_PACKAGE_SOURCES = [
+	...PREVIOUS_CORE_PACKAGE_SOURCES,
+	...LEGACY_ADJACENT_PACKAGE_SOURCES,
+] as const;
+
+const LEGACY_CURRENT_PINNED_CORE_PACKAGE_SOURCES = [
+	...CORE_PACKAGE_SOURCES,
+	...LEGACY_ADJACENT_PACKAGE_SOURCES,
+] as const;
+
 const LEGACY_TELEMETRY_WITH_PI_OTEL_PACKAGE_SOURCES = [
 	...LEGACY_CORE_WITH_PI_OTEL_PACKAGE_SOURCES,
 	"npm:@devkade/pi-opentelemetry",
@@ -67,7 +85,7 @@ export const NATIVE_PACKAGE_SOURCES = [
 	"npm:@kaiserlich-dev/pi-session-search",
 ] as const;
 
-const CORE_PACKAGE_UPDATE_ALIASES: Record<string, string> = {
+const OPTIONAL_PACKAGE_UPDATE_ALIASES: Record<string, string> = {
 	hindsight: "npm:@luxusai/pi-hindsight",
 	"pi-hindsight": "npm:@luxusai/pi-hindsight",
 	memory: "npm:@samfp/pi-memory",
@@ -75,6 +93,33 @@ const CORE_PACKAGE_UPDATE_ALIASES: Record<string, string> = {
 	"session-search": "npm:@kaiserlich-dev/pi-session-search",
 	"pi-session-search": "npm:@kaiserlich-dev/pi-session-search",
 };
+
+function parseNpmPackageName(source: string): string | undefined {
+	const spec = source.startsWith("npm:") ? source.slice("npm:".length) : source;
+	const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@.+)?$/);
+	return match?.[1];
+}
+
+function buildCorePackageUpdateAliases(): Record<string, string> {
+	const aliases: Record<string, string> = {};
+	for (const source of CORE_PACKAGE_SOURCES) {
+		const packageName = parseNpmPackageName(source);
+		if (!packageName) continue;
+
+		const normalizedPackageName = packageName.toLowerCase();
+		aliases[normalizedPackageName] = source;
+		const basename = normalizedPackageName.includes("/")
+			? normalizedPackageName.slice(normalizedPackageName.lastIndexOf("/") + 1)
+			: normalizedPackageName;
+		aliases[basename] = source;
+		if (basename.startsWith("pi-")) {
+			aliases[basename.slice("pi-".length)] = source;
+		}
+	}
+	return aliases;
+}
+
+const CORE_PACKAGE_UPDATE_ALIASES = buildCorePackageUpdateAliases();
 
 const REMOVED_OPTIONAL_PACKAGE_TARGETS = new Set([
 	"all-extras",
@@ -130,6 +175,25 @@ const LEGACY_DEFAULT_PACKAGE_SETS = [
 	],
 	[
 		...LEGACY_PINNED_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...LEGACY_CURRENT_PINNED_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...PREVIOUS_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:pi-generative-ui",
+	],
+	[
+		...PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+	],
+	[
+		...PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+		"npm:pi-generative-ui",
 	],
 	[
 		...CORE_PACKAGE_SOURCES,
@@ -277,13 +341,22 @@ export function resolvePackageUpdateSources(name: string, platform: NodeJS.Platf
 	if (isRemovedOptionalPackageTarget(trimmed)) {
 		throw new Error(`Removed optional package target: ${trimmed}. Use \`feynman packages list\` and install only the research-continuity presets you need.`);
 	}
-	if (trimmed.startsWith("npm:") || trimmed.startsWith("github:") || trimmed.startsWith("file:")) {
+	if (trimmed.startsWith("npm:")) {
+		const packageName = parseNpmPackageName(trimmed);
+		const configuredCoreSource = packageName && trimmed.toLowerCase() === `npm:${packageName.toLowerCase()}`
+			? CORE_PACKAGE_UPDATE_ALIASES[packageName.toLowerCase()]
+			: undefined;
+		return [configuredCoreSource ?? trimmed];
+	}
+	if (trimmed.startsWith("github:") || trimmed.startsWith("file:")) {
 		return [trimmed];
 	}
 
 	const normalized = trimmed.toLowerCase();
 	const coreSource = CORE_PACKAGE_UPDATE_ALIASES[normalized];
 	if (coreSource) return [coreSource];
+	const optionalSource = OPTIONAL_PACKAGE_UPDATE_ALIASES[normalized];
+	if (optionalSource) return [optionalSource];
 
 	const optionalSources = getOptionalPackagePresetSources(normalized, platform);
 	return optionalSources ?? [trimmed];

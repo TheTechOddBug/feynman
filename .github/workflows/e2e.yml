@@ -307,6 +307,9 @@ jobs:
           npm install --prefix "$consumer" --omit=dev --no-audit "$tarball"
           npm audit --omit=dev --prefix "$consumer"
           bin="$consumer/node_modules/.bin/feynman"
+          if command -v cygpath >/dev/null 2>&1; then
+            bin="$consumer/node_modules/.bin/feynman.cmd"
+          fi
           test "$("$bin" --version | tail -1)" = "$version"
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
@@ -335,6 +338,11 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          global_node_modules=$(npm root --global --prefix "$global_prefix")
+          if command -v cygpath >/dev/null 2>&1; then
+            global_node_modules=$(cygpath -u "$global_node_modules")
+          fi
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
 
   windows-native-installer-pr:
     if: github.event_name == 'pull_request'
@@ -374,6 +382,17 @@ jobs:
           }
           if ((Get-Item -LiteralPath $archive).Length -eq 0) {
             throw "Native archive is empty: $archive"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("feynman-native-rpc-" + [guid]::NewGuid().ToString("N"))
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $smokeRoot)
+          $bundleRoot = Join-Path $smokeRoot "feynman-$version-win32-x64"
+          $native = Join-Path $bundleRoot "feynman.cmd"
+          $nativeNode = Join-Path $bundleRoot "node/node.exe"
+          $nativeVerifier = Join-Path $bundleRoot "app/scripts/verify-installed-runtime.mjs"
+          & $nativeNode $nativeVerifier $native
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows native launcher failed installed-runtime verification: $LASTEXITCODE"
           }
 
       - name: Install candidate with Windows PowerShell 5.1

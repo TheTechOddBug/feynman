@@ -18,7 +18,12 @@ import { patchPiUndiciProxyTree } from "../../scripts/lib/pi-undici-proxy-patch.
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "../../scripts/lib/pi-session-search-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource } from "../../scripts/lib/pi-subagents-patch.mjs";
-import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "../../scripts/lib/pi-tui-patch.mjs";
+import {
+	patchPiEditorSource,
+	patchPiInteractiveThemeSource,
+	patchPiInteractiveUpdateNoticeSource,
+	patchPiTuiSource,
+} from "../../scripts/lib/pi-tui-patch.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "../../scripts/lib/pi-web-access-patch.mjs";
 
 function patchFileIfPresent(path: string, patchSource: (source: string) => string): boolean {
@@ -84,8 +89,11 @@ function resolveBundledPiVersion(appRoot: string): string | undefined {
 }
 
 function shouldPatchPiPackage(packageRoot: string, bundledPiVersion: string | undefined): boolean {
+	if (!existsSync(packageRoot) || !bundledPiVersion) {
+		return false;
+	}
 	const installedVersion = readPackageVersion(packageRoot);
-	return !bundledPiVersion || !installedVersion || installedVersion === bundledPiVersion;
+	return installedVersion === bundledPiVersion;
 }
 
 function patchScopedPiPackageFileIfPresent(
@@ -192,6 +200,14 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			patchPiAgentCoreSource,
 			bundledPiVersion,
 		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-agent-core",
+			"dist/agent-loop.js",
+			patchPiAgentCoreSource,
+			bundledPiVersion,
+		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
@@ -235,8 +251,24 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			patchPiTuiSource,
 			bundledPiVersion,
 		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-tui",
+			"dist/tui.js",
+			patchPiTuiSource,
+			bundledPiVersion,
+		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
+			"pi-tui",
+			"dist/components/editor.js",
+			patchPiEditorSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
 			"pi-tui",
 			"dist/components/editor.js",
 			patchPiEditorSource,
@@ -247,6 +279,13 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			"pi-coding-agent",
 			"dist/modes/interactive/theme/theme.js",
 			patchPiInteractiveThemeSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/modes/interactive/interactive-mode.js",
+			patchPiInteractiveUpdateNoticeSource,
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(

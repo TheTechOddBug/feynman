@@ -9,8 +9,18 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 test("Windows installer extracts into staging before replacing installed bundle", () => {
 	const installer = readFileSync(resolve(appRoot, "scripts", "install", "install.ps1"), "utf8");
 
-	assert.match(installer, /\$extractRoot = Join-Path \$tmpDir "extract"/);
+	assert.match(installer, /function Mount-ShortStagingDrive/);
+	assert.match(installer, /& subst\.exe \$drive \$TargetPath/);
+	assert.match(
+		installer,
+		/\$stagingPhysicalRoot = New-SameVolumeStagingRoot -InstallRoot \$installRoot/,
+	);
+	assert.match(installer, /\$shortStagingRoot = Mount-ShortStagingDrive -TargetPath \$stagingPhysicalRoot/);
+	assert.match(installer, /\$extractRoot = Join-Path \$shortStagingRoot "extract"/);
+	assert.match(installer, /\$env:TEMP = \$shortTempRoot/);
+	assert.match(installer, /\$env:TMP = \$shortTempRoot/);
 	assert.match(installer, /\$extractedBundleDir = Join-Path \$extractRoot \$bundleName/);
+	assert.match(installer, /\$extractedBundlePhysicalDir = Join-Path \$physicalExtractRoot \$bundleName/);
 	assert.match(installer, /Add-Type -AssemblyName System\.IO\.Compression\.FileSystem/);
 	assert.match(
 		installer,
@@ -22,13 +32,13 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.match(installer, /SHA256SUMS contains multiple checksum entries/);
 	assert.equal((installer.match(/Invoke-WebRequest/g) ?? []).length, 3);
 	assert.equal((installer.match(/-UseBasicParsing/g) ?? []).length, 3);
-	assert.match(installer, /\$backupBundleDir = Join-Path \$tmpDir "previous-bundle"/);
-	assert.match(installer, /\$backupBinDir = Join-Path \$tmpDir "previous-bin"/);
+	assert.match(installer, /\$backupBundleDir = Join-Path \$stagingPhysicalRoot "previous-bundle"/);
+	assert.match(installer, /\$backupBinDir = Join-Path \$stagingPhysicalRoot "previous-bin"/);
 	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_BACKUP/);
 	assert.match(installer, /Move-Item -LiteralPath \$installBinDir -Destination \$backupBinDir/);
-	assert.match(installer, /Move-Item -LiteralPath \$stagedBinDir -Destination \$installBinDir/);
+	assert.match(installer, /Move-Item -LiteralPath \$stagedBinPhysicalDir -Destination \$installBinDir/);
 	assert.match(installer, /FEYNMAN_INSTALL_TEST_FAIL_AFTER_BUNDLE_SWAP/);
-	assert.match(installer, /Move-Item -LiteralPath \$extractedBundleDir -Destination \$bundleDir/);
+	assert.match(installer, /Move-Item -LiteralPath \$extractedBundlePhysicalDir -Destination \$bundleDir/);
 	assert.match(installer, /\$candidatePs1 = Join-Path \$extractedBundleDir "feynman\.ps1"/);
 	assert.match(
 		installer,
@@ -43,6 +53,10 @@ test("Windows installer extracts into staging before replacing installed bundle"
 	assert.doesNotMatch(installer, /\$resolvedCommand\.Source -ne \$shimPath/);
 	assert.doesNotMatch(installer, /Move-Item -LiteralPath \$shimCandidate -Destination \$shimPath/);
 	assert.doesNotMatch(installer, /Expand-Archive/);
+	assert.match(installer, /Dismount-ShortStagingDrive -DriveRoot \$shortStagingRoot/);
+	assert.match(installer, /Restore-ProcessEnvironmentVariable -Name "TEMP"/);
+	assert.match(installer, /Restore-ProcessEnvironmentVariable -Name "TMP"/);
+	assert.match(installer, /Installer cleanup also failed/);
 });
 
 test("website Windows installer stays synced with the packaged installer", () => {
@@ -61,6 +75,18 @@ test("Windows installer verifier defines every strict-mode install path", () => 
 	assert.match(verifier, /-ExecutionPolicy Restricted/);
 	assert.match(verifier, /PATH bin must not contain a policy-blocked feynman\.ps1 shim/);
 	assert.match(verifier, /\$servedArchive = Join-Path \$testRoot \$archiveName/);
+	assert.match(verifier, /\$env:TEMP = \$longTempRoot/);
+	assert.match(verifier, /\$env:TMP = \$longTempRoot/);
+	assert.match(verifier, /Mount-OccupiedTestDrive -TargetPath \$testRoot/);
+	assert.match(verifier, /Assert-NoInstallerStagingLeaks/);
+	assert.match(verifier, /short-drive Windows MAX_PATH safety budget/);
+	assert.match(verifier, /getRecursionDetectionPlugin\.browser\.js/);
+	assert.doesNotMatch(verifier, /\$reportedAwsEntryName\.Length -ne \d+/);
+	assert.match(verifier, /\$maximumExtractedPathLength = 259/);
+	assert.match(verifier, /\$maximumArchiveEntryLength =/);
+	assert.match(verifier, /\$longFixtureExtractedPathLength -ne \$maximumExtractedPathLength/);
+	assert.match(verifier, /Successful compact replacement did not install the reported AWS fixture entry/);
+	assert.match(verifier, /Successful compact replacement did not install the MAX_PATH boundary fixture entry/);
 	assert.match(verifier, /Exact-candidate replacement retained the old bundle/);
 	assert.match(verifier, /\$fixtureRoot = Join-Path \$testRoot "compact-fixture"/);
 	assert.match(
