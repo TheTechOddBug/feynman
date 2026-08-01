@@ -1,5 +1,5 @@
 /**
- * Temporary Pi 0.82.1 correctness patches for:
+ * Temporary Pi 0.83.0 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7150
  * - https://github.com/earendil-works/pi/issues/7053
  *
@@ -14,11 +14,11 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	]),
 	piAi: Object.freeze(["dist/api/transform-messages.js"]),
 });
-export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.82.1";
+export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.83.0";
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
-	agentSession: "Feynman Pi 0.82.1 correctness patch: issues #7150 and #7053",
-	sessionManager: "Feynman Pi 0.82.1 correctness patch: restore eager tool results",
-	transformMessages: "Feynman Pi 0.82.1 correctness patch: order eager tool results",
+	agentSession: "Feynman Pi 0.83.0 correctness patch: issues #7150 and #7053",
+	sessionManager: "Feynman Pi 0.83.0 correctness patch: restore eager tool results",
+	transformMessages: "Feynman Pi 0.83.0 correctness patch: order eager tool results",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
@@ -114,7 +114,9 @@ export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = 
 function replaceRequired(source, original, replacement, label) {
 	const first = source.indexOf(original);
 	if (first === -1 || source.indexOf(original, first + original.length) !== -1) {
-		throw new Error(`Unsupported Pi 0.82.1 ${label} layout; remove or update the runtime correctness patch`);
+		throw new Error(
+			`Unsupported Pi ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION} ${label} layout; remove or update the runtime correctness patch`,
+		);
 	}
 	return source.replace(original, replacement);
 }

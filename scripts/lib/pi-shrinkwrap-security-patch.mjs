@@ -5,9 +5,9 @@ import { dirname, resolve } from "node:path";
 const require = createRequire(import.meta.url);
 
 const SAFE_BRACE_EXPANSION = {
-	version: "5.0.8",
-	resolved: "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.8.tgz",
-	integrity: "sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg==",
+	version: "5.0.9",
+	resolved: "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz",
+	integrity: "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==",
 	license: "MIT",
 	dependencies: { "balanced-match": "^4.0.2" },
 	engines: { node: "20 || >=22" },
@@ -40,7 +40,7 @@ export function patchPiCodingAgentShrinkwrapSource(source) {
 	if (entry?.version === SAFE_BRACE_EXPANSION.version) {
 		return source;
 	}
-	if (!entry || !["5.0.6", "5.0.7"].includes(entry.version)) {
+	if (!entry || !["5.0.6", "5.0.7", "5.0.8"].includes(entry.version)) {
 		throw new Error(`Unsupported Pi brace-expansion shrinkwrap entry: ${entry?.version ?? "missing"}`);
 	}
 	shrinkwrap.packages["node_modules/brace-expansion"] = SAFE_BRACE_EXPANSION;
@@ -57,7 +57,7 @@ export function patchPiPackageLockSource(source) {
 		if (entry?.version === SAFE_BRACE_EXPANSION.version) {
 			continue;
 		}
-		if (!entry || !["5.0.6", "5.0.7"].includes(entry.version)) {
+		if (!entry || !["5.0.6", "5.0.7", "5.0.8"].includes(entry.version)) {
 			throw new Error(`Unsupported Pi brace-expansion package-lock entry: ${entry?.version ?? "missing"}`);
 		}
 		lockfile.packages[packagePath] = SAFE_BRACE_EXPANSION;
@@ -67,9 +67,10 @@ export function patchPiPackageLockSource(source) {
 }
 
 /**
- * Pi 0.82.1 still shrinkwraps vulnerable brace-expansion 5.0.7. Replace only
- * that nested package with the verified 5.0.8 tree and update Pi's published
- * shrinkwrap metadata. Remove this patch after Pi ships brace-expansion >=5.0.8.
+ * Pi 0.83.0 still shrinkwraps an older brace-expansion release. Replace only
+ * the reviewed 5.0.6-5.0.8 trees with verified 5.0.9 and update Pi's published
+ * shrinkwrap metadata. Remove this patch after Pi ships brace-expansion >=5.0.8,
+ * the first release outside the advisory range.
  */
 export function patchPiBraceExpansionTree(nodeModulesPath, fallbackSafePackagePath) {
 	const piRoots = ["@earendil-works", "@mariozechner"]
@@ -88,7 +89,7 @@ export function patchPiBraceExpansionTree(nodeModulesPath, fallbackSafePackagePa
 		const nestedPackagePath = resolve(piRoot, "node_modules", "brace-expansion");
 		const nestedVersion = readPackageVersion(nestedPackagePath);
 		if (nestedVersion !== SAFE_BRACE_EXPANSION.version) {
-			if (nestedVersion && !["5.0.6", "5.0.7"].includes(nestedVersion)) {
+			if (nestedVersion && !["5.0.6", "5.0.7", "5.0.8"].includes(nestedVersion)) {
 				throw new Error(`Unsupported installed Pi brace-expansion version: ${nestedVersion}`);
 			}
 			const safePackagePath = resolveSafePackagePath(nodeModulesPath, fallbackSafePackagePath);

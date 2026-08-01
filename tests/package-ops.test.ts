@@ -9,14 +9,29 @@ import {
 	updateConfiguredPackages,
 } from "../src/pi/package-ops.js";
 
-function createInstalledGlobalPackage(homeRoot: string, packageName: string, version = "1.0.0"): void {
-	const packageDir = resolve(homeRoot, "npm-global", "lib", "node_modules", packageName);
+function createInstalledPackage(packageDir: string, packageName: string, version = "1.0.0"): void {
 	mkdirSync(packageDir, { recursive: true });
 	writeFileSync(
 		join(packageDir, "package.json"),
 		JSON.stringify({ name: packageName, version }, null, 2) + "\n",
 		"utf8",
 	);
+}
+
+function createInstalledGlobalPackage(homeRoot: string, packageName: string, version = "1.0.0"): void {
+	createInstalledPackage(resolve(homeRoot, "npm-global", "lib", "node_modules", packageName), packageName, version);
+}
+
+function createInstalledManagedPackage(agentDir: string, packageName: string, version = "1.0.0"): void {
+	createInstalledPackage(resolve(agentDir, "npm", "node_modules", packageName), packageName, version);
+}
+
+function createInstalledProjectPackage(workingDir: string, packageName: string, version = "1.0.0"): void {
+	createInstalledPackage(resolve(workingDir, ".feynman", "npm", "node_modules", packageName), packageName, version);
+}
+
+function readInstalledPackageVersion(packageRoot: string): string {
+	return JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version as string;
 }
 
 function writeSettings(agentDir: string, settings: Record<string, unknown>): void {
@@ -39,6 +54,44 @@ function writeFakeNpmScript(root: string, body: string): string {
 	return scriptPath;
 }
 
+function writeFakeUpdatingNpmScript(
+	root: string,
+	logPath: string,
+	versions: Record<string, string>,
+	options?: { leaveStale?: string[] },
+): string {
+	return writeFakeNpmScript(root, [
+		`import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";`,
+		`import { resolve } from "node:path";`,
+		`const args = process.argv.slice(2);`,
+		`const versions = ${JSON.stringify(versions)};`,
+		`const leaveStale = new Set(${JSON.stringify(options?.leaveStale ?? [])});`,
+		`if (args.length === 2 && args[0] === "root" && args[1] === "-g") {`,
+		`  console.log(resolve(${JSON.stringify(root)}, "npm-global", "lib", "node_modules"));`,
+		`  process.exit(0);`,
+		`}`,
+		`if (args.length >= 4 && args[0] === "view" && args[2] === "version" && args[3] === "--json") {`,
+		`  console.log(JSON.stringify(versions[args[1]] ?? "1.0.0"));`,
+		`  process.exit(0);`,
+		`}`,
+		`appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n", "utf8");`,
+		`const prefixIndex = args.indexOf("--prefix");`,
+		`const prefix = prefixIndex >= 0 ? args[prefixIndex + 1] : undefined;`,
+		`if (args.includes("install") && prefix) {`,
+		`  const nodeModulesRoot = args.includes("-g")`,
+		`    ? resolve(prefix, "lib", "node_modules")`,
+		`    : resolve(prefix, "node_modules");`,
+		`  for (const [name, version] of Object.entries(versions)) {`,
+		`    if (leaveStale.has(name) || !args.some((arg) => arg === name || arg.startsWith(name + "@"))) continue;`,
+		`    const packageRoot = resolve(nodeModulesRoot, name);`,
+		`    mkdirSync(packageRoot, { recursive: true });`,
+		`    writeFileSync(resolve(packageRoot, "package.json"), JSON.stringify({ name, version }, null, 2) + "\\n", "utf8");`,
+		`  }`,
+		`}`,
+		"process.exit(0);",
+	].join("\n"));
+}
+
 const SESSION_SEARCH_UPSTREAM_INDEXER = `
 export async function indexAllSessions() {
     const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
@@ -58,6 +111,10 @@ function writeFakeSessionSearchNpmScript(root: string, logPath?: string): string
 		`const args = process.argv.slice(2);`,
 		`if (args.length === 2 && args[0] === "root" && args[1] === "-g") {`,
 		`  console.log(resolve(${JSON.stringify(root)}, "npm-global", "lib", "node_modules"));`,
+		`  process.exit(0);`,
+		`}`,
+		`if (args.length >= 4 && args[0] === "view" && args[2] === "version" && args[3] === "--json") {`,
+		`  console.log(JSON.stringify("1.1.3"));`,
 		`  process.exit(0);`,
 		`}`,
 		logPath ? `appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n", "utf8");` : "",
@@ -233,62 +290,6 @@ test("installPackageSources installs Pi runtime peers beside Pi packages", async
 	assert.ok(invocation.includes(`@mariozechner/pi-tui@npm:@earendil-works/pi-tui@${piRuntimeVersion}`));
 });
 
-test("installPackageSources derives legacy Pi aliases from current runtime peers", async () => {
-	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
-	const workingDir = resolve(root, "project");
-	const agentDir = resolve(root, "agent");
-	const logPath = resolve(root, "npm-invocations.jsonl");
-	mkdirSync(workingDir, { recursive: true });
-
-	const scriptPath = writeFakeNpmScript(root, [
-		`import { appendFileSync } from "node:fs";`,
-		`appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(process.argv.slice(2)) + "\\n", "utf8");`,
-		"process.exit(0);",
-	].join("\n"));
-
-	writeSettings(agentDir, {
-		npmCommand: [process.execPath, scriptPath],
-	});
-
-	const appRoot = resolve(import.meta.dirname ?? __dirname, "..");
-	const bundledRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
-	const legacyPackages = {
-		"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
-		"@mariozechner/pi-coding-agent": "@earendil-works/pi-coding-agent",
-		"@mariozechner/pi-ai": "@earendil-works/pi-ai",
-		"@mariozechner/pi-tui": "@earendil-works/pi-tui",
-	};
-
-	const createdPaths: string[] = [];
-	try {
-		for (const [dirName, realName] of Object.entries(legacyPackages)) {
-			const packageRoot = resolve(bundledRoot, dirName);
-			mkdirSync(packageRoot, { recursive: true });
-			createdPaths.push(packageRoot);
-			writeFileSync(
-				resolve(packageRoot, "package.json"),
-				JSON.stringify({ name: realName, version: "0.79.1" }, null, 2) + "\n",
-				"utf8",
-			);
-		}
-
-		const result = await installPackageSources(workingDir, agentDir, ["npm:@luxusai/pi-hindsight"]);
-
-		assert.deepEqual(result.installed, ["npm:@luxusai/pi-hindsight"]);
-		const invocation = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[])[0] ?? [];
-		const piRuntimeVersion = getRootPiRuntimeVersion();
-		assert.ok(invocation.includes(`@mariozechner/pi-agent-core@npm:@earendil-works/pi-agent-core@${piRuntimeVersion}`));
-		assert.ok(invocation.includes(`@mariozechner/pi-coding-agent@npm:@earendil-works/pi-coding-agent@${piRuntimeVersion}`));
-		assert.ok(invocation.includes(`@mariozechner/pi-ai@npm:@earendil-works/pi-ai@${piRuntimeVersion}`));
-		assert.ok(invocation.includes(`@mariozechner/pi-tui@npm:@earendil-works/pi-tui@${piRuntimeVersion}`));
-	} finally {
-		for (const packageRoot of createdPaths) {
-			rmSync(packageRoot, { recursive: true, force: true });
-		}
-		rmSync(resolve(bundledRoot, "@mariozechner"), { recursive: true, force: true });
-	}
-});
-
 test("installPackageSources patches installed Pi packages before returning", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const workingDir = resolve(root, "project");
@@ -315,92 +316,330 @@ test("installPackageSources patches installed Pi packages before returning", asy
 	assert.doesNotMatch(patched, /const sessionsDir = path\.join\(os\.homedir\(\), "\.pi", "agent", "sessions"\)/);
 });
 
-test("updateConfiguredPackages batches multiple npm updates into a single install per scope", async () => {
+test("updateConfiguredPackages updates the managed package root Pi actually resolves", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const workingDir = resolve(root, "project");
 	const agentDir = resolve(root, "agent");
 	const logPath = resolve(root, "npm-invocations.jsonl");
 	mkdirSync(workingDir, { recursive: true });
 
-	const scriptPath = writeFakeNpmScript(root, [
-		`import { appendFileSync } from "node:fs";`,
-		`import { resolve } from "node:path";`,
-		`const args = process.argv.slice(2);`,
-		`if (args.length === 2 && args[0] === "root" && args[1] === "-g") {`,
-		`  console.log(resolve(${JSON.stringify(root)}, "npm-global", "lib", "node_modules"));`,
-		`  process.exit(0);`,
-		`}`,
-		`if (args.length >= 4 && args[0] === "view" && args[2] === "version" && args[3] === "--json") {`,
-		`  console.log(JSON.stringify("2.0.0"));`,
-		`  process.exit(0);`,
-		`}`,
-		`appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n", "utf8");`,
-		"process.exit(0);",
-	].join("\n"));
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, {
+		"test-one": "2.0.0",
+		"test-two": "2.0.0",
+	});
 
 	writeSettings(agentDir, {
 		npmCommand: [process.execPath, scriptPath],
 		packages: ["npm:test-one", "npm:test-two"],
 	});
-	createInstalledGlobalPackage(root, "test-one", "1.0.0");
-	createInstalledGlobalPackage(root, "test-two", "1.0.0");
+	createInstalledManagedPackage(agentDir, "test-one", "1.0.0");
+	createInstalledManagedPackage(agentDir, "test-two", "1.0.0");
+	createInstalledGlobalPackage(root, "test-one", "2.0.0");
+	createInstalledGlobalPackage(root, "test-two", "2.0.0");
 
-	const originalFetch = globalThis.fetch;
-	globalThis.fetch = (async () => ({
-		ok: true,
-		json: async () => ({ version: "2.0.0" }),
-	})) as unknown as typeof fetch;
-
-	try {
-		const result = await updateConfiguredPackages(workingDir, agentDir);
-		assert.deepEqual(result.skipped, []);
-		assert.deepEqual(result.updated.sort(), ["npm:test-one", "npm:test-two"]);
-	} finally {
-		globalThis.fetch = originalFetch;
-	}
+	const result = await updateConfiguredPackages(workingDir, agentDir);
+	assert.deepEqual(result.skipped, []);
+	assert.deepEqual(result.updated.sort(), ["npm:test-one", "npm:test-two"]);
 
 	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
 	assert.equal(invocations.length, 1);
-	assert.ok(invocations[0]?.includes("install"));
-	assert.ok(invocations[0]?.includes("test-one@latest"));
-	assert.ok(invocations[0]?.includes("test-two@latest"));
+	const invocation = invocations[0] ?? [];
+	assert.ok(invocation.includes("install"));
+	assert.ok(invocation.includes("test-one@latest"));
+	assert.ok(invocation.includes("test-two@latest"));
+	assert.ok(!invocation.includes("-g"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(agentDir, "npm"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-one")),
+		"2.0.0",
+	);
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-two")),
+		"2.0.0",
+	);
+	assert.equal(
+		readInstalledPackageVersion(resolve(root, "npm-global", "lib", "node_modules", "test-one")),
+		"2.0.0",
+	);
 });
 
-test("updateConfiguredPackages updates a specific npm package through the npm install path", async () => {
+test("updateConfiguredPackages reconciles stale exact-pinned packages omitted by Pi update discovery", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const workingDir = resolve(root, "project");
 	const agentDir = resolve(root, "agent");
 	const logPath = resolve(root, "npm-invocations.jsonl");
 	mkdirSync(workingDir, { recursive: true });
 
-	const scriptPath = writeFakeNpmScript(root, [
-		`import { appendFileSync } from "node:fs";`,
-		`import { resolve } from "node:path";`,
-		`const args = process.argv.slice(2);`,
-		`if (args.length === 2 && args[0] === "root" && args[1] === "-g") {`,
-		`  console.log(resolve(${JSON.stringify(root)}, "npm-global", "lib", "node_modules"));`,
-		`  process.exit(0);`,
-		`}`,
-		`appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n", "utf8");`,
-		"process.exit(0);",
-	].join("\n"));
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "test-pinned": "2.0.0" });
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-pinned@2.0.0"],
+	});
+	createInstalledManagedPackage(agentDir, "test-pinned", "1.0.0");
 
+	const result = await updateConfiguredPackages(workingDir, agentDir);
+
+	assert.deepEqual(result, { updated: ["npm:test-pinned@2.0.0"], skipped: [] });
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	assert.equal(invocations.length, 1);
+	const invocation = invocations[0] ?? [];
+	assert.ok(invocation.includes("test-pinned@2.0.0"));
+	assert.ok(!invocation.includes("test-pinned@latest"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(agentDir, "npm"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-pinned")),
+		"2.0.0",
+	);
+});
+
+test("updateConfiguredPackages leaves current exact-pinned packages untouched", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "test-pinned": "2.0.0" });
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-pinned@2.0.0"],
+	});
+	createInstalledManagedPackage(agentDir, "test-pinned", "2.0.0");
+
+	const result = await updateConfiguredPackages(workingDir, agentDir);
+
+	assert.deepEqual(result, { updated: [], skipped: [] });
+	assert.equal(existsSync(logPath), false);
+});
+
+test("updateConfiguredPackages preserves npm range and tag selectors as unpinned sources", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, {
+		"test-range": "1.0.0",
+		"test-tag": "1.0.0",
+	});
+	const rangeSource = "npm:test-range@^1.0.0";
+	const tagSource = "npm:test-tag@next";
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: [rangeSource, tagSource],
+	});
+	createInstalledManagedPackage(agentDir, "test-range", "0.9.0");
+	createInstalledManagedPackage(agentDir, "test-tag", "0.9.0");
+
+	assert.deepEqual(
+		await updateConfiguredPackages(workingDir, agentDir, rangeSource),
+		{ updated: [rangeSource], skipped: [] },
+	);
+	assert.deepEqual(
+		await updateConfiguredPackages(workingDir, agentDir, tagSource),
+		{ updated: [tagSource], skipped: [] },
+	);
+
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	assert.equal(invocations.length, 2);
+	assert.ok(invocations[0]?.includes("test-range@^1.0.0"));
+	assert.ok(!invocations[0]?.includes("test-range@latest"));
+	assert.ok(invocations[1]?.includes("test-tag@next"));
+	assert.ok(!invocations[1]?.includes("test-tag@latest"));
+});
+
+test("updateConfiguredPackages rejects a pinned update that did not reach the configured version", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(
+		root,
+		logPath,
+		{ "test-pinned": "2.0.0" },
+		{ leaveStale: ["test-pinned"] },
+	);
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-pinned@2.0.0"],
+	});
+	createInstalledManagedPackage(agentDir, "test-pinned", "1.0.0");
+
+	await assert.rejects(
+		updateConfiguredPackages(workingDir, agentDir),
+		/Package updates remain available after install: npm:test-pinned@2\.0\.0/,
+	);
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-pinned")),
+		"1.0.0",
+	);
+});
+
+test("updateConfiguredPackages preserves global install semantics for fallback packages", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "test-global": "2.0.0" });
+
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-global"],
+	});
+	createInstalledGlobalPackage(root, "test-global", "1.0.0");
+
+	const result = await updateConfiguredPackages(workingDir, agentDir);
+
+	assert.deepEqual(result.skipped, []);
+	assert.deepEqual(result.updated, ["npm:test-global"]);
+
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	assert.equal(invocations.length, 1);
+	const invocation = invocations[0] ?? [];
+	assert.ok(invocation.includes("install"));
+	assert.ok(invocation.includes("-g"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(root, "npm-global"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(root, "npm-global", "lib", "node_modules", "test-global")),
+		"2.0.0",
+	);
+	assert.equal(existsSync(resolve(agentDir, "npm", "node_modules", "test-global")), false);
+});
+
+test("updateConfiguredPackages updates project packages in the project install root", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(resolve(workingDir, ".feynman"), { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "test-project": "2.0.0" });
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+	});
+	writeFileSync(
+		resolve(workingDir, ".feynman", "settings.json"),
+		JSON.stringify({ packages: ["npm:test-project"] }, null, 2) + "\n",
+		"utf8",
+	);
+	createInstalledProjectPackage(workingDir, "test-project", "1.0.0");
+
+	const result = await updateConfiguredPackages(workingDir, agentDir);
+
+	assert.deepEqual(result, { updated: ["npm:test-project"], skipped: [] });
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	assert.equal(invocations.length, 1);
+	const invocation = invocations[0] ?? [];
+	assert.ok(!invocation.includes("-g"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(workingDir, ".feynman", "npm"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(workingDir, ".feynman", "npm", "node_modules", "test-project")),
+		"2.0.0",
+	);
+});
+
+test("updateConfiguredPackages targets a specific package's resolved managed root", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "@samfp/pi-memory": "2.0.0" });
 	writeSettings(agentDir, {
 		npmCommand: [process.execPath, scriptPath],
 		packages: ["npm:@samfp/pi-memory"],
 	});
-	createInstalledGlobalPackage(root, "@samfp/pi-memory", "1.0.0");
+	createInstalledManagedPackage(agentDir, "@samfp/pi-memory", "1.0.0");
+	createInstalledGlobalPackage(root, "@samfp/pi-memory", "2.0.0");
 
 	const result = await updateConfiguredPackages(workingDir, agentDir, "npm:@samfp/pi-memory");
 
-	assert.deepEqual(result.skipped, []);
-	assert.deepEqual(result.updated, ["npm:@samfp/pi-memory"]);
-
+	assert.deepEqual(result, { updated: ["npm:@samfp/pi-memory"], skipped: [] });
 	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
 	assert.equal(invocations.length, 1);
-	assert.ok(invocations[0]?.includes("install"));
-	assert.ok(invocations[0]?.includes("--legacy-peer-deps"));
-	assert.ok(invocations[0]?.includes("@samfp/pi-memory@latest"));
+	const invocation = invocations[0] ?? [];
+	assert.ok(invocation.includes("install"));
+	assert.ok(invocation.includes("--legacy-peer-deps"));
+	assert.ok(invocation.includes("@samfp/pi-memory@latest"));
+	assert.ok(!invocation.includes("-g"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(agentDir, "npm"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "@samfp", "pi-memory")),
+		"2.0.0",
+	);
+});
+
+test("updateConfiguredPackages targets the effective project package when a source exists in both scopes", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(resolve(workingDir, ".feynman"), { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, { "test-duplicate": "2.0.0" });
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-duplicate"],
+	});
+	writeFileSync(
+		resolve(workingDir, ".feynman", "settings.json"),
+		JSON.stringify({ packages: ["npm:test-duplicate"] }, null, 2) + "\n",
+		"utf8",
+	);
+	createInstalledManagedPackage(agentDir, "test-duplicate", "1.0.0");
+	createInstalledProjectPackage(workingDir, "test-duplicate", "1.0.0");
+
+	const result = await updateConfiguredPackages(workingDir, agentDir, "npm:test-duplicate");
+
+	assert.deepEqual(result, { updated: ["npm:test-duplicate"], skipped: [] });
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	assert.equal(invocations.length, 1);
+	const invocation = invocations[0] ?? [];
+	assert.ok(!invocation.includes("-g"));
+	assert.equal(invocation[invocation.indexOf("--prefix") + 1], resolve(workingDir, ".feynman", "npm"));
+	assert.equal(
+		readInstalledPackageVersion(resolve(workingDir, ".feynman", "npm", "node_modules", "test-duplicate")),
+		"2.0.0",
+	);
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-duplicate")),
+		"1.0.0",
+	);
+});
+
+test("updateConfiguredPackages rechecks attempted sources before reporting success", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const workingDir = resolve(root, "project");
+	const agentDir = resolve(root, "agent");
+	const logPath = resolve(root, "npm-invocations.jsonl");
+	mkdirSync(workingDir, { recursive: true });
+
+	const scriptPath = writeFakeUpdatingNpmScript(
+		root,
+		logPath,
+		{ "test-stale": "2.0.0" },
+		{ leaveStale: ["test-stale"] },
+	);
+	writeSettings(agentDir, {
+		npmCommand: [process.execPath, scriptPath],
+		packages: ["npm:test-stale"],
+	});
+	createInstalledManagedPackage(agentDir, "test-stale", "1.0.0");
+
+	await assert.rejects(
+		updateConfiguredPackages(workingDir, agentDir),
+		/Package updates remain available after install: npm:test-stale/,
+	);
+	assert.equal(
+		readInstalledPackageVersion(resolve(agentDir, "npm", "node_modules", "test-stale")),
+		"1.0.0",
+	);
 });
 
 test("updateConfiguredPackages patches updated Pi package roots before returning", async () => {
@@ -427,7 +666,9 @@ test("updateConfiguredPackages patches updated Pi package roots before returning
 		Object.defineProperty(process.versions, "node", { value: originalVersion, configurable: true });
 	}
 
-	const invocations = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]);
+	const invocations = readFileSync(logPath, "utf8").trim().split("\n")
+		.map((line) => JSON.parse(line) as string[])
+		.filter((args) => args.includes("install"));
 	assert.equal(invocations.length, 1);
 	assert.ok(invocations[0]?.includes("@kaiserlich-dev/pi-session-search@latest"));
 	const patched = readFileSync(getSessionSearchIndexerPath(root), "utf8");
@@ -442,21 +683,10 @@ test("updateConfiguredPackages skips native package updates on unsupported Node 
 	const logPath = resolve(root, "npm-invocations.jsonl");
 	mkdirSync(workingDir, { recursive: true });
 
-	const scriptPath = writeFakeNpmScript(root, [
-		`import { appendFileSync } from "node:fs";`,
-		`import { resolve } from "node:path";`,
-		`const args = process.argv.slice(2);`,
-		`if (args.length === 2 && args[0] === "root" && args[1] === "-g") {`,
-		`  console.log(resolve(${JSON.stringify(root)}, "npm-global", "lib", "node_modules"));`,
-		`  process.exit(0);`,
-		`}`,
-		`if (args.length >= 4 && args[0] === "view" && args[2] === "version" && args[3] === "--json") {`,
-		`  console.log(JSON.stringify("2.0.0"));`,
-		`  process.exit(0);`,
-		`}`,
-		`appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n", "utf8");`,
-		"process.exit(0);",
-	].join("\n"));
+	const scriptPath = writeFakeUpdatingNpmScript(root, logPath, {
+		"@kaiserlich-dev/pi-session-search": "2.0.0",
+		"test-regular": "2.0.0",
+	});
 
 	writeSettings(agentDir, {
 		npmCommand: [process.execPath, scriptPath],
@@ -465,12 +695,7 @@ test("updateConfiguredPackages skips native package updates on unsupported Node 
 	createInstalledGlobalPackage(root, "@kaiserlich-dev/pi-session-search", "1.0.0");
 	createInstalledGlobalPackage(root, "test-regular", "1.0.0");
 
-	const originalFetch = globalThis.fetch;
 	const originalVersion = process.versions.node;
-	globalThis.fetch = (async () => ({
-		ok: true,
-		json: async () => ({ version: "2.0.0" }),
-	})) as unknown as typeof fetch;
 	Object.defineProperty(process.versions, "node", { value: "24.0.0", configurable: true });
 
 	try {
@@ -478,7 +703,6 @@ test("updateConfiguredPackages skips native package updates on unsupported Node 
 		assert.deepEqual(result.updated, ["npm:test-regular"]);
 		assert.deepEqual(result.skipped, ["npm:@kaiserlich-dev/pi-session-search"]);
 	} finally {
-		globalThis.fetch = originalFetch;
 		Object.defineProperty(process.versions, "node", { value: originalVersion, configurable: true });
 	}
 

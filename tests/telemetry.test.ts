@@ -10,11 +10,17 @@ import {
 	DEFAULT_POSTHOG_PROJECT_TOKEN,
 	buildPostHogOtelEnv,
 	clearPostHogOtelEnv,
+	captureTelemetryEventImmediate,
+	createTelemetryCircuitBreakerFetch,
+	createOneShotOtlpTransport,
+	createTelemetryTransportCircuitBreaker,
 	getCliTelemetryMetadata,
 	getPostHogOtelEnv,
+	initializePostHogTelemetry,
 	normalizeTelemetryProperties,
 	resolvePostHogTelemetryConfig,
 	sanitizeTelemetryException,
+	shutdownPostHogTelemetry,
 	telemetryErrorProperties,
 } from "../src/telemetry/posthog.js";
 
@@ -105,6 +111,89 @@ test("getPostHogOtelEnv clears inherited telemetry env when telemetry is disable
 			process.env.FEYNMAN_TELEMETRY = previousTelemetrySetting;
 		}
 	}
+});
+
+test("PostHog transport failures open a silent session circuit breaker", async () => {
+	const home = mkdtempSync(join(tmpdir(), "feynman-telemetry-failure-home-"));
+	let fetchAttempts = 0;
+	const originalConsoleError = console.error;
+	const consoleErrors: unknown[][] = [];
+	console.error = (...args: unknown[]) => {
+		consoleErrors.push(args);
+	};
+
+	try {
+		initializePostHogTelemetry({
+			home,
+			appVersion: "0.3.10",
+			serviceName: "feynman-test",
+			posthogFetch: async () => {
+				fetchAttempts += 1;
+				throw new Error("simulated unreachable telemetry endpoint");
+			},
+		});
+		await captureTelemetryEventImmediate("transport_failure_probe");
+		await captureTelemetryEventImmediate("transport_failure_probe_after_circuit");
+		await shutdownPostHogTelemetry();
+	} finally {
+		console.error = originalConsoleError;
+		await shutdownPostHogTelemetry();
+	}
+
+	assert.equal(fetchAttempts, 1);
+	assert.deepEqual(consoleErrors, []);
+});
+
+test("PostHog circuit breaker drops later requests after a non-success response", async () => {
+	let fetchAttempts = 0;
+	const failures: unknown[] = [];
+	const circuitFetch = createTelemetryCircuitBreakerFetch(
+		async () => {
+			fetchAttempts += 1;
+			return new Response("unavailable", { status: 503 });
+		},
+		(error) => failures.push(error),
+	);
+
+	const request = { method: "POST" as const, headers: {} };
+	assert.equal((await circuitFetch("https://example.test/batch", request)).status, 204);
+	assert.equal((await circuitFetch("https://example.test/batch", request)).status, 204);
+	assert.equal(fetchAttempts, 1);
+	assert.equal(failures.length, 1);
+	assert.match(failures[0] instanceof Error ? failures[0].message : "", /HTTP 503/);
+});
+
+test("OTLP transport makes one silent attempt and shares the open circuit with PostHog", async () => {
+	let otlpAttempts = 0;
+	let posthogAttempts = 0;
+	const failures: unknown[] = [];
+	const circuit = createTelemetryTransportCircuitBreaker((error) => failures.push(error));
+	const transport = createOneShotOtlpTransport({
+		url: "https://example.test/i/v1/traces",
+		headers: { Authorization: "Bearer test" },
+		contentType: "application/x-protobuf",
+		fetchImpl: async () => {
+			otlpAttempts += 1;
+			throw new Error("simulated blocked collector");
+		},
+		circuit,
+	});
+	const posthogFetch = createTelemetryCircuitBreakerFetch(
+		async () => {
+			posthogAttempts += 1;
+			return new Response(null, { status: 204 });
+		},
+		(error) => failures.push(error),
+		circuit,
+	);
+
+	assert.deepEqual(await transport.send(new Uint8Array([1, 2, 3]), 50), { status: "success" });
+	assert.deepEqual(await transport.send(new Uint8Array([4, 5, 6]), 50), { status: "success" });
+	assert.equal((await posthogFetch("https://example.test/batch", { method: "POST", headers: {} })).status, 204);
+	assert.equal(otlpAttempts, 1);
+	assert.equal(posthogAttempts, 0);
+	assert.equal(failures.length, 1);
+	assert.equal(circuit.isOpen(), true);
 });
 
 test("getPostHogOtelEnv clears inherited collectors before setting PostHog routes", () => {

@@ -125,10 +125,11 @@ export function patchPiUndiciPackageLockSource(source, requiredPiVersion) {
 }
 
 /**
- * Pi 0.82.1 shrinkwraps Undici 8.5.0, whose EnvHttpProxyAgent tunnels plain
+ * Pi 0.83.0 shrinkwraps Undici 8.5.0, whose EnvHttpProxyAgent tunnels plain
  * HTTP requests by default. Replace that nested tree with 8.9.0 so Feynman and
  * Pi both inherit Undici's fixed absolute-form forwarding. Remove this patch
- * after a supported Pi release depends on Undici >=8.7.0.
+ * after a supported Pi release depends on Undici >=8.9.0, the first release
+ * outside every currently published advisory range affecting Pi's copy.
  */
 export function patchPiUndiciProxyTree(nodeModulesPath, fallbackPackagePath, requiredPiVersion) {
 	const piRoots = ["@earendil-works", "@mariozechner"]

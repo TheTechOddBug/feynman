@@ -47,7 +47,7 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 	assert.equal(runtimeLock.packages["node_modules/undici"]?.version, "8.9.0");
 	for (const [packagePath, entry] of Object.entries(runtimeLock.packages)) {
 		if (packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion")) {
-			assert.equal(entry.version, "5.0.8");
+			assert.equal(entry.version, "5.0.9");
 		}
 		if (packagePath.endsWith("/pi-coding-agent/node_modules/undici")) {
 			assert.equal(entry.version, "8.9.0");

@@ -1,7 +1,59 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveChildProcessCommand } from "../scripts/lib/child-process-command.mjs";
+import {
+	resolveChildProcessCommand,
+	resolveChildProcessExecutable,
+} from "../scripts/lib/child-process-command.mjs";
+
+test("Windows extensionless npm launchers prefer the CMD shim over the existing Git Bash shim", () => {
+	const command = "C:\\consumer\\node_modules\\.bin\\feynman";
+	const fileExists = (path: string) => path === command || path === `${command}.cmd`;
+	const resolved = resolveChildProcessExecutable(command, {
+		platform: "win32",
+		fileExists,
+	});
+	assert.equal(resolved, `${command}.cmd`);
+	assert.equal(
+		resolveChildProcessCommand(command, ["--mode", "rpc"], {
+			platform: "win32",
+			comSpec: "C:\\Windows\\System32\\cmd.exe",
+			fileExists,
+		}).command,
+		"C:\\Windows\\System32\\cmd.exe",
+	);
+});
+
+test("Windows extensionless launchers fall back through CMD, BAT, and EXE", () => {
+	const command = "C:\\feynman\\bin\\feynman";
+	for (const extension of [".cmd", ".bat", ".exe"]) {
+		assert.equal(
+			resolveChildProcessExecutable(command, {
+				platform: "win32",
+				fileExists: (path) => path === `${command}${extension}`,
+			}),
+			`${command}${extension}`,
+		);
+	}
+	assert.equal(
+		resolveChildProcessExecutable(command, {
+			platform: "win32",
+			fileExists: (path) => path === command,
+		}),
+		command,
+	);
+});
+
+test("Windows launcher resolution prefers the first executable candidate", () => {
+	const command = "C:\\feynman\\bin\\feynman";
+	assert.equal(
+		resolveChildProcessExecutable(command, {
+			platform: "win32",
+			fileExists: (path) => [".cmd", ".bat", ".exe"].some((extension) => path === `${command}${extension}`),
+		}),
+		`${command}.cmd`,
+	);
+});
 
 test("Windows command shims use explicit ComSpec without shell args", () => {
 	assert.deepEqual(
@@ -21,6 +73,21 @@ test("Windows command shims use explicit ComSpec without shell args", () => {
 			],
 			shell: false,
 			windowsVerbatimArguments: true,
+		},
+	);
+});
+
+test("explicit Windows executables remain direct child processes", () => {
+	assert.deepEqual(
+		resolveChildProcessCommand("C:\\feynman\\bin\\feynman.exe", ["--mode", "rpc"], {
+			platform: "win32",
+			fileExists: () => false,
+		}),
+		{
+			command: "C:\\feynman\\bin\\feynman.exe",
+			args: ["--mode", "rpc"],
+			shell: false,
+			windowsVerbatimArguments: false,
 		},
 	);
 });

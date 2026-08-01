@@ -44,9 +44,19 @@ function readConfiguredPackages(): string[] {
 }
 
 function formatSourceLabel(sourceInfo: { source: string; path: string }): string {
+	const normalizedPath = sourceInfo.path.replaceAll("\\", "/");
+	if (
+		(sourceInfo.source === "local" || sourceInfo.source === "cli") &&
+		(
+			normalizedPath.endsWith("/extensions/research-tools.ts") ||
+			normalizedPath.includes("/extensions/research-tools/")
+		)
+	) {
+		return "extension";
+	}
 	if (sourceInfo.source === "local") {
-		if (sourceInfo.path.includes("/prompts/")) return "workflow";
-		if (sourceInfo.path.includes("/extensions/")) return "extension";
+		if (normalizedPath.includes("/prompts/")) return "workflow";
+		if (normalizedPath.includes("/extensions/")) return "extension";
 		return "local";
 	}
 	return sourceInfo.source.replace(/^npm:/, "").replace(/^git:/, "");
@@ -71,7 +81,12 @@ function isPublicCommand(command: SlashCommandInfo, publicNames: Set<string>): b
 }
 
 function isFeynmanLocalTool(tool: ToolInfo): boolean {
-	return tool.sourceInfo.source === "local" && tool.sourceInfo.path.includes("/extensions/research-tools/");
+	if (tool.sourceInfo.source !== "local" && tool.sourceInfo.source !== "cli") return false;
+	const normalizedPath = tool.sourceInfo.path.replaceAll("\\", "/");
+	return (
+		normalizedPath.endsWith("/extensions/research-tools.ts") ||
+		normalizedPath.includes("/extensions/research-tools/")
+	);
 }
 
 function isPublicTool(tool: ToolInfo): boolean {

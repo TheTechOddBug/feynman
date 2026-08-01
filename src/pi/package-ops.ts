@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { valid as validSemver } from "semver";
 
 import { resolveAdjacentNpmCommand } from "../../scripts/lib/npm-command.mjs";
 import { NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
@@ -26,13 +27,21 @@ type NpmSource = {
 	name: string;
 	source: string;
 	spec: string;
-	pinned: boolean;
+	version?: string;
+	exactVersion?: string;
 };
 
 type PackageManagerCommand = {
 	command: string;
 	args: string[];
 	shell?: boolean;
+};
+
+type NpmInstallTarget = {
+	scope: PackageScope;
+	installRoot: string;
+	global: boolean;
+	cwd: string;
 };
 
 export type MissingConfiguredPackageSummary = {
@@ -58,7 +67,7 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^run `npm fund` for details$/i,
 ];
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PI_RUNTIME_FALLBACK_VERSION = "0.82.1";
+const PI_RUNTIME_FALLBACK_VERSION = "0.83.0";
 const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
 	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
 	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
@@ -138,12 +147,14 @@ function parseNpmSource(source: string): NpmSource | undefined {
 	const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@(.+))?$/);
 	const name = match?.[1] ?? spec;
 	const version = match?.[2];
+	const exactVersion = validSemver(version ?? "") ?? undefined;
 
 	return {
 		name,
 		source,
 		spec,
-		pinned: Boolean(version),
+		version,
+		exactVersion,
 	};
 }
 
@@ -154,7 +165,7 @@ function dedupeNpmSources(sources: string[], updateToLatest: boolean): string[] 
 		const parsed = parseNpmSource(source);
 		if (!parsed) continue;
 
-		specs.set(parsed.name, updateToLatest && !parsed.pinned ? `${parsed.name}@latest` : parsed.spec);
+		specs.set(parsed.name, updateToLatest && !parsed.version ? `${parsed.name}@latest` : parsed.spec);
 	}
 
 	return [...specs.values()];
@@ -214,8 +225,7 @@ function withRuntimePeerSpecs(specs: string[]): string[] {
 	return [...specs, ...peerSpecs];
 }
 
-function ensureProjectInstallRoot(workingDir: string): string {
-	const installRoot = resolve(workingDir, ".feynman", "npm");
+function ensureLocalInstallRoot(installRoot: string): string {
 	mkdirSync(installRoot, { recursive: true });
 
 	const ignorePath = join(installRoot, ".gitignore");
@@ -229,6 +239,54 @@ function ensureProjectInstallRoot(workingDir: string): string {
 	}
 
 	return installRoot;
+}
+
+function defaultNpmInstallTarget(workingDir: string, agentDir: string, scope: PackageScope): NpmInstallTarget {
+	if (scope === "project") {
+		return {
+			scope,
+			installRoot: resolve(workingDir, ".feynman", "npm"),
+			global: false,
+			cwd: workingDir,
+		};
+	}
+
+	return {
+		scope,
+		installRoot: getFeynmanNpmPrefixPath(agentDir),
+		global: true,
+		cwd: agentDir,
+	};
+}
+
+function configuredNpmInstallTarget(
+	workingDir: string,
+	agentDir: string,
+	configuredPackage: ConfiguredPackage,
+): NpmInstallTarget {
+	if (configuredPackage.scope === "project") {
+		return defaultNpmInstallTarget(workingDir, agentDir, "project");
+	}
+
+	const managedInstallRoot = resolve(agentDir, "npm");
+	const managedNodeModulesRoot = resolve(managedInstallRoot, "node_modules");
+	if (
+		configuredPackage.installedPath &&
+		isPathInsideRoot(resolve(configuredPackage.installedPath), managedNodeModulesRoot)
+	) {
+		return {
+			scope: "user",
+			installRoot: managedInstallRoot,
+			global: false,
+			cwd: agentDir,
+		};
+	}
+
+	return defaultNpmInstallTarget(workingDir, agentDir, "user");
+}
+
+function npmInstallTargetKey(target: NpmInstallTarget): string {
+	return `${target.global ? "global" : "local"}\0${target.installRoot}`;
 }
 
 
@@ -267,9 +325,7 @@ function childPackageManagerEnv(): NodeJS.ProcessEnv {
 
 async function runPackageManagerInstall(
 	settingsManager: SettingsManager,
-	workingDir: string,
-	agentDir: string,
-	scope: PackageScope,
+	target: NpmInstallTarget,
 	specs: string[],
 ): Promise<void> {
 	if (specs.length === 0) {
@@ -291,17 +347,17 @@ async function runPackageManagerInstall(
 		"error",
 	];
 
-	if (scope === "user") {
-		args.push("-g", "--prefix", getFeynmanNpmPrefixPath(agentDir));
+	if (target.global) {
+		args.push("-g", "--prefix", target.installRoot);
 	} else {
-		args.push("--prefix", ensureProjectInstallRoot(workingDir));
+		args.push("--prefix", ensureLocalInstallRoot(target.installRoot));
 	}
 
 	args.push(...withRuntimePeerSpecs(specs));
 
 	await new Promise<void>((resolvePromise, reject) => {
 		const child = spawn(packageManagerCommand.command, args, {
-			cwd: scope === "user" ? agentDir : workingDir,
+			cwd: target.cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: childPackageManagerEnv(),
 			shell: packageManagerCommand.shell,
@@ -404,7 +460,11 @@ export async function installPackageSources(
 
 	const supportedNpmSources = scope === "user" ? supportedUserSources : supportedProjectSources;
 	if (supportedNpmSources.length > 0) {
-		await runPackageManagerInstall(settingsManager, workingDir, agentDir, scope, dedupeNpmSources(supportedNpmSources, false));
+		await runPackageManagerInstall(
+			settingsManager,
+			defaultNpmInstallTarget(workingDir, agentDir, scope),
+			dedupeNpmSources(supportedNpmSources, false),
+		);
 		installed.push(...supportedNpmSources);
 	}
 
@@ -434,6 +494,52 @@ export async function installPackageSources(
 	return { installed, skipped };
 }
 
+function packageUpdateKey(source: string, scope: PackageScope): string {
+	return `${scope}\0${source}`;
+}
+
+function readInstalledNpmVersion(installedPath: string | undefined): string | undefined {
+	if (!installedPath) return undefined;
+	try {
+		const pkg = JSON.parse(readFileSync(resolve(installedPath, "package.json"), "utf8")) as { version?: unknown };
+		return typeof pkg.version === "string" ? pkg.version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function pinnedNpmPackageNeedsReconciliation(configuredPackage: ConfiguredPackage): boolean {
+	const parsed = parseNpmSource(configuredPackage.source);
+	if (!parsed?.exactVersion) return false;
+	return readInstalledNpmVersion(configuredPackage.installedPath) !== parsed.exactVersion;
+}
+
+async function assertAttemptedPackageUpdatesResolved(
+	workingDir: string,
+	agentDir: string,
+	attemptedUpdates: ConfiguredPackage[],
+): Promise<void> {
+	if (attemptedUpdates.length === 0) {
+		return;
+	}
+
+	const attemptedKeys = new Set(attemptedUpdates.map((entry) => packageUpdateKey(entry.source, entry.scope)));
+	const { packageManager } = createPackageContext(workingDir, agentDir);
+	const configuredPackages = packageManager.listConfiguredPackages();
+	const unresolvedPinned = configuredPackages
+		.filter((entry) => attemptedKeys.has(packageUpdateKey(entry.source, entry.scope)))
+		.filter(pinnedNpmPackageNeedsReconciliation)
+		.map((entry) => entry.source);
+	const remainingUpdates = await packageManager.checkForAvailableUpdates();
+	const unresolvedUnpinned = remainingUpdates
+		.filter((entry) => attemptedKeys.has(packageUpdateKey(entry.source, entry.scope)))
+		.map((entry) => entry.source);
+	const unresolved = [...new Set([...unresolvedPinned, ...unresolvedUnpinned])];
+	if (unresolved.length > 0) {
+		throw new Error(`Package updates remain available after install: ${unresolved.join(", ")}`);
+	}
+}
+
 export async function updateConfiguredPackages(
 	workingDir: string,
 	agentDir: string,
@@ -450,13 +556,20 @@ export async function updateConfiguredPackages(
 			}
 
 			const configured = packageManager.listConfiguredPackages();
-			const match = configured.find((entry) => entry.source === source);
+			const matchingPackages = configured.filter((entry) => entry.source === source);
+			const match = matchingPackages.find((entry) => entry.scope === "project") ??
+				matchingPackages.find((entry) => entry.scope === "user");
 			if (!match) {
 				throw new Error(`No matching package found for ${source}`);
 			}
 
-			await runPackageManagerInstall(settingsManager, workingDir, agentDir, match.scope, dedupeNpmSources([source], true));
+			await runPackageManagerInstall(
+				settingsManager,
+				configuredNpmInstallTarget(workingDir, agentDir, match),
+				dedupeNpmSources([source], true),
+			);
 			patchInstalledPackageRoots(agentDir);
+			await assertAttemptedPackageUpdatesResolved(workingDir, agentDir, [match]);
 			return { updated: [source], skipped: [] };
 		}
 
@@ -465,14 +578,24 @@ export async function updateConfiguredPackages(
 		return { updated: [source], skipped: [] };
 	}
 
+	const configuredPackages = packageManager.listConfiguredPackages();
 	const availableUpdates = await packageManager.checkForAvailableUpdates();
-	if (availableUpdates.length === 0) {
+	const availableUpdateKeys = new Set(
+		availableUpdates.map((entry) => packageUpdateKey(entry.source, entry.scope)),
+	);
+	const pinnedReconciliations = configuredPackages.filter(
+		(entry) =>
+			pinnedNpmPackageNeedsReconciliation(entry) &&
+			!availableUpdateKeys.has(packageUpdateKey(entry.source, entry.scope)),
+	);
+	if (availableUpdates.length === 0 && pinnedReconciliations.length === 0) {
 		return { updated: [], skipped: [] };
 	}
 
-	const npmUpdatesByScope: Record<PackageScope, string[]> = { user: [], project: [] };
+	const npmUpdateBatches = new Map<string, { target: NpmInstallTarget; packages: ConfiguredPackage[] }>();
 	const gitUpdates: string[] = [];
 	const skipped: string[] = [];
+	const attemptedUpdates: ConfiguredPackage[] = [];
 
 	for (const entry of availableUpdates) {
 		if (entry.type === "npm") {
@@ -480,18 +603,43 @@ export async function updateConfiguredPackages(
 				skipped.push(entry.source);
 				continue;
 			}
-			npmUpdatesByScope[entry.scope].push(entry.source);
+			const configuredPackage = configuredPackages.find(
+				(candidate) => candidate.scope === entry.scope && candidate.source === entry.source,
+			);
+			if (!configuredPackage) {
+				throw new Error(`No matching configured package found for ${entry.source}`);
+			}
+			const target = configuredNpmInstallTarget(workingDir, agentDir, configuredPackage);
+			const key = npmInstallTargetKey(target);
+			const batch = npmUpdateBatches.get(key) ?? { target, packages: [] };
+			batch.packages.push(configuredPackage);
+			npmUpdateBatches.set(key, batch);
+			attemptedUpdates.push(configuredPackage);
 			continue;
 		}
 
 		gitUpdates.push(entry.source);
 	}
 
-	for (const scope of ["user", "project"] as const) {
-		const sources = npmUpdatesByScope[scope];
-		if (sources.length === 0) continue;
+	for (const configuredPackage of pinnedReconciliations) {
+		if (shouldSkipNativeSource(configuredPackage.source)) {
+			skipped.push(configuredPackage.source);
+			continue;
+		}
+		const target = configuredNpmInstallTarget(workingDir, agentDir, configuredPackage);
+		const key = npmInstallTargetKey(target);
+		const batch = npmUpdateBatches.get(key) ?? { target, packages: [] };
+		batch.packages.push(configuredPackage);
+		npmUpdateBatches.set(key, batch);
+		attemptedUpdates.push(configuredPackage);
+	}
 
-		await runPackageManagerInstall(settingsManager, workingDir, agentDir, scope, dedupeNpmSources(sources, true));
+	for (const { target, packages } of npmUpdateBatches.values()) {
+		await runPackageManagerInstall(
+			settingsManager,
+			target,
+			dedupeNpmSources(packages.map((entry) => entry.source), true),
+		);
 	}
 
 	for (const gitSource of gitUpdates) {
@@ -500,10 +648,12 @@ export async function updateConfiguredPackages(
 
 	const updated = availableUpdates
 		.map((entry) => entry.source)
+		.concat(pinnedReconciliations.map((entry) => entry.source))
 		.filter((source) => !skipped.includes(source));
 	if (updated.length > 0) {
 		patchInstalledPackageRoots(agentDir);
 	}
+	await assertAttemptedPackageUpdatesResolved(workingDir, agentDir, attemptedUpdates);
 
 	return { updated, skipped };
 }

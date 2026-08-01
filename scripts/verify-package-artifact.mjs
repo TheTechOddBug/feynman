@@ -22,6 +22,11 @@ import {
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
+const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
+const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
+const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
+const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
+        const action = theme.fg("accent", \`\${APP_NAME} update --extensions\`);`;
 
 function fail(message) {
 	throw new Error(`[feynman artifact] ${message}`);
@@ -46,6 +51,16 @@ function requireMarkers(source, label, markers) {
 		if (!source.includes(marker)) {
 			fail(`${label} is missing required marker: ${marker}`);
 		}
+	}
+}
+
+function assertPiInteractiveUpdateNoticeSource(source, label) {
+	requireMarkers(source, label, [
+		PI_INTERACTIVE_UPDATE_NOTICE_MARKER,
+		PI_INTERACTIVE_UPDATE_NOTICE_ACTION,
+	]);
+	if (source.includes(PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR)) {
+		fail(`${label} still routes package notices through update --extensions`);
 	}
 }
 
@@ -76,6 +91,12 @@ if (expectedPiVersion !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
 if (manifest.dependencies?.["@earendil-works/pi-ai"] !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
 	fail(`Pi AI correctness patches require ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
 }
+if (manifest.dependencies?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION) {
+	fail(`package.json does not pin brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
+if (manifest.overrides?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION) {
+	fail(`package.json does not override brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
 
 for (const name of [
 	"@earendil-works/pi-agent-core",
@@ -84,6 +105,11 @@ for (const name of [
 	"@earendil-works/pi-tui",
 ]) {
 	const expected = manifest.dependencies?.[name];
+	if (expected !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
+		fail(
+			`${name} must be pinned to Pi ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${expected ?? "missing"}`,
+		);
+	}
 	const installed = readJson(
 		resolve(packageRoot, "node_modules", ...name.split("/"), "package.json"),
 		`${name} package manifest`,
@@ -91,6 +117,69 @@ for (const name of [
 	if (installed !== expected) {
 		fail(`${name} version mismatch: expected ${expected}, found ${installed}`);
 	}
+}
+for (const name of [
+	"@earendil-works/pi-agent-core",
+	"@earendil-works/pi-ai",
+	"@earendil-works/pi-tui",
+]) {
+	const installed = readJson(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			...name.split("/"),
+			"package.json",
+		),
+		`nested ${name} package manifest`,
+	).version;
+	if (installed !== expectedPiVersion) {
+		fail(`nested ${name} version mismatch: expected ${expectedPiVersion}, found ${installed}`);
+	}
+}
+requireMarkers(
+	readText(
+		resolve(packageRoot, "scripts", "verify-installed-runtime.mjs"),
+		"installed runtime verifier",
+	),
+	"installed runtime verifier",
+	[
+		"EXPECTED_FEYNMAN_COMMANDS",
+		"EXPECTED_FEYNMAN_TOOLS",
+		'message: "/tools"',
+		"valid-typebox-probe",
+		"malformed-typebox-probe",
+		"terminateChildProcessTree",
+	],
+);
+
+for (const [label, path] of [
+	[
+		"bundled root Pi AgentCore",
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-agent-core", "dist", "agent-loop.js"),
+	],
+	[
+		"bundled nested Pi AgentCore",
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-agent-core",
+			"dist",
+			"agent-loop.js",
+		),
+	],
+]) {
+	requireMarkers(readText(path, label), label, [
+		"function normalizeFeynmanToolAlias",
+		'["search_web", "web_search"]',
+		"prepareToolCallArguments(tool, effectiveToolCall)",
+	]);
 }
 
 assertPiRuntimeCorrectnessPatchSource(
@@ -207,6 +296,64 @@ requireMarkers(
 		'const cursor = "\\x1b[7m \\x1b[27m"',
 	],
 );
+requireMarkers(
+	readText(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-tui",
+			"dist",
+			"tui.js",
+		),
+		"bundled nested Pi TUI",
+	),
+	"bundled nested Pi TUI",
+	["line = sliceByColumn(line, 0, width, true);"],
+);
+requireMarkers(
+	readText(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"node_modules",
+			"@earendil-works",
+			"pi-tui",
+			"dist",
+			"components",
+			"editor.js",
+		),
+		"bundled nested Pi editor",
+	),
+	"bundled nested Pi editor",
+	[
+		"applyBackgroundToLine",
+		"const styleInput = typeof this.theme.input",
+		'const cursor = `\\x1b[7m${firstGrapheme}\\x1b[27m`',
+		'const cursor = "\\x1b[7m \\x1b[27m"',
+	],
+);
+assertPiInteractiveUpdateNoticeSource(
+	readText(
+		resolve(
+			packageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"dist",
+			"modes",
+			"interactive",
+			"interactive-mode.js",
+		),
+		"bundled Pi interactive update notice",
+	),
+	"bundled Pi interactive update notice",
+);
 
 const alphaLib = resolve(packageRoot, "node_modules", "@companion-ai", "alpha-hub", "src", "lib");
 requireMarkers(
@@ -245,8 +392,13 @@ if (
 ) {
 	fail("bundled Hono node server is not 2.0.12");
 }
-if (
-	readJson(
+for (const [label, path] of [
+	[
+		"bundled root brace-expansion",
+		packageRequire.resolve("brace-expansion/package.json"),
+	],
+	[
+		"bundled Pi brace-expansion",
 		resolve(
 			packageRoot,
 			"node_modules",
@@ -256,10 +408,11 @@ if (
 			"brace-expansion",
 			"package.json",
 		),
-		"bundled Pi brace-expansion manifest",
-	).version !== "5.0.8"
-) {
-	fail("bundled Pi brace-expansion is not 5.0.8");
+	],
+]) {
+	if (readJson(path, `${label} manifest`).version !== FEYNMAN_BRACE_EXPANSION_VERSION) {
+		fail(`${label} is not ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+	}
 }
 const bundledPiManifest = readJson(
 	resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
@@ -311,12 +464,22 @@ if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION)
 if (runtimeLock.packages?.["node_modules/undici"]?.version !== FEYNMAN_UNDICI_VERSION) {
 	fail(`committed runtime lock does not resolve Undici ${FEYNMAN_UNDICI_VERSION}`);
 }
+if (
+	runtimeLock.packages?.[""]?.dependencies?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION
+) {
+	fail(`committed runtime lock does not pin brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
+if (
+	runtimeLock.packages?.["node_modules/brace-expansion"]?.version !== FEYNMAN_BRACE_EXPANSION_VERSION
+) {
+	fail(`committed runtime lock does not resolve brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
 for (const [packagePath, entry] of Object.entries(runtimeLock.packages ?? {})) {
 	if (
 		packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion") &&
-		entry?.version !== "5.0.8"
+		entry?.version !== FEYNMAN_BRACE_EXPANSION_VERSION
 	) {
-		fail("committed runtime lock does not pin Pi brace-expansion 5.0.8");
+		fail(`committed runtime lock does not pin Pi brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
 	}
 	if (
 		packagePath.endsWith("/pi-coding-agent/node_modules/undici") &&
@@ -393,6 +556,22 @@ for (const [label, entryPath] of [
 		label,
 	);
 }
+for (const [label, entryPath] of [
+	[
+		"runtime root Pi AgentCore",
+		"npm/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+	],
+	[
+		"runtime nested Pi AgentCore",
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+	],
+]) {
+	requireMarkers(readArchivedText(archivePath, entryPath), label, [
+		"function normalizeFeynmanToolAlias",
+		'["search_web", "web_search"]',
+		"prepareToolCallArguments(tool, effectiveToolCall)",
+	]);
+}
 if (
 	readArchivedJson(
 		archivePath,
@@ -400,6 +579,16 @@ if (
 	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
 ) {
 	fail(`runtime nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+}
+for (const name of ["pi-agent-core", "pi-tui"]) {
+	if (
+		readArchivedJson(
+			archivePath,
+			`npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/${name}/package.json`,
+		).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
+	) {
+		fail(`runtime nested ${name} is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
+	}
 }
 
 requireMarkers(
@@ -429,12 +618,40 @@ requireMarkers(
 		"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
 	],
 );
+assertPiInteractiveUpdateNoticeSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/interactive-mode.js",
+	),
+	"runtime Pi interactive update notice",
+);
 requireMarkers(
 	readArchivedText(
 		archivePath,
 		"npm/node_modules/@earendil-works/pi-tui/dist/components/editor.js",
 	),
 	"runtime Pi editor",
+	[
+		"applyBackgroundToLine",
+		"const styleInput = typeof this.theme.input",
+		'const cursor = `\\x1b[7m${firstGrapheme}\\x1b[27m`',
+		'const cursor = "\\x1b[7m \\x1b[27m"',
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/tui.js",
+	),
+	"runtime nested Pi TUI",
+	["line = sliceByColumn(line, 0, width, true);"],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/components/editor.js",
+	),
+	"runtime nested Pi editor",
 	[
 		"applyBackgroundToLine",
 		"const styleInput = typeof this.theme.input",
@@ -456,7 +673,21 @@ requireMarkers(
 		"npm/node_modules/pi-otel/dist/otel/sdk.js",
 	),
 	"runtime pi-otel SDK",
-	["createFeynmanResource", "resourceFromAttributes"],
+	[
+		"createFeynmanResource",
+		"resourceFromAttributes",
+		"FEYNMAN_POSTHOG_KEY",
+		'method: "OPTIONS"',
+		".then((response) => response.ok",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-otel/dist/index.js",
+	),
+	"runtime pi-otel extension",
+	["probeEndpoint(cfg.endpoint, 300, cfg.headers)", "if (!process.env.FEYNMAN_POSTHOG_KEY)"],
 );
 if (
 	readArchivedJson(
@@ -490,13 +721,16 @@ if (
 ) {
 	fail("runtime Hono node server is not 2.0.12");
 }
-if (
-	readArchivedJson(
-		archivePath,
+for (const [label, entryPath] of [
+	["runtime root brace-expansion", "npm/node_modules/brace-expansion/package.json"],
+	[
+		"runtime Pi brace-expansion",
 		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion/package.json",
-	).version !== "5.0.8"
-) {
-	fail("runtime Pi brace-expansion is not 5.0.8");
+	],
+]) {
+	if (readArchivedJson(archivePath, entryPath).version !== FEYNMAN_BRACE_EXPANSION_VERSION) {
+		fail(`${label} is not ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+	}
 }
 const runtimePiManifest = readArchivedJson(
 	archivePath,

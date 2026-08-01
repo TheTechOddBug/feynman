@@ -286,6 +286,7 @@ jobs:
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -342,6 +343,9 @@ jobs:
           npm install --prefix "$consumer" --omit=dev --no-audit "$tarball"
           npm audit --omit=dev --prefix "$consumer"
           bin="$consumer/node_modules/.bin/feynman"
+          if command -v cygpath >/dev/null 2>&1; then
+            bin="$consumer/node_modules/.bin/feynman.cmd"
+          fi
           test "$("$bin" --version | tail -1)" = "$VERSION"
           "$bin" --help >/dev/null
           HOME="$RUNNER_TEMP/feynman-home" FEYNMAN_HOME="$RUNNER_TEMP/feynman-home" "$bin" packages list
@@ -369,6 +373,12 @@ jobs:
           npm audit --omit=dev --prefix "$runtime_audit/npm"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          global_node_modules=$(npm root --global --prefix "$global_prefix")
+          if command -v cygpath >/dev/null 2>&1; then
+            global_node_modules=$(cygpath -u "$global_node_modules")
+          fi
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
 
   publish-npm:
     needs:
@@ -483,9 +493,11 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           tmp=$(mktemp -d)
           tar -xzf "dist/release/feynman-${VERSION}-${{ matrix.id }}.tar.gz" -C "$tmp"
-          "$tmp/feynman-${VERSION}-${{ matrix.id }}/feynman" --help >/tmp/feynman-help.out
+          bundle="$tmp/feynman-${VERSION}-${{ matrix.id }}"
+          "$bundle/feynman" --help >/tmp/feynman-help.out
           head -20 /tmp/feynman-help.out
-          node scripts/verify-stale-pi-upgrade.mjs "$tmp/feynman-${VERSION}-${{ matrix.id }}/feynman"
+          node scripts/verify-stale-pi-upgrade.mjs "$bundle/feynman"
+          "$bundle/node/bin/node" "$bundle/app/scripts/verify-installed-runtime.mjs" "$bundle/feynman"
       - name: Smoke native bundle (Windows)
         if: matrix.id == 'win32-x64'
         shell: pwsh
@@ -502,6 +514,12 @@ jobs:
           node scripts/verify-stale-pi-upgrade.mjs (Join-Path $bundleRoot "feynman.cmd")
           if ($LASTEXITCODE -ne 0) {
             throw "Windows native launcher failed stale-Pi upgrade smoke: $LASTEXITCODE"
+          }
+          & (Join-Path $bundleRoot "node/node.exe") `
+            (Join-Path $bundleRoot "app/scripts/verify-installed-runtime.mjs") `
+            (Join-Path $bundleRoot "feynman.cmd")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows native launcher failed installed-runtime verification: $LASTEXITCODE"
           }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -708,12 +726,15 @@ jobs:
           "$bin" --help >/dev/null
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
           global_prefix="$RUNNER_TEMP/published-global"
           npm install --global --prefix "$global_prefix" --omit=dev --no-audit \
             "@companion-ai/feynman@$VERSION"
           global_bin="$global_prefix/bin/feynman"
           test "$("$global_bin" --version | tail -1)" = "$VERSION"
           "$global_bin" --help >/dev/null
+          global_node_modules=$(npm root --global --prefix "$global_prefix")
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
 
           release_dir="$RUNNER_TEMP/published-release"
           mkdir -p "$release_dir"
@@ -767,3 +788,7 @@ jobs:
           native="$native_root/feynman-$VERSION-linux-x64/feynman"
           test "$("$native" --version | tail -1)" = "$VERSION"
           "$native" --help >/dev/null
+          native_bundle_root="$native_root/feynman-$VERSION-linux-x64"
+          "$native_bundle_root/node/bin/node" \
+            "$native_bundle_root/app/scripts/verify-installed-runtime.mjs" \
+            "$native"

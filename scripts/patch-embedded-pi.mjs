@@ -22,7 +22,12 @@ import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
-import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
+import {
+	patchPiEditorSource,
+	patchPiInteractiveThemeSource,
+	patchPiInteractiveUpdateNoticeSource,
+	patchPiTuiSource,
+} from "./lib/pi-tui-patch.mjs";
 import {
 	runtimeManifestPackagesMatch,
 	verifyFileSha256,
@@ -78,6 +83,24 @@ const piPackageRoot = findPiPackageRoot("pi-coding-agent");
 const piAgentCoreRoot = findPiPackageRoot("pi-agent-core");
 const piTuiRoot = findPiPackageRoot("pi-tui");
 const piAiRoot = findPiPackageRoot("pi-ai");
+const PI_SCOPES = ["@earendil-works", "@mariozechner"];
+
+function resolveNestedPiFiles(parentRoot, nestedPackageName, ...segments) {
+	if (!parentRoot) return [];
+	return PI_SCOPES.map((scope) =>
+		resolve(parentRoot, "node_modules", scope, nestedPackageName, ...segments)
+	);
+}
+
+function resolveWorkspaceNestedPiFiles(workspaceRoot, nestedPackageName, ...segments) {
+	return PI_SCOPES.flatMap((codingScope) =>
+		resolveNestedPiFiles(
+			resolve(workspaceRoot, codingScope, "pi-coding-agent"),
+			nestedPackageName,
+			...segments,
+		)
+	);
+}
 
 if (!piPackageRoot) {
 	console.warn("[feynman] pi-coding-agent not found, skipping Pi patches");
@@ -98,14 +121,15 @@ const llamaProviderPath = piPackageRoot
 	: null;
 const transformMessagesPath = piAiRoot ? resolve(piAiRoot, "dist", "api", "transform-messages.js") : null;
 const nestedTransformMessagesPaths = piPackageRoot
-	? ["@earendil-works", "@mariozechner"].map((scope) =>
-		resolve(piPackageRoot, "node_modules", scope, "pi-ai", "dist", "api", "transform-messages.js"),
-	)
+	? resolveNestedPiFiles(piPackageRoot, "pi-ai", "dist", "api", "transform-messages.js")
 	: [];
 const agentLoopPath = piAgentCoreRoot ? resolve(piAgentCoreRoot, "dist", "agent-loop.js") : null;
+const nestedAgentLoopPaths = resolveNestedPiFiles(piPackageRoot, "pi-agent-core", "dist", "agent-loop.js");
 const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
 const terminalPath = piTuiRoot ? resolve(piTuiRoot, "dist", "terminal.js") : null;
 const editorPath = piTuiRoot ? resolve(piTuiRoot, "dist", "components", "editor.js") : null;
+const nestedTuiPaths = resolveNestedPiFiles(piPackageRoot, "pi-tui", "dist", "tui.js");
+const nestedEditorPaths = resolveNestedPiFiles(piPackageRoot, "pi-tui", "dist", "components", "editor.js");
 const workspaceRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
 function resolveWorkspacePiFile(packageName, ...segments) {
 	const candidates = [
@@ -116,6 +140,12 @@ function resolveWorkspacePiFile(packageName, ...segments) {
 }
 
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
+const workspaceNestedAgentLoopPaths = resolveWorkspaceNestedPiFiles(
+	workspaceRoot,
+	"pi-agent-core",
+	"dist",
+	"agent-loop.js",
+);
 const workspaceAgentSessionPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "agent-session.js");
 const workspaceSessionManagerPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "session-manager.js");
 const workspaceLlamaProviderPath = resolveWorkspacePiFile(
@@ -126,20 +156,12 @@ const workspaceLlamaProviderPath = resolveWorkspacePiFile(
 	"provider.js",
 );
 const workspaceTransformMessagesPath = resolveWorkspacePiFile("pi-ai", "dist", "api", "transform-messages.js");
-const workspaceNestedTransformMessagesPaths = ["@earendil-works", "@mariozechner"].flatMap((codingScope) =>
-	["@earendil-works", "@mariozechner"].map((aiScope) =>
-		resolve(
-			workspaceRoot,
-			codingScope,
-			"pi-coding-agent",
-			"node_modules",
-			aiScope,
-			"pi-ai",
-			"dist",
-			"api",
-			"transform-messages.js",
-		),
-	),
+const workspaceNestedTransformMessagesPaths = resolveWorkspaceNestedPiFiles(
+	workspaceRoot,
+	"pi-ai",
+	"dist",
+	"api",
+	"transform-messages.js",
 );
 
 function assertPiPackageVersion(packageRoot, surface) {
@@ -167,12 +189,31 @@ function shouldPatchPiRuntimeCorrectnessFile(entryPath) {
 }
 
 assertPiPackageVersion(piPackageRoot, "bundled pi-coding-agent");
+assertPiPackageVersion(piAgentCoreRoot, "bundled pi-agent-core");
 assertPiPackageVersion(piAiRoot, "bundled pi-ai");
+assertPiPackageVersion(piTuiRoot, "bundled pi-tui");
+for (const entryPath of nestedAgentLoopPaths) {
+	assertPiPackageVersion(resolve(entryPath, "..", ".."), "bundled nested pi-agent-core");
+}
 for (const entryPath of nestedTransformMessagesPaths) {
 	assertPiPackageVersion(resolve(entryPath, "..", "..", ".."), "bundled nested pi-ai");
 }
+for (const entryPath of nestedTuiPaths) {
+	assertPiPackageVersion(resolve(entryPath, "..", ".."), "bundled nested pi-tui");
+}
 const workspaceTuiPath = resolveWorkspacePiFile("pi-tui", "dist", "tui.js");
 const workspaceEditorPath = resolveWorkspacePiFile("pi-tui", "dist", "components", "editor.js");
+const workspaceNestedTuiPaths = resolveWorkspaceNestedPiFiles(workspaceRoot, "pi-tui", "dist", "tui.js");
+const workspaceNestedEditorPaths = workspaceNestedTuiPaths.map((entryPath) =>
+	resolve(entryPath, "..", "components", "editor.js")
+);
+const workspaceInteractiveModePath = resolveWorkspacePiFile(
+	"pi-coding-agent",
+	"dist",
+	"modes",
+	"interactive",
+	"interactive-mode.js",
+);
 const workspaceInteractiveThemePath = resolveWorkspacePiFile(
 	"pi-coding-agent",
 	"dist",
@@ -225,6 +266,17 @@ function patchMcpSdkManifest(nodeModulesRoot) {
 	const patched = patchMcpSdkPackageJsonSource(source);
 	if (patched !== source) {
 		writeFileSync(manifestPath, patched, "utf8");
+	}
+}
+
+function patchFilesIfPresent(entryPaths, patchSource) {
+	for (const entryPath of entryPaths.filter(Boolean)) {
+		if (!existsSync(entryPath)) continue;
+		const source = readFileSync(entryPath, "utf8");
+		const patched = patchSource(source);
+		if (patched !== source) {
+			writeFileSync(entryPath, patched, "utf8");
+		}
 	}
 }
 const FILTERED_INSTALL_OUTPUT_PATTERNS = [
@@ -921,17 +973,12 @@ for (const [entryPath, patchSource] of [
 	}
 }
 
-for (const entryPath of [agentLoopPath, workspaceAgentLoopPath].filter(Boolean)) {
-	if (!existsSync(entryPath)) {
-		continue;
-	}
-
-	const source = readFileSync(entryPath, "utf8");
-	const patched = patchPiAgentCoreSource(source);
-	if (patched !== source) {
-		writeFileSync(entryPath, patched, "utf8");
-	}
-}
+patchFilesIfPresent([
+	agentLoopPath,
+	...nestedAgentLoopPaths,
+	workspaceAgentLoopPath,
+	...workspaceNestedAgentLoopPaths,
+], patchPiAgentCoreSource);
 
 for (const entryPath of [llamaProviderPath, workspaceLlamaProviderPath].filter(Boolean)) {
 	if (!existsSync(entryPath) || !shouldPatchPiRuntimeCorrectnessFile(entryPath)) {
@@ -944,41 +991,29 @@ for (const entryPath of [llamaProviderPath, workspaceLlamaProviderPath].filter(B
 	}
 }
 
-for (const entryPath of [tuiPath, workspaceTuiPath].filter(Boolean)) {
-	if (!existsSync(entryPath)) {
-		continue;
-	}
+patchFilesIfPresent([
+	tuiPath,
+	...nestedTuiPaths,
+	workspaceTuiPath,
+	...workspaceNestedTuiPaths,
+], patchPiTuiSource);
 
-	const source = readFileSync(entryPath, "utf8");
-	const patched = patchPiTuiSource(source);
-	if (patched !== source) {
-		writeFileSync(entryPath, patched, "utf8");
-	}
-}
+patchFilesIfPresent(
+	[interactiveThemePath, workspaceInteractiveThemePath],
+	patchPiInteractiveThemeSource,
+);
 
-for (const entryPath of [interactiveThemePath, workspaceInteractiveThemePath].filter(Boolean)) {
-	if (!existsSync(entryPath)) {
-		continue;
-	}
+patchFilesIfPresent(
+	[interactiveModePath, workspaceInteractiveModePath],
+	patchPiInteractiveUpdateNoticeSource,
+);
 
-	const source = readFileSync(entryPath, "utf8");
-	const patched = patchPiInteractiveThemeSource(source);
-	if (patched !== source) {
-		writeFileSync(entryPath, patched, "utf8");
-	}
-}
-
-for (const entryPath of [editorPath, workspaceEditorPath].filter(Boolean)) {
-	if (!existsSync(entryPath)) {
-		continue;
-	}
-
-	const source = readFileSync(entryPath, "utf8");
-	const patched = patchPiEditorSource(source);
-	if (patched !== source) {
-		writeFileSync(entryPath, patched, "utf8");
-	}
-}
+patchFilesIfPresent([
+	editorPath,
+	...nestedEditorPaths,
+	workspaceEditorPath,
+	...workspaceNestedEditorPaths,
+], patchPiEditorSource);
 
 const piWebAccessRoot = resolve(workspaceRoot, "pi-web-access");
 

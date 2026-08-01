@@ -1,6 +1,7 @@
 export interface ChildProcessCommandOptions {
 	platform?: NodeJS.Platform;
 	comSpec?: string;
+	fileExists?: (path: string) => boolean;
 }
 
 export interface ChildProcessCommand {
@@ -9,6 +10,11 @@ export interface ChildProcessCommand {
 	shell: false;
 	windowsVerbatimArguments: boolean;
 }
+
+export declare function resolveChildProcessExecutable(
+	command: string,
+	options?: ChildProcessCommandOptions,
+): string;
 
 export declare function resolveChildProcessCommand(
 	command: string,

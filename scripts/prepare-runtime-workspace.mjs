@@ -15,7 +15,12 @@ import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mj
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
-import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "./lib/pi-tui-patch.mjs";
+import {
+	patchPiEditorSource,
+	patchPiInteractiveThemeSource,
+	patchPiInteractiveUpdateNoticeSource,
+	patchPiTuiSource,
+} from "./lib/pi-tui-patch.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
@@ -48,7 +53,7 @@ const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const workspaceArchiveDigestPath = resolve(feynmanDir, "runtime-workspace.sha256");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.82.1";
+const PI_RUNTIME_FALLBACK_VERSION = "0.83.0";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@modelcontextprotocol/sdk": {
@@ -78,7 +83,7 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-node": "0.221.0",
 	"@opentelemetry/sdk-trace-base": "2.10.0",
 	"@opentelemetry/sdk-trace-node": "2.10.0",
-	"brace-expansion": "5.0.8",
+	"brace-expansion": "5.0.9",
 	undici: "8.9.0",
 };
 const PINNED_RUNTIME_PACKAGES = [
@@ -408,6 +413,30 @@ function patchScopedPiWorkspaceFile(packageName, relativePath, patchSource) {
 	return changed;
 }
 
+function patchNestedPiWorkspaceFile(parentPackageName, nestedPackageName, relativePath, patchSource) {
+	let changed = false;
+	for (const parentScope of ["@earendil-works", "@mariozechner"]) {
+		for (const nestedScope of ["@earendil-works", "@mariozechner"]) {
+			const filePath = resolve(
+				workspaceNodeModulesDir,
+				parentScope,
+				parentPackageName,
+				"node_modules",
+				nestedScope,
+				nestedPackageName,
+				...relativePath.split("/"),
+			);
+			if (!existsSync(filePath)) continue;
+			const source = readFileSync(filePath, "utf8");
+			const patched = patchSource(source);
+			if (patched === source) continue;
+			writeFileSync(filePath, patched, "utf8");
+			changed = true;
+		}
+	}
+	return changed;
+}
+
 function assertPiPackageVersion(packageRoot, surface) {
 	if (!existsSync(resolve(packageRoot, "package.json"))) return;
 	const version = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version;
@@ -433,7 +462,15 @@ function patchBundledPiCodingAgentPackageJson() {
 }
 
 function patchBundledPiAgentCore() {
-	return patchScopedPiWorkspaceFile("pi-agent-core", "dist/agent-loop.js", patchPiAgentCoreSource);
+	let changed = false;
+	changed = patchScopedPiWorkspaceFile("pi-agent-core", "dist/agent-loop.js", patchPiAgentCoreSource) || changed;
+	changed = patchNestedPiWorkspaceFile(
+		"pi-coding-agent",
+		"pi-agent-core",
+		"dist/agent-loop.js",
+		patchPiAgentCoreSource,
+	) || changed;
+	return changed;
 }
 
 function patchBundledNestedPiAiTransformMessages() {
@@ -464,26 +501,26 @@ function patchBundledNestedPiAiTransformMessages() {
 
 function patchBundledPiRuntimeCorrectness() {
 	for (const scope of ["@earendil-works", "@mariozechner"]) {
-		assertPiPackageVersion(
-			resolve(workspaceNodeModulesDir, scope, "pi-coding-agent"),
-			`runtime workspace ${scope}/pi-coding-agent`,
-		);
-		assertPiPackageVersion(
-			resolve(workspaceNodeModulesDir, scope, "pi-ai"),
-			`runtime workspace ${scope}/pi-ai`,
-		);
-		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
+		for (const packageName of ["pi-agent-core", "pi-ai", "pi-coding-agent", "pi-tui"]) {
 			assertPiPackageVersion(
-				resolve(
-					workspaceNodeModulesDir,
-					scope,
-					"pi-coding-agent",
-					"node_modules",
-					aiScope,
-					"pi-ai",
-				),
-				`runtime workspace nested ${scope}/pi-coding-agent ${aiScope}/pi-ai`,
+				resolve(workspaceNodeModulesDir, scope, packageName),
+				`runtime workspace ${scope}/${packageName}`,
 			);
+		}
+		for (const nestedScope of ["@earendil-works", "@mariozechner"]) {
+			for (const packageName of ["pi-agent-core", "pi-ai", "pi-tui"]) {
+				assertPiPackageVersion(
+					resolve(
+						workspaceNodeModulesDir,
+						scope,
+						"pi-coding-agent",
+						"node_modules",
+						nestedScope,
+						packageName,
+					),
+					`runtime workspace nested ${scope}/pi-coding-agent ${nestedScope}/${packageName}`,
+				);
+			}
 		}
 	}
 	let changed = false;
@@ -517,7 +554,19 @@ function patchBundledPiLlamaUsage() {
 function patchBundledPiTui() {
 	let changed = false;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/tui.js", patchPiTuiSource) || changed;
+	changed = patchNestedPiWorkspaceFile(
+		"pi-coding-agent",
+		"pi-tui",
+		"dist/tui.js",
+		patchPiTuiSource,
+	) || changed;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/components/editor.js", patchPiEditorSource) || changed;
+	changed = patchNestedPiWorkspaceFile(
+		"pi-coding-agent",
+		"pi-tui",
+		"dist/components/editor.js",
+		patchPiEditorSource,
+	) || changed;
 	return changed;
 }
 
@@ -534,6 +583,14 @@ function patchBundledPiModelRuntime() {
 
 function patchBundledPiInteractiveTheme() {
 	return patchScopedPiWorkspaceFile("pi-coding-agent", "dist/modes/interactive/theme/theme.js", patchPiInteractiveThemeSource);
+}
+
+function patchBundledPiInteractiveUpdateNotice() {
+	return patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/modes/interactive/interactive-mode.js",
+		patchPiInteractiveUpdateNoticeSource,
+	);
 }
 
 function patchBundledPiWebAccess() {
@@ -655,6 +712,7 @@ function patchBundledRuntime() {
 		PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	) || changed;
 	changed = patchBundledPiInteractiveTheme() || changed;
+	changed = patchBundledPiInteractiveUpdateNotice() || changed;
 	changed = patchBundledPiTui() || changed;
 	changed = patchBundledPiWebAccess() || changed;
 	changed = patchBundledPiSubagents() || changed;

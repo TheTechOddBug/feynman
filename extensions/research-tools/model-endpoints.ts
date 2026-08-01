@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 type ModelEndpointModel = "alphafold2" | "esmfold";
 type ModelEndpointProvider = "nvidia-bionemo";
@@ -238,6 +238,14 @@ function formatToolText(result: ModelEndpointResult): string {
 	return JSON.stringify(printable, null, 2);
 }
 
+// Pi converts Type.Array inputs before validating them, which would turn null into ["null"].
+// Preserve the JSON Schema array contract without the Type.Array conversion marker.
+const modelDatabasesSchema = Type.Unsafe<string[]>({
+	type: "array",
+	items: Type.String(),
+	description: "AlphaFold2 database names, for example uniref90, mgnify, or small_bfd.",
+});
+
 export function registerModelEndpointTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "feynman_model_endpoint_call",
@@ -259,7 +267,7 @@ export function registerModelEndpointTools(pi: ExtensionAPI): void {
 			], { description: "Model endpoint to call. esmfold defaults to NVIDIA-hosted ESMFold; alphafold2 defaults to a local/self-hosted NIM endpoint." }),
 			sequence: Type.String({ description: "Protein amino-acid sequence. FASTA headers and whitespace are ignored. Maximum hosted length is 1024 residues." }),
 			endpointUrl: Type.Optional(Type.String({ description: "Override endpoint URL. Use this for self-hosted/local NIM endpoints or test endpoints." })),
-			databases: Type.Optional(Type.Array(Type.String(), { description: "AlphaFold2 database names, for example uniref90, mgnify, or small_bfd." })),
+			databases: Type.Optional(modelDatabasesSchema),
 			iterations: Type.Optional(Type.Number({ description: "AlphaFold2 MSA iterations. Defaults to provider behavior." })),
 			relaxPrediction: Type.Optional(Type.Boolean({ description: "AlphaFold2 relax_prediction flag. Defaults to provider behavior." })),
 			timeoutMs: Type.Optional(Type.Number({ description: `Request timeout in milliseconds. Defaults to ${DEFAULT_TIMEOUT_MS}.` })),

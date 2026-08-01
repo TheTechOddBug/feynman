@@ -51,6 +51,26 @@ test("package and native release gates exercise persisted Pi user-package upgrad
 	assert.equal((publishWorkflow.match(staleUpgradeVerifier) ?? []).length, 3);
 });
 
+test("installed package gates verify Feynman commands, tools, and TypeBox schemas across launchers", () => {
+	const installedRuntimeVerifier = /scripts\/verify-installed-runtime\.mjs/g;
+	assert.equal((e2eWorkflow.match(installedRuntimeVerifier) ?? []).length, 4);
+	assert.equal((publishWorkflow.match(installedRuntimeVerifier) ?? []).length, 8);
+	for (const workflow of [e2eWorkflow, publishWorkflow]) {
+		assert.match(workflow, /bin="\$consumer\/node_modules\/\.bin\/feynman\.cmd"/);
+		assert.match(
+			workflow,
+			/global_node_modules\/@companion-ai\/feynman\/scripts\/verify-installed-runtime\.mjs" "\$global_bin"/,
+		);
+		assert.match(workflow, /global_node_modules=\$\(npm root --global --prefix "\$global_prefix"\)/);
+	}
+	assert.match(e2eWorkflow, /& \$nativeNode \$nativeVerifier \$native/);
+	assert.match(publishWorkflow, /"\$bundle\/node\/bin\/node" "\$bundle\/app\/scripts\/verify-installed-runtime\.mjs"/);
+	assert.match(
+		publishWorkflow,
+		/"\$native_bundle_root\/node\/bin\/node"\s+\\\n\s+"\$native_bundle_root\/app\/scripts\/verify-installed-runtime\.mjs"/,
+	);
+});
+
 test("package gates exercise the global npm install path", () => {
 	assert.ok(
 		packageManifest.bundleDependencies?.includes("@opentelemetry/api"),

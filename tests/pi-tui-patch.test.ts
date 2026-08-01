@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { patchPiEditorSource, patchPiInteractiveThemeSource, patchPiTuiSource } from "../scripts/lib/pi-tui-patch.mjs";
+import {
+	patchPiEditorSource,
+	patchPiInteractiveThemeSource,
+	patchPiInteractiveUpdateNoticeSource,
+	patchPiTuiSource,
+} from "../scripts/lib/pi-tui-patch.mjs";
 
 const SOURCE = `
         const renderEnd = Math.min(lastChanged, newLines.length - 1);
@@ -183,6 +188,14 @@ export function getSettingsListTheme() {
 }
 `;
 
+const INTERACTIVE_UPDATE_NOTICE_SOURCE = [
+	'const unrelatedAction = theme.fg("accent", `${APP_NAME} update --extensions`);',
+	"    showPackageUpdateNotification(packages) {",
+	'        const action = theme.fg("accent", `${APP_NAME} update --extensions`);',
+	'        const updateInstruction = theme.fg("muted", "Package updates are available. Run ") + action;',
+	"    }",
+].join("\n");
+
 test("patchPiEditorSource styles typed input before applying the editor background", () => {
 	const patched = patchPiEditorSource(EDITOR_SOURCE);
 
@@ -224,4 +237,32 @@ test("patchPiInteractiveThemeSource is idempotent", () => {
 	const once = patchPiInteractiveThemeSource(THEME_SOURCE);
 	const twice = patchPiInteractiveThemeSource(once);
 	assert.equal(twice, once);
+});
+
+test("patchPiInteractiveUpdateNoticeSource routes package notices through the full update command", () => {
+	const patched = patchPiInteractiveUpdateNoticeSource(INTERACTIVE_UPDATE_NOTICE_SOURCE);
+
+	assert.match(patched, /Feynman: package update notices use the full update command\./);
+	assert.match(
+		patched,
+		/showPackageUpdateNotification\(packages\) \{\n\s+\/\/ Feynman:[^\n]+\n\s+const action = theme\.fg\("accent", `\$\{APP_NAME\} update`\);/,
+	);
+	assert.match(
+		patched,
+		/const unrelatedAction = theme\.fg\("accent", `\$\{APP_NAME\} update --extensions`\);/,
+	);
+	assert.equal(patchPiInteractiveUpdateNoticeSource(patched), patched);
+});
+
+test("patchPiInteractiveUpdateNoticeSource fails closed on unknown or ambiguous layouts", () => {
+	assert.throws(
+		() => patchPiInteractiveUpdateNoticeSource("export class InteractiveMode {}"),
+		/Unsupported Pi interactive update notice layout/,
+	);
+	assert.throws(
+		() => patchPiInteractiveUpdateNoticeSource(
+			`${INTERACTIVE_UPDATE_NOTICE_SOURCE}\n${INTERACTIVE_UPDATE_NOTICE_SOURCE}`,
+		),
+		/Unsupported Pi interactive update notice layout/,
+	);
 });

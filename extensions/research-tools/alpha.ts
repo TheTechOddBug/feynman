@@ -8,7 +8,7 @@ import {
 	searchPapers,
 } from "@companion-ai/alpha-hub/lib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { extractPaperSections } from "./alpha-sections.js";
 
@@ -16,6 +16,16 @@ function formatText(value: unknown): string {
 	if (typeof value === "string") return value;
 	return JSON.stringify(value, null, 2);
 }
+
+// Pi converts Type.Array inputs before validating them, which would turn null into ["null"].
+// Preserve the JSON Schema array contract without the Type.Array conversion marker.
+const paperSectionsSchema = Type.Unsafe<string[]>({
+	type: "array",
+	items: Type.String({
+		description:
+			"Multiple sections to extract from content. Supported values: abstract, introduction, methodology, experiments, results, discussion, limitations, conclusion.",
+	}),
+});
 
 export function registerAlphaTools(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -49,14 +59,7 @@ export function registerAlphaTools(pi: ExtensionAPI): void {
 						"Single section to extract from content: abstract, introduction, methodology, experiments, results, discussion, limitations, or conclusion.",
 				}),
 			),
-			sections: Type.Optional(
-				Type.Array(
-					Type.String({
-						description:
-							"Multiple sections to extract from content. Supported values: abstract, introduction, methodology, experiments, results, discussion, limitations, conclusion.",
-					}),
-				),
-			),
+			sections: Type.Optional(paperSectionsSchema),
 		}),
 		async execute(_toolCallId, params) {
 			const result = await getPaper(params.paper, { fullText: params.fullText });

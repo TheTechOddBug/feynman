@@ -4,6 +4,38 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-01 07:30 PDT — intake-sweep-native-nested-pi-repair
+
+- Failed: Exact-SHA PR run `30703039353` reached the Windows native bundle and rejected the freshly installed nested `@earendil-works/pi-agent-core` because `patch-embedded-pi.mjs` patched only hoisted and runtime-workspace copies before artifact verification.
+- Fixed: The embedded patch now applies the reviewed AgentCore, TUI, editor, and package-update-notice repairs to hoisted and nested Pi copies in both the application dependency tree and vendored runtime workspace, with exact Pi-version guards.
+- Verified: A clean production-only dependency install began with all four affected files unpatched, then the embedded patch added every required marker; focused embedded/runtime regressions passed `8/8`; full tests passed `727/727`; typecheck, build, architecture check, and `git diff --check` passed.
+- State: `verified` locally and `unverified` for successor-SHA Daytona, Windows native CI, merge, and publication. Next: push the repair, prove the exact successor commit in Daytona and CI, then merge and reconcile the release.
+
+### 2026-08-01 06:12 PDT — intake-sweep-0.3.10-current-queue
+
+- Objective: Finish PR `#206` and issues `#207/#208/#209` as one `0.3.10` reliability release without losing the coordinated Pi `0.83.0` candidate.
+- Fixed: The Windows installer now extracts through a unique short same-volume drive and cleans up transactionally; package updates target the effective managed/project root and verify the update actually landed; PostHog transport failures open a silent per-process circuit breaker; TypeBox schemas reject null arrays; installed RPC verification reaps complete process trees; Pi package notices use the supported `feynman update` command; and the bundled `pi-subagents@0.38.0` / `pi-web-access@0.17.1` defaults now migrate consistently across settings, runtime, package-list, and release surfaces.
+- Hardened: Adversarial review replaced version-dependent Windows path lengths with a calculated boundary fixture, requires successful `taskkill`, corrects patch removal conditions, resolves hoisted direct dependencies during artifact verification, prevents tests from mutating the vendored Pi tree through legacy symlinks, and follows symlinked temp paths when deciding whether the installed verifier should execute. A final review also restricted exact-pin reconciliation to valid semantic versions while preserving range/tag selectors, and changed the bundled tracer preflight to an authenticated, status-checked `OPTIONS` request so retriable HTTP failures never enable the exporter.
+- Verified locally: focused review regressions passed `54/54`; full tests passed `726/726`; typecheck, build, architecture check, actionlint, website lint/typecheck/build (`34` pages), source/runtime/site/consumer audits, source and installed artifact checks, runtime tree reconciliation, stale-Pi upgrade, local/global installed RPC checks, healthy PostHog/OTLP log/trace delivery, blocked-collector silence, and `git diff --check` passed.
+- Package proof: dry and real packs matched at `112,524,540` bytes, `329,580,850` unpacked bytes, `39,705` files, SHA-1 `bfecb172351c30fddfe3a5b2aedfe8dea708e4d6`, and integrity `sha512-bZMJhGiA0F5YzasK6ehOLciAWfkv5WQMCKrmsdk2ja7Utn7aTSM4qmcukVE2fZTmERKiyuas2nzB3NUBeClo1w==`. Tarball SHA-256 is `1c459ea70d98f1f09e66057d1192bd23bf592e7674c0fd464bcfbe18411f1617`; runtime SHA-256 is `fa4828de88c37d559de58eef449be255f5b97d2de0f9a6a6eb8a66f2a2c1d069`.
+- State: `verified` locally and `unverified` for committed exact-SHA Daytona, PR CI, merge, published `0.3.10`, and terminal issue reconciliation. Next: commit/push the exact candidate, run and delete Daytona, require green Windows/consumer CI, merge, verify npm/GitHub/native release identity, then close `#207/#208/#209`.
+
+### 2026-07-30 02:02 PDT — intake-sweep-0.3.10-release-candidate
+
+- Fixed: PaperRank now reads only Pi's finalized assistant message and rejects provider errors, aborts, output-limit truncation, and other non-completion stop reasons before generated synthesis is written. Pi's top-level `cli` extension source classification no longer hides Feynman's 15 built-in research tools.
+- Hardened: Installed-package verification now inventories 9 Feynman commands and 15 tools over RPC, compiles all 15 installed schemas, exercises a genuinely nullable array through Pi's TypeBox tool path, and proves malformed arguments fail before tool execution.
+- Verified locally: focused release gates passed `10/10`; full tests passed `688/688`; typecheck, build, architecture check, website lint/typecheck/build, `git diff --check`, root/site/runtime/consumer audits, mixed-Pi rejection, stale-Pi upgrade, package-artifact verification, dry/real pack, package budget, clean consumer install, and global install all passed. The real tarball is 112,476,954 bytes with 39,700 files; runtime archive SHA-256 is `ec22f6bae0eadbe56012818ebc4fa9c42345159adbd8a2c540efd436f3a26bb7`.
+- Verified user paths: the installed runtime exposed all 9 commands and 15 tools, rejected malformed TypeBox input, completed a real authenticated `openai/gpt-5.5` prompt, and generated a real PaperRank synthesis artifact from the fixture source.
+- State: `verified` locally and `unverified` for exact-SHA Daytona, PR CI, merge, and published `0.3.10` reconciliation. Next: commit and push the exact candidate, run Daytona, merge only green CI, then verify npm provenance and GitHub/native assets.
+
+### 2026-07-29 16:07 PDT — intake-sweep-0.3.10-pi-0.83
+
+- Objective: Continue the terminal intake from released `0.3.9` and adopt the new coordinated Pi runtime rather than leave a fixable dependency migration deferred.
+- Found: Pi `0.83.0` was published from upstream commit `845d6ff1` during this sweep. Its TypeBox `1.3.7` change requires an explicit compatibility pass; its llama.cpp source now requests streaming usage, but old `models-store.json` entries still preserve the false capability. Upstream issues `#7150` and `#7053` remain open, and Pi's shrinkwrap still carries vulnerable `brace-expansion@5.0.7` plus proxy-broken Undici `8.5.0`.
+- Fixed: Moved all four Pi packages, root/runtime locks, fallback pins, correctness gates, declarations, artifact checks, and fixtures to exact `0.83.0`. Retained the compaction-loss and eager parallel-result repairs, rebased llama.cpp handling to keep only the serialized cached-metadata migration on top of Pi's upstream usage fix, and reapplied the exact `brace-expansion@5.0.8` and Undici `8.9.0` repairs. Mixed Pi trains and unreviewed older/newer versions now fail closed.
+- Verified so far: Focused runtime, llama.cpp, TypeBox-compatible extension/model, package, audit, integrity, and release-workflow tests passed `92/92`; root and generated-runtime production audits, typecheck, architecture check, and `git diff --check` passed. npm metadata and the official `v0.83.0` tag/release all resolve the four-package train to `845d6ff1`.
+- State: `verified` for the focused migration and `unverified` for the full source/site/package/native/clean-machine/CI/release ladder. Next: complete cumulative validation, exact-SHA Daytona proof, PR CI, merge, and `0.3.10` npm/GitHub/native release reconciliation.
+
 ### 2026-07-29 05:18 PDT — intake-sweep-0.3.9-runtime-correctness
 
 - Objective: Close the post-`0.3.8` release-gate findings and current Pi `0.82.1` runtime correctness gaps instead of leaving them as upstream or dependency deferrals.
