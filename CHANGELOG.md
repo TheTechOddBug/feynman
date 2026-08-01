@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-01 10:00 PDT — intake-sweep-0.3.10-release-completion
+
+- Objective: Finish the Pi `0.83.0` migration, Windows installer, package-update, and blocked-telemetry queue through exact-head proof, merge, publication, issue reconciliation, and cleanup.
+- Exact-head proof: Commit `b5c43a1508b26e7be12f0f54a09b3089c181bd40` passed the complete `727/727` suite, typecheck, build, architecture check, website lint/typecheck/build, all production audits, dry and real packs, package budget, clean local/global installs, stale-Pi and package-artifact verification, and installed RPC/TypeBox checks in Daytona sandbox `8423796e-c70c-4c61-bab4-d43ab8aa188f`. Its 113,079,330-byte, 39,702-file tarball had SHA-256 `e68cdab8074ec84d6833d4c296aeddf68fe5e6a5e8f3365c88eec1002559d365`; the sandbox was deleted and confirmed absent.
+- CI and merge: PR run `30704056177` passed the release candidate, both Windows PowerShell installer paths, and all six Linux/macOS/Windows Node `22.22.0`/`24.18.0`/`25` consumers. PR `#206` merged as `162a26a14c07576e44f2e579bc97a56de81a169e`; the release branch was deleted and local `main` fast-forwarded.
+- Released: Main run `30705796129` passed source/package verification, all six package consumers, all five native bundles, npm publication, GitHub release creation, and published-state verification. npm `@companion-ai/feynman@0.3.10` has integrity `sha512-yZQSjB6GmTo/m41lra8WaavQ3jFFxbWQkNvcmw1EV7zZAO8xSSdZ/G81Pd1UKBKJS/wJ5uR32PLtyiQvjTGhvQ==`; its verified SLSA/Fulcio provenance resolves to `162a26a`, and the registry tarball exactly matches the Daytona SHA-256.
+- Release identity: GitHub `v0.3.10` targets `162a26a` and contains five native archives plus `SHA256SUMS`; every provider asset digest matches the manifest. GitHub latest resolves to `v0.3.10`, the live Unix and Windows installer bytes match `main`, and the deployed release page names `v0.3.10`.
+- Reconciled: Issues `#207`, `#208`, and `#209` are closed with release receipts; the open issue and PR queues are empty. State: `completed`. Next: start future intake from the clean `0.3.10` release baseline and remove the remaining temporary fork-inspection refs.
+
 ### 2026-08-01 07:30 PDT — intake-sweep-native-nested-pi-repair
 
 - Failed: Exact-SHA PR run `30703039353` reached the Windows native bundle and rejected the freshly installed nested `@earendil-works/pi-agent-core` because `patch-embedded-pi.mjs` patched only hoisted and runtime-workspace copies before artifact verification.
