@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-01 07:30 PDT — intake-sweep-native-nested-pi-repair
+
+- Failed: Exact-SHA PR run `30703039353` reached the Windows native bundle and rejected the freshly installed nested `@earendil-works/pi-agent-core` because `patch-embedded-pi.mjs` patched only hoisted and runtime-workspace copies before artifact verification.
+- Fixed: The embedded patch now applies the reviewed AgentCore, TUI, editor, and package-update-notice repairs to hoisted and nested Pi copies in both the application dependency tree and vendored runtime workspace, with exact Pi-version guards.
+- Verified: A clean production-only dependency install began with all four affected files unpatched, then the embedded patch added every required marker; focused embedded/runtime regressions passed `8/8`; full tests passed `727/727`; typecheck, build, architecture check, and `git diff --check` passed.
+- State: `verified` locally and `unverified` for successor-SHA Daytona, Windows native CI, merge, and publication. Next: push the repair, prove the exact successor commit in Daytona and CI, then merge and reconcile the release.
+
 ### 2026-08-01 06:12 PDT — intake-sweep-0.3.10-current-queue
 
 - Objective: Finish PR `#206` and issues `#207/#208/#209` as one `0.3.10` reliability release without losing the coordinated Pi `0.83.0` candidate.
