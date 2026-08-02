@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-02 00:45 PDT — intake-sweep-0.3.11-release-completion
+
+- Objective: Finish the `pi-subagents@0.40.0` intake through exact-commit proof, publication, live installer verification, successor CI, and queue/worktree reconciliation.
+- Exact-head proof: Candidate `03fdb2a4c816e2de5c128821c0e48bf0011b2f73` passed the full local `728/728` ladder, authenticated parent/subagent smokes, exact-commit Daytona sandbox `7e3db21f-b329-4331-b4e2-4ce07e156dc4`, and PR run `30733954782`; PR `#210` merged as `26a55bd0cf9acf539413c3177da9ddb27029a5ce`.
+- Released: Main run `30735432891` passed source/package verification, all six Linux/macOS/Windows Node consumers, all five native builds, npm publication, GitHub release creation, and published-state verification. npm latest is `@companion-ai/feynman@0.3.11` with integrity `sha512-L/cWUqE1MitHhTntq57wcZdZEjQT2x2NZytMjXFn+JxeeVE5wmnearF5+/kMKiHq/tSArrqpBTMaFM/mUJ62bA==`; the 113,095,746-byte registry tarball has SHA-256 `12d36457caa982e8d4cdde292c4aef70a935a7d06aeabad52a1108c51859fada`, exactly matches the main workflow artifact, and verified provenance resolves to `26a55bd`.
+- Release identity: GitHub `v0.3.11` targets `26a55bd` and contains five nonempty native archives plus `SHA256SUMS`; every GitHub asset digest matches the manifest. Clean registry local/global consumers, source/runtime audits, package-artifact verification, installed RPC/TypeBox checks, the direct macOS one-line installer, and deployed `feynman.is` release docs all passed.
+- Installer gate: PR `#211` added durable post-release checks for the public Unix and Windows one-line installers and merged as `b67abf280d19eecc6c978fcfddeb2201b6178e1c` after local `729/729` validation and PR run `30736017829`. Dispatch `30737679781` passed all six published-package jobs plus live native installation on Ubuntu, macOS, and Windows; successor main run `30738324530` verified the existing release identity and skipped rebuild/publication.
+- Reconciled: Open issue and PR queues are empty; recent fork heads are behind `main`; root, website, and bundled runtime audits are clean; the unrelated Lima worktree remains preserved at `6a81316`. State: `completed`. Next: start future intake from the clean `0.3.11` release baseline.
+
 ### 2026-08-01 22:00 PDT — intake-sweep-pi-subagents-0.40
 
 - Objective: Process the only post-`0.3.10` in-scope intake change, preserve the clean unrelated Lima worktree, and carry `pi-subagents@0.40.0` through a `0.3.11` release.
