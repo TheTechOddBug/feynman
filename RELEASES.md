@@ -6,6 +6,14 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.11 - 2026-08-01
+
+### Research agents
+
+- Updated `pi-subagents` to `0.40.0` so delegated research runs have stable child identities, explicit signal-termination status, separate process and output-availability state, and clearer model and thinking-level visibility.
+- Added session-scoped agent capability ceilings, chain approval checkpoints, reported token and cost budgets, and child-runtime extension acknowledgements for safer, more auditable multi-agent research workflows.
+- Restored automatic package reconciliation for workspaces that retained either the `0.3.10` or older `0.3.6` bundled package defaults.
+
 ## v0.3.10 - 2026-08-01
 
 ### Runtime
