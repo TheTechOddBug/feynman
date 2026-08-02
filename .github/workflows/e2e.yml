@@ -185,6 +185,95 @@ jobs:
           grep -o "RESULT=PONG" subagent.log | head -1
           echo "subagent smoke ok"
 
+  published-native-installer-e2e:
+    if: github.event_name == 'workflow_dispatch'
+    name: native installer (${{ matrix.os }})
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-14
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.18.0"
+
+      - name: Install the published native bundle through the live Unix installer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          expected=$(npm view "@companion-ai/feynman@${FEYNMAN_VERSION_INPUT}" version | tail -1)
+          install_root="$RUNNER_TEMP/feynman-native-install"
+          installer="$RUNNER_TEMP/feynman-install.sh"
+          curl --fail --location --silent --show-error \
+            https://feynman.is/install \
+            --output "$installer"
+          FEYNMAN_INSTALL_BIN_DIR="$install_root/bin" \
+            FEYNMAN_INSTALL_APP_DIR="$install_root/app" \
+            FEYNMAN_INSTALL_SKIP_PATH_UPDATE=1 \
+            sh "$installer" "$FEYNMAN_VERSION_INPUT"
+
+          bin="$install_root/bin/feynman"
+          test "$("$bin" --version | tail -1)" = "$expected"
+          "$bin" --help >/dev/null
+          case "$(uname -s)" in
+            Darwin) os=darwin ;;
+            Linux) os=linux ;;
+            *) exit 1 ;;
+          esac
+          case "$(uname -m)" in
+            x86_64 | amd64) arch=x64 ;;
+            arm64 | aarch64) arch=arm64 ;;
+            *) exit 1 ;;
+          esac
+          bundle="$install_root/app/feynman-$expected-$os-$arch"
+          test -x "$bundle/feynman"
+          "$bundle/node/bin/node" \
+            "$bundle/app/scripts/verify-installed-runtime.mjs" \
+            "$bin"
+
+      - name: Install the published native bundle through the live Windows installer
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $expected = (
+            & npm view "@companion-ai/feynman@$env:FEYNMAN_VERSION_INPUT" version |
+              Select-Object -Last 1
+          ).ToString().Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not resolve the requested npm version."
+          }
+
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "FeynmanLocalAppData"
+          $env:FEYNMAN_HOME = Join-Path $env:RUNNER_TEMP "FeynmanHome"
+          New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+          & ([scriptblock]::Create((irm https://feynman.is/install.ps1))) `
+            -Version $env:FEYNMAN_VERSION_INPUT
+
+          $installRoot = Join-Path $env:LOCALAPPDATA "Programs\feynman"
+          $bin = Join-Path $installRoot "bin\feynman.cmd"
+          $installed = (& $bin --version | Select-Object -Last 1).ToString().Trim()
+          if ($LASTEXITCODE -ne 0 -or $installed -ne $expected) {
+            throw "Installed version mismatch: expected=$expected actual=$installed"
+          }
+          & $bin --help | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installed Windows launcher failed --help."
+          }
+          $bundle = Join-Path $installRoot "feynman-$expected-win32-x64"
+          & (Join-Path $bundle "node\node.exe") `
+            (Join-Path $bundle "app\scripts\verify-installed-runtime.mjs") `
+            $bin
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installed Windows runtime verification failed."
+          }
+
   release-candidate-pr:
     if: github.event_name == 'pull_request'
     name: Release candidate (PR)

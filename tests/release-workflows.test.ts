@@ -28,6 +28,22 @@ test("pull-request release gates validate the merge candidate", () => {
 	);
 });
 
+test("manual post-release gates exercise the live native installers", () => {
+	const installerJob = e2eWorkflow.match(
+		/\n  published-native-installer-e2e:[\s\S]*?(?=\n  release-candidate-pr:)/,
+	);
+	assert.ok(installerJob, "manual workflow must define the published native installer job");
+	assert.match(installerJob[0], /if: github\.event_name == 'workflow_dispatch'/);
+	assert.match(installerJob[0], /https:\/\/feynman\.is\/install\b/);
+	assert.match(installerJob[0], /https:\/\/feynman\.is\/install\.ps1/);
+	assert.match(installerJob[0], /FEYNMAN_INSTALL_BIN_DIR/);
+	assert.match(installerJob[0], /shell: powershell/);
+	assert.match(installerJob[0], /verify-installed-runtime\.mjs/);
+	for (const os of ["ubuntu-latest", "macos-14", "windows-latest"]) {
+		assert.match(installerJob[0], new RegExp(`- ${os}`));
+	}
+});
+
 test("PR and publish workflows require clean package and consumer audits", () => {
 	for (const workflow of [e2eWorkflow, publishWorkflow]) {
 		assert.match(workflow, /npm audit --omit=dev --prefix \.feynman\/npm/);
@@ -53,7 +69,7 @@ test("package and native release gates exercise persisted Pi user-package upgrad
 
 test("installed package gates verify Feynman commands, tools, and TypeBox schemas across launchers", () => {
 	const installedRuntimeVerifier = /scripts\/verify-installed-runtime\.mjs/g;
-	assert.equal((e2eWorkflow.match(installedRuntimeVerifier) ?? []).length, 4);
+	assert.equal((e2eWorkflow.match(installedRuntimeVerifier) ?? []).length, 5);
 	assert.equal((publishWorkflow.match(installedRuntimeVerifier) ?? []).length, 8);
 	for (const workflow of [e2eWorkflow, publishWorkflow]) {
 		assert.match(workflow, /bin="\$consumer\/node_modules\/\.bin\/feynman\.cmd"/);
