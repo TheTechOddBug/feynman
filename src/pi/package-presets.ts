@@ -9,7 +9,7 @@ const UNPINNED_CORE_PACKAGE_SOURCES = [
 	"npm:pi-otel",
 ] as const;
 
-const PREVIOUS_CORE_PACKAGE_SOURCES = [
+const LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub@0.1.3",
 	"npm:pi-subagents@0.37.2",
 	"npm:pi-btw@0.4.1",
@@ -18,9 +18,18 @@ const PREVIOUS_CORE_PACKAGE_SOURCES = [
 	"npm:pi-otel@0.1.0",
 ] as const;
 
-export const CORE_PACKAGE_SOURCES = [
+const PREVIOUS_CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub@0.1.3",
 	"npm:pi-subagents@0.38.0",
+	"npm:pi-btw@0.4.1",
+	"npm:pi-docparser@3.0.1",
+	"npm:pi-web-access@0.17.1",
+	"npm:pi-otel@0.1.0",
+] as const;
+
+export const CORE_PACKAGE_SOURCES = [
+	"npm:@companion-ai/alpha-hub@0.1.3",
+	"npm:pi-subagents@0.40.0",
 	"npm:pi-btw@0.4.1",
 	"npm:pi-docparser@3.0.1",
 	"npm:pi-web-access@0.17.1",
@@ -67,6 +76,11 @@ const LEGACY_ADJACENT_PACKAGE_SOURCES = [
 ] as const;
 
 const LEGACY_PINNED_CORE_PACKAGE_SOURCES = [
+	...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+	...LEGACY_ADJACENT_PACKAGE_SOURCES,
+] as const;
+
+const PREVIOUS_PINNED_CORE_PACKAGE_SOURCES = [
 	...PREVIOUS_CORE_PACKAGE_SOURCES,
 	...LEGACY_ADJACENT_PACKAGE_SOURCES,
 ] as const;
@@ -177,7 +191,26 @@ const LEGACY_DEFAULT_PACKAGE_SETS = [
 		...LEGACY_PINNED_CORE_PACKAGE_SOURCES,
 	],
 	[
+		...PREVIOUS_PINNED_CORE_PACKAGE_SOURCES,
+	],
+	[
 		...LEGACY_CURRENT_PINNED_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+	],
+	[
+		...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:pi-generative-ui",
+	],
+	[
+		...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+	],
+	[
+		...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+		"npm:@devkade/pi-opentelemetry",
+		"npm:pi-generative-ui",
 	],
 	[
 		...PREVIOUS_CORE_PACKAGE_SOURCES,

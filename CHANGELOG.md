@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-01 22:00 PDT — intake-sweep-pi-subagents-0.40
+
+- Objective: Process the only post-`0.3.10` in-scope intake change, preserve the clean unrelated Lima worktree, and carry `pi-subagents@0.40.0` through a `0.3.11` release.
+- Changed: Updated the bundled/default/runtime-locked subagent package to `0.40.0`; retained automatic migration for both the `0.3.10` (`pi-subagents@0.38.0`) and `0.3.6` (`0.37.2`) default package sets; bumped Feynman to `0.3.11`; and added matching repository/website release notes. TypeBox remains at Pi `0.83.0`'s exact `1.3.7` contract.
+- Source proof: npm `pi-subagents@0.40.0` resolves to upstream tag commit `d4d2ab706b612ccd173caad2bc202eef07e7eda3`; upstream CI `30721272104` passed Ubuntu and Windows. The installed package exposes the reviewed capability ceilings, usage budgets, approval checkpoints, runtime-extension acknowledgement, signal status, process/output separation, and model/thinking visibility paths.
+- Verified locally: Focused package/settings/runtime/release coverage passed `92/92`; full tests passed `728/728`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, package freshness review, `git diff --check`, package-artifact verification, stale-Pi upgrade, and clean local/global installed-runtime RPC/TypeBox checks passed. Registry signature audit reported zero invalid or missing packages, and real authenticated `openai/gpt-5.5` parent plus `researcher` subagent smokes returned `PARENT_OK` and `RESULT=PONG`.
+- Package proof: Dry and real packs matched at `112,546,426` bytes, `329,608,636` unpacked bytes, and `39,705` files. The tarball SHA-256 is `79f8a976fc9dc4a4e2d4ffd1616b42798a6fd18ad0716241e35ab6933a108612`; the embedded runtime SHA-256 is `cad4ab09354c89cc5026ecbf78573ff6e0a4b08ae95b72a5205a6b3be7471ab3`.
+- State: `verified` locally and `unverified` for exact-commit Daytona, PR CI, merge, and npm/GitHub/native publication. Next: commit and push the candidate, prove that exact commit in a disposable Daytona sandbox and required CI, then merge and verify every `0.3.11` release surface.
+
 ### 2026-08-01 10:00 PDT — intake-sweep-0.3.10-release-completion
 
 - Objective: Finish the Pi `0.83.0` migration, Windows installer, package-update, and blocked-telemetry queue through exact-head proof, merge, publication, issue reconciliation, and cleanup.
