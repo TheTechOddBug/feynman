@@ -469,6 +469,11 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	);
 	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
 	writeFileSync(webAccessPdfPath, WEB_ACCESS_PDF_SOURCE, "utf8");
+	writeFileSync(
+		join(dirname(webAccessPath), "package.json"),
+		JSON.stringify({ name: "pi-web-access", version: "0.18.0" }, null, 2) + "\n",
+		"utf8",
+	);
 	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(piOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
@@ -496,6 +501,22 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.match(readFileSync(piOtelConfigPath, "utf8"), /process\.env\.OTEL_EXPORTER_OTLP_TRACES_HEADERS/);
 	assert.match(readFileSync(sessionSearchPath, "utf8"), /process\.env\.FEYNMAN_SESSION_DIR/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
+});
+
+test("patchPiRuntimeNodeModules leaves unsupported pi-web-access versions untouched", async () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-web-runtime-patches-"));
+	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
+	const webAccessPath = join(webRoot, "index.ts");
+	await mkdir(webRoot, { recursive: true });
+	writeFileSync(
+		join(webRoot, "package.json"),
+		JSON.stringify({ name: "pi-web-access", version: "0.19.0" }, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
+
+	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
+	assert.equal(readFileSync(webAccessPath, "utf8"), WEB_ACCESS_INDEX_SOURCE);
 });
 
 test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while patching extensions", async () => {

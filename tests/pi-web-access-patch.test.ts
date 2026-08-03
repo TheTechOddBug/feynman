@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { patchPiWebAccessSource } from "../scripts/lib/pi-web-access-patch.mjs";
+import {
+	assertPiWebAccessVersion,
+	PI_WEB_ACCESS_REQUIRED_VERSION,
+	patchPiWebAccessSource,
+} from "../scripts/lib/pi-web-access-patch.mjs";
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
 	const input = [
@@ -188,6 +196,198 @@ test("patchPiWebAccessSource is idempotent", () => {
 	const twice = patchPiWebAccessSource("perplexity.ts", once);
 
 	assert.equal(twice, once);
+});
+
+test("patchPiWebAccessSource binds nested web model calls to Pi's resolved session scope", async () => {
+	const scopeSource = [
+		'import { existsSync, readFileSync } from "node:fs";',
+		'import { homedir } from "node:os";',
+		'import { join } from "node:path";',
+		"",
+		'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);',
+		"",
+		"interface SummaryModelScopeContext {",
+		"\tcwd: string;",
+		"\tisProjectTrusted(): boolean;",
+		"}",
+		"",
+		"export interface ModelLike {",
+		"\tprovider: string;",
+		"\tid: string;",
+		"}",
+		"",
+		"function getAgentDir(): string {",
+		'\treturn process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");',
+		"}",
+		"",
+		"function readSettings(path: string): Record<string, unknown> {",
+		"\tif (!existsSync(path)) return {};",
+		'\tconst raw = readFileSync(path, "utf8");',
+		"\ttry {",
+		"\t\treturn JSON.parse(raw) as Record<string, unknown>;",
+		"\t} catch (err) {",
+		"\t\tconst message = err instanceof Error ? err.message : String(err);",
+		"\t\tthrow new Error(`Failed to parse ${path}: ${message}`);",
+		"\t}",
+		"}",
+		"",
+		"export function loadEnabledModelPatterns(ctx: SummaryModelScopeContext): string[] | null {",
+		'\tconst globalSettings = readSettings(join(getAgentDir(), "settings.json"));',
+		"\tconst projectSettings = ctx.isProjectTrusted()",
+		'\t\t? readSettings(join(ctx.cwd, ".pi", "settings.json"))',
+		"\t\t: {};",
+		'\tconst value = Object.hasOwn(projectSettings, "enabledModels")',
+		"\t\t? projectSettings.enabledModels",
+		"\t\t: globalSettings.enabledModels;",
+		"\tif (value === undefined) return null;",
+		'\tif (!Array.isArray(value)) throw new Error("enabledModels must be an array");',
+		"\treturn value",
+		'\t\t.filter((item): item is string => typeof item === "string")',
+		"\t\t.map(item => item.trim())",
+		"\t\t.filter(Boolean);",
+		"}",
+		"",
+		"export function summaryModelValue(model: ModelLike): string {",
+		"\treturn `${model.provider}/${model.id}`;",
+		"}",
+	].join("\n");
+
+	const patchedScope = patchPiWebAccessSource("summary-model-scope.ts", scopeSource);
+	assert.match(patchedScope, /scopedModels: readonly \{ model: ModelLike \}\[\]/);
+	assert.match(patchedScope, /ctx\.scopedModels\.length === 0/);
+	assert.match(patchedScope, /ctx\.scopedModels\.map\(\(\{ model \}\) => summaryModelValue\(model\)\)/);
+	assert.match(patchedScope, /export function modelMatchesScopedModels/);
+	assert.match(patchedScope, /"xhigh", "max"/);
+	assert.doesNotMatch(patchedScope, /readSettings|PI_CODING_AGENT_DIR|\.pi.*settings\.json/);
+	assert.equal(patchPiWebAccessSource("summary-model-scope.ts", patchedScope), patchedScope);
+
+	const fixtureRoot = mkdtempSync(join(tmpdir(), "feynman-web-model-scope-"));
+	const fixturePath = join(fixtureRoot, "summary-model-scope.ts");
+	writeFileSync(fixturePath, patchedScope, "utf8");
+	try {
+		const scopeModule = await import(`${pathToFileURL(fixturePath).href}?v=${Date.now()}`);
+		assert.deepEqual(
+			scopeModule.loadEnabledModelPatterns({
+				scopedModels: [{ model: { provider: "openai", id: "gpt-5.5" } }],
+			}),
+			["openai/gpt-5.5"],
+		);
+		assert.equal(scopeModule.loadEnabledModelPatterns({ scopedModels: [] }), null);
+		assert.equal(
+			scopeModule.modelMatchesScopedModels(
+				{ provider: "openai", id: "gpt-5.5" },
+				[{ model: { provider: "openai", id: "gpt-5.5" } }],
+			),
+			true,
+		);
+		assert.equal(
+			scopeModule.modelMatchesScopedModels(
+				{ provider: "openai", id: "gpt-5.5" },
+				[{ model: { provider: "anthropic", id: "claude-opus-4-7" } }],
+			),
+			false,
+		);
+	} finally {
+		rmSync(fixtureRoot, { recursive: true, force: true });
+	}
+
+	const summaryReviewSource =
+		'export type SummaryGenerationContext = Pick<ExtensionContext, "model" | "modelRegistry" | "cwd" | "isProjectTrusted">;';
+	const patchedReview = patchPiWebAccessSource("summary-review.ts", summaryReviewSource);
+	assert.match(patchedReview, /"modelRegistry" \| "scopedModels" \| "cwd"/);
+	assert.equal(patchPiWebAccessSource("summary-review.ts", patchedReview), patchedReview);
+});
+
+test("patchPiWebAccessSource uses direct Pi session-scope membership at every nested model call", () => {
+	const pageQuerySource = [
+		'import { loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";',
+		"function resolveModel(ctx, model) {",
+		"\tif (!modelMatchesEnabledPatterns(model, loadEnabledModelPatterns(ctx))) throw new Error();",
+		"}",
+	].join("\n");
+	const patchedPageQuery = patchPiWebAccessSource("page-query.ts", pageQuerySource);
+	assert.match(patchedPageQuery, /import \{ modelMatchesScopedModels \}/);
+	assert.match(patchedPageQuery, /modelMatchesScopedModels\(model, ctx\.scopedModels\)/);
+	assert.doesNotMatch(patchedPageQuery, /loadEnabledModelPatterns|modelMatchesEnabledPatterns/);
+
+	const summaryReviewSource = [
+		'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";',
+		'export type SummaryGenerationContext = Pick<ExtensionContext, "model" | "modelRegistry" | "cwd" | "isProjectTrusted">;',
+		"async function resolve(ctx) {",
+		"\tconst enabledModelPatterns = loadEnabledModelPatterns(ctx);",
+		"\tif (!modelMatchesEnabledPatterns(model, enabledModelPatterns)) throw new Error();",
+		"}",
+	].join("\n");
+	const patchedReview = patchPiWebAccessSource("summary-review.ts", summaryReviewSource);
+	assert.match(patchedReview, /modelMatchesScopedModels\(model, ctx\.scopedModels\)/);
+	assert.doesNotMatch(patchedReview, /loadEnabledModelPatterns|modelMatchesEnabledPatterns/);
+});
+
+test("patchPiWebAccessSource carries Pi scoped models into every nested summary context", () => {
+	const input = [
+		"const first: SummaryGenerationContext = {",
+		"\tmodel: ctx.model,",
+		"\tmodelRegistry: ctx.modelRegistry,",
+		"\tcwd: ctx.cwd,",
+		"\tisProjectTrusted: () => ctx.isProjectTrusted(),",
+		"};",
+		"const second: SummaryGenerationContext = {",
+		"\t\tmodel: ctx.model,",
+		"\t\tmodelRegistry: ctx.modelRegistry,",
+		"\t\tcwd: ctx.cwd,",
+		"\t\tisProjectTrusted: () => ctx.isProjectTrusted(),",
+		"};",
+	].join("\n");
+
+	const patched = patchPiWebAccessSource("index.ts", input);
+	assert.equal(patched.match(/get scopedModels\(\) \{ return ctx\.scopedModels; \}/g)?.length, 2);
+	assert.doesNotMatch(patched, /scopedModels: ctx\.scopedModels/);
+	assert.equal(patchPiWebAccessSource("index.ts", patched), patched);
+
+	const runnable = patchPiWebAccessSource("index.ts", [
+		"const summaryContext = {",
+		"\tmodelRegistry: ctx.modelRegistry,",
+		"\tcwd: ctx.cwd,",
+		"};",
+		"return summaryContext;",
+	].join("\n"));
+	const firstScope = [{ model: { provider: "openai", id: "gpt-5.5" } }];
+	const secondScope = [{ model: { provider: "anthropic", id: "claude-haiku-4-5" } }];
+	const ctx = { modelRegistry: {}, cwd: "/tmp", scopedModels: firstScope };
+	const summaryContext = Function("ctx", runnable)(ctx);
+	assert.equal(summaryContext.scopedModels, firstScope);
+	ctx.scopedModels = secondScope;
+	assert.equal(summaryContext.scopedModels, secondScope);
+});
+
+test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.18.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.18.0", "test"));
+	assert.throws(
+		() => assertPiWebAccessVersion("0.19.0", "future"),
+		/expected 0\.18\.0, found 0\.19\.0/,
+	);
+
+	const futureSource = [
+		'import { existsSync, readFileSync } from "node:fs";',
+		'import { homedir } from "node:os";',
+		'import { join } from "node:path";',
+		'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);',
+		"interface SummaryModelScopeContext {",
+		"\tcwd: string;",
+		"\tisProjectTrusted(): boolean;",
+		"}",
+		"function getAgentDir(): string {",
+		'\treturn process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");',
+		"}",
+		"function futureScopeHelper(): string { return \"preserve-me\"; }",
+		"export function loadEnabledModelPatterns(): string[] | null { return null; }",
+	].join("\n");
+	assert.throws(
+		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
+		/Unsupported pi-web-access 0\.18\.0 summary model scope layout/,
+	);
+	assert.match(futureSource, /futureScopeHelper/);
 });
 
 test("patchPiWebAccessSource bounds web_search query calls with a deadline in index.ts", () => {

@@ -24,7 +24,11 @@ import {
 	patchPiInteractiveUpdateNoticeSource,
 	patchPiTuiSource,
 } from "../../scripts/lib/pi-tui-patch.mjs";
-import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "../../scripts/lib/pi-web-access-patch.mjs";
+import {
+	PI_WEB_ACCESS_PATCH_TARGETS,
+	PI_WEB_ACCESS_REQUIRED_VERSION,
+	patchPiWebAccessSource,
+} from "../../scripts/lib/pi-web-access-patch.mjs";
 
 function patchFileIfPresent(path: string, patchSource: (source: string) => string): boolean {
 	if (!existsSync(path)) {
@@ -53,6 +57,20 @@ function patchPackageFiles(
 		) || changed;
 	}
 	return changed;
+}
+
+function patchVersionedPackageFiles(
+	nodeModulesPath: string,
+	packageName: string,
+	requiredVersion: string,
+	relativePaths: string[],
+	patchSource: (relativePath: string, source: string) => string,
+): boolean {
+	const packageRoot = resolve(nodeModulesPath, ...packageName.split("/"));
+	if (readPackageVersion(packageRoot) !== requiredVersion) {
+		return false;
+	}
+	return patchPackageFiles(nodeModulesPath, packageName, relativePaths, patchSource);
 }
 
 function readPackageVersion(packageRoot: string): string | undefined {
@@ -322,9 +340,10 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
 			patchAlphaHubSearchResultsSource,
 		) || changed;
-		changed = patchPackageFiles(
+		changed = patchVersionedPackageFiles(
 			nodeModulesPath,
 			"pi-web-access",
+			PI_WEB_ACCESS_REQUIRED_VERSION,
 			PI_WEB_ACCESS_PATCH_TARGETS,
 			patchPiWebAccessSource,
 		) || changed;

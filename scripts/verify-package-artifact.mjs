@@ -54,6 +54,13 @@ function requireMarkers(source, label, markers) {
 	}
 }
 
+function requireMarkerCount(source, label, marker, expectedCount) {
+	const actualCount = source.split(marker).length - 1;
+	if (actualCount !== expectedCount) {
+		fail(`${label} expected ${expectedCount} occurrences of ${marker}, found ${actualCount}`);
+	}
+}
+
 function assertPiInteractiveUpdateNoticeSource(source, label) {
 	requireMarkers(source, label, [
 		PI_INTERACTIVE_UPDATE_NOTICE_MARKER,
@@ -697,11 +704,12 @@ if (
 ) {
 	fail(`runtime pi-web-access is not ${expectedPiWebAccessVersion}`);
 }
+const webSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/index.ts",
+);
 requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/pi-web-access/index.ts",
-	),
+	webSource,
 	"runtime pi-web-access research tools",
 	[
 		'StringEnum(["readable", "raw", "answer"]',
@@ -711,8 +719,66 @@ requireMarkers(
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
 		"Searches return directly by default",
+		"get scopedModels() { return ctx.scopedModels; }",
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
 	],
 );
+requireMarkerCount(
+	webSource,
+	"runtime pi-web-access live nested model scope",
+	"get scopedModels() { return ctx.scopedModels; }",
+	3,
+);
+const webModelScopeSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/summary-model-scope.ts",
+);
+requireMarkers(
+	webModelScopeSource,
+	"runtime pi-web-access model scope",
+	[
+		"ctx.scopedModels.length === 0",
+		"ctx.scopedModels.map(({ model }) => summaryModelValue(model))",
+		"export function modelMatchesScopedModels(",
+		"scopedModel.provider === model.provider && scopedModel.id === model.id",
+		'"xhigh", "max"',
+	],
+);
+for (const staleMarker of ["readSettings(", 'join(ctx.cwd, ".pi", "settings.json")']) {
+	if (webModelScopeSource.includes(staleMarker)) {
+		fail(`runtime pi-web-access model scope still contains stale marker: ${staleMarker}`);
+	}
+}
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/page-query.ts",
+	),
+	"runtime pi-web-access page-answer model scope",
+	[
+		'import { modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+	],
+);
+const webSummaryReviewSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/summary-review.ts",
+);
+requireMarkers(
+	webSummaryReviewSource,
+	"runtime pi-web-access summary review model scope",
+	[
+		'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		'Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">',
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+	],
+);
+for (const staleMarker of ["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"]) {
+	if (webSummaryReviewSource.includes(staleMarker)) {
+		fail(`runtime pi-web-access summary review still contains stale marker: ${staleMarker}`);
+	}
+}
 requireMarkers(
 	readArchivedText(
 		archivePath,

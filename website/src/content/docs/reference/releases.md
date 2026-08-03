@@ -20,6 +20,8 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 ### Reliability
 
 - Kept PDF scratch Markdown in the active project's `.feynman/cache/fetch-content`, kept browser-cookie access opt-in, retained the bounded primary search deadline, and adopted upstream's per-call curator isolation and no-browser timeout rather than carrying superseded local patches.
+- Bound page-answer, search-rewrite, and curator summary model selection to Pi's resolved session model scope, including `--models` overrides, instead of rereading an adjacent settings file.
+- Removed macOS ACL, file-flag, Apple metadata, and extended-attribute records from bundled runtime archives so those host records no longer change package bytes.
 - Restored automatic package reconciliation for workspaces retaining the `0.3.11`, `0.3.10`, or older `0.3.6` bundled package defaults.
 
 ## v0.3.11 - 2026-08-01
