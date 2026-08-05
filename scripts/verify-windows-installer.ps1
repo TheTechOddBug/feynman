@@ -222,7 +222,7 @@ try {
     $zip.Dispose()
   }
   @'
-import { createReadStream, statSync, writeFileSync } from "node:fs";
+import { createReadStream, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename } from "node:path";
 
@@ -254,9 +254,19 @@ const server = createServer((request, response) => {
     return;
   }
 
+  if (source === checksumFile) {
+    const body = readFileSync(source);
+    response.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Content-Length": body.byteLength,
+    });
+    response.end(request.method === "HEAD" ? undefined : body);
+    return;
+  }
+
   const size = statSync(source).size;
   response.writeHead(200, {
-    "Content-Type": source === archive ? "application/zip" : "text/plain",
+    "Content-Type": "application/zip",
     "Content-Length": size,
   });
 

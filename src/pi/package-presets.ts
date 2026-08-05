@@ -40,7 +40,7 @@ export const CORE_PACKAGE_SOURCES = [
 	"npm:@companion-ai/alpha-hub@0.1.3",
 	"npm:pi-subagents@0.40.0",
 	"npm:pi-btw@0.4.1",
-	"npm:pi-docparser@3.0.1",
+	"npm:pi-docparser@4.0.0",
 	"npm:pi-web-access@0.18.0",
 	"npm:pi-otel@0.1.0",
 ] as const;

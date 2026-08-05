@@ -26,6 +26,129 @@ export function assertPiWebAccessVersion(version, surface) {
 	}
 }
 
+function countOccurrences(source, marker) {
+	return source.split(marker).length - 1;
+}
+
+function requireMarkerCount(source, relativePath, marker, expectedCount, surface) {
+	const actualCount = countOccurrences(source, marker);
+	if (actualCount !== expectedCount) {
+		throw new Error(
+			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface} ${relativePath}: expected ${expectedCount} occurrences of ${marker}, found ${actualCount}`,
+		);
+	}
+}
+
+function requireMarkerCounts(source, relativePath, expectations, surface) {
+	for (const [marker, expectedCount] of expectations) {
+		requireMarkerCount(source, relativePath, marker, expectedCount, surface);
+	}
+}
+
+function rejectMarkers(source, relativePath, markers, surface) {
+	for (const marker of markers) {
+		if (source.includes(marker)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface} ${relativePath}: stale ${marker}`,
+			);
+		}
+	}
+}
+
+export function assertPiWebAccessPatchedSources(sources, surface = "patched source tree") {
+	for (const relativePath of ["index.ts", "page-query.ts", "summary-model-scope.ts", "summary-review.ts"]) {
+		if (!sources.has(relativePath)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface}: missing ${relativePath}`,
+			);
+		}
+	}
+
+	const indexSource = sources.get("index.ts");
+	requireMarkerCounts(indexSource, "index.ts", [
+		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		["get scopedModels() { return ctx.scopedModels; }", 3],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+		["modelMatchesScopedModels(model, summaryContext.scopedModels)", 1],
+		["modelMatchesScopedModels(summaryContext.model, summaryContext.scopedModels)", 1],
+	], surface);
+	rejectMarkers(
+		indexSource,
+		"index.ts",
+		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns", "scopedModels: ctx.scopedModels"],
+		surface,
+	);
+
+	const pageQuerySource = sources.get("page-query.ts");
+	requireMarkerCounts(pageQuerySource, "page-query.ts", [
+		['import { modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+	], surface);
+	rejectMarkers(
+		pageQuerySource,
+		"page-query.ts",
+		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"],
+		surface,
+	);
+
+	const scopeSource = sources.get("summary-model-scope.ts");
+	for (const marker of [
+		'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);',
+		"\tscopedModels: readonly { model: ModelLike }[];",
+		"export function modelMatchesScopedModels(",
+		"\tif (ctx.scopedModels.length === 0) return null;",
+		"\treturn ctx.scopedModels.map(({ model }) => summaryModelValue(model));",
+	]) {
+		requireMarkerCount(scopeSource, "summary-model-scope.ts", marker, 1, surface);
+	}
+	rejectMarkers(
+		scopeSource,
+		"summary-model-scope.ts",
+		[
+			"function getAgentDir(): string {",
+			"function readSettings(",
+			'join(ctx.cwd, ".pi", "settings.json")',
+		'from "node:fs"',
+			'from "node:os"',
+			'from "node:path"',
+		],
+		surface,
+	);
+
+	const reviewSource = sources.get("summary-review.ts");
+	requireMarkerCounts(reviewSource, "summary-review.ts", [
+		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		['Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">', 1],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+	], surface);
+	rejectMarkers(
+		reviewSource,
+		"summary-review.ts",
+		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"],
+		surface,
+	);
+}
+
+export function patchPiWebAccessSources(sources, surface = "source tree") {
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		if (!sources.has(relativePath)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface}: missing ${relativePath}`,
+			);
+		}
+	}
+
+	const patchedSources = new Map();
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		patchedSources.set(
+			relativePath,
+			patchPiWebAccessSource(relativePath, sources.get(relativePath)),
+		);
+	}
+	assertPiWebAccessPatchedSources(patchedSources, surface);
+	return patchedSources;
+}
+
 const LEGACY_CONFIG_EXPR = 'join(homedir(), ".pi", "web-search.json")';
 const PATCHED_CONFIG_EXPR =
 	'process.env.FEYNMAN_WEB_SEARCH_CONFIG ?? process.env.PI_WEB_SEARCH_CONFIG ?? join(homedir(), ".pi", "web-search.json")';

@@ -89,6 +89,9 @@ test("Windows installer verifier defines every strict-mode install path", () => 
 	assert.match(verifier, /Successful compact replacement did not install the MAX_PATH boundary fixture entry/);
 	assert.match(verifier, /Exact-candidate replacement retained the old bundle/);
 	assert.match(verifier, /\$fixtureRoot = Join-Path \$testRoot "compact-fixture"/);
+	assert.match(verifier, /const body = readFileSync\(source\);/);
+	assert.match(verifier, /response\.end\(request\.method === "HEAD" \? undefined : body\);/);
+	assert.match(verifier, /createReadStream\(source\)\.pipe\(response\);/);
 	assert.match(
 		verifier,
 		/\[System\.IO\.Compression\.ZipFile\]::CreateFromDirectory\(\$fixtureRoot, \$fixtureArchive\)/,

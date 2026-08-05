@@ -9,7 +9,13 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.12 - 2026-08-03
+## v0.3.12 - 2026-08-04
+
+### Document research
+
+- Updated `pi-docparser` to `4.0.0`. Native PDFium and OCR work now runs in isolated, cancellable child processes, so parser crashes and memory failures become bounded tool errors instead of terminating the research session.
+- Added strict page, worker, DPI, search, screenshot, and output limits. Parse publication is atomic, JSON output has a stable `{ pages, text }` shape, screenshots default to page 1, and each call accepts at most four explicit pages.
+- Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.10.1`. Document parsing now requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
 
 ### Web research
 
@@ -22,6 +28,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 - Kept PDF scratch Markdown in the active project's `.feynman/cache/fetch-content`, kept browser-cookie access opt-in, retained the bounded primary search deadline, and adopted upstream's per-call curator isolation and no-browser timeout rather than carrying superseded local patches.
 - Bound page-answer, search-rewrite, and curator summary model selection to Pi's resolved session model scope, including `--models` overrides, instead of rereading an adjacent settings file.
 - Removed macOS ACL, file-flag, Apple metadata, and extended-attribute records from bundled runtime archives so those host records no longer change package bytes.
+- Updated audited Hono, `fast-uri`, `ip-address`, `express-rate-limit`, and website `brace-expansion` overrides after new registry advisories, and removed a streamed checksum-file handle from the Windows installer verifier.
 - Restored automatic package reconciliation for workspaces retaining the `0.3.11`, `0.3.10`, or older `0.3.6` bundled package defaults.
 
 ## v0.3.11 - 2026-08-01

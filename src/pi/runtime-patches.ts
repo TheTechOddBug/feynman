@@ -25,9 +25,9 @@ import {
 	patchPiTuiSource,
 } from "../../scripts/lib/pi-tui-patch.mjs";
 import {
+	assertPiWebAccessVersion,
 	PI_WEB_ACCESS_PATCH_TARGETS,
-	PI_WEB_ACCESS_REQUIRED_VERSION,
-	patchPiWebAccessSource,
+	patchPiWebAccessSources,
 } from "../../scripts/lib/pi-web-access-patch.mjs";
 
 function patchFileIfPresent(path: string, patchSource: (source: string) => string): boolean {
@@ -59,18 +59,31 @@ function patchPackageFiles(
 	return changed;
 }
 
-function patchVersionedPackageFiles(
-	nodeModulesPath: string,
-	packageName: string,
-	requiredVersion: string,
-	relativePaths: string[],
-	patchSource: (relativePath: string, source: string) => string,
-): boolean {
-	const packageRoot = resolve(nodeModulesPath, ...packageName.split("/"));
-	if (readPackageVersion(packageRoot) !== requiredVersion) {
+function patchPiWebAccessPackageFiles(nodeModulesPath: string): boolean {
+	const packageRoot = resolve(nodeModulesPath, "pi-web-access");
+	if (!existsSync(packageRoot)) {
 		return false;
 	}
-	return patchPackageFiles(nodeModulesPath, packageName, relativePaths, patchSource);
+	assertPiWebAccessVersion(readPackageVersion(packageRoot), packageRoot);
+
+	const sources = new Map<string, string>();
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		const path = resolve(packageRoot, ...relativePath.split("/"));
+		if (!existsSync(path)) {
+			throw new Error(`pi-web-access patch target is missing: ${path}`);
+		}
+		sources.set(relativePath, readFileSync(path, "utf8"));
+	}
+
+	const patchedSources = patchPiWebAccessSources(sources, packageRoot);
+	let changed = false;
+	for (const [relativePath, patched] of patchedSources) {
+		const source = sources.get(relativePath);
+		if (patched === source) continue;
+		writeFileSync(resolve(packageRoot, ...relativePath.split("/")), patched, "utf8");
+		changed = true;
+	}
+	return changed;
 }
 
 function readPackageVersion(packageRoot: string): string | undefined {
@@ -340,13 +353,7 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
 			patchAlphaHubSearchResultsSource,
 		) || changed;
-		changed = patchVersionedPackageFiles(
-			nodeModulesPath,
-			"pi-web-access",
-			PI_WEB_ACCESS_REQUIRED_VERSION,
-			PI_WEB_ACCESS_PATCH_TARGETS,
-			patchPiWebAccessSource,
-		) || changed;
+		changed = patchPiWebAccessPackageFiles(nodeModulesPath) || changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"pi-subagents",

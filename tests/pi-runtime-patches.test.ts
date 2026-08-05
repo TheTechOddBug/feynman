@@ -5,6 +5,8 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { PI_WEB_ACCESS_PATCH_TARGETS } from "../scripts/lib/pi-web-access-patch.mjs";
+import { readArchiveEntry } from "../scripts/lib/runtime-workspace-integrity.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const SOURCE = `
@@ -159,24 +161,25 @@ export async function agenticSearch(query) {
 }
 `;
 
-const WEB_ACCESS_INDEX_SOURCE = `
-import { join } from "node:path";
-import { homedir } from "node:os";
-const WEB_SEARCH_CONFIG_PATH = join(homedir(), ".pi", "web-search.json");
-function saveConfig() {
-    const dir = join(homedir(), ".pi");
+const RUNTIME_ARCHIVE_PATH = join(import.meta.dirname, "..", ".feynman", "runtime-workspace.tgz");
+function writePiWebAccessFixture(webRoot: string, version = "0.18.0"): void {
+	mkdirSync(webRoot, { recursive: true });
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		const path = join(webRoot, relativePath);
+		const source = readArchiveEntry(
+			RUNTIME_ARCHIVE_PATH,
+			`npm/node_modules/pi-web-access/${relativePath}`,
+		);
+		if (source === undefined) throw new Error(`runtime fixture is missing ${relativePath}`);
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, source, "utf8");
+	}
+	writeFileSync(
+		join(webRoot, "package.json"),
+		JSON.stringify({ name: "pi-web-access", version }, null, 2) + "\n",
+		"utf8",
+	);
 }
-async function execute(params, configWorkflow, ctx) {
-    const workflow = resolveWorkflow(params.workflow ?? configWorkflow, ctx?.hasUI !== false);
-}
-pi.registerCommand("search", { description: "Browse stored web search results" });
-`;
-
-const WEB_ACCESS_PDF_SOURCE = `
-import { join, basename } from "node:path";
-import { tmpdir } from "node:os";
-const DEFAULT_OUTPUT_DIR = join(tmpdir(), "pi-web-pdf");
-`;
 
 const SUBAGENT_PI_SPAWN_SOURCE = `
 export interface PiSpawnDeps {
@@ -467,13 +470,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 		JSON.stringify({ name: "@mariozechner/pi-tui", version: "0.83.0" }, null, 2) + "\n",
 		"utf8",
 	);
-	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
-	writeFileSync(webAccessPdfPath, WEB_ACCESS_PDF_SOURCE, "utf8");
-	writeFileSync(
-		join(dirname(webAccessPath), "package.json"),
-		JSON.stringify({ name: "pi-web-access", version: "0.18.0" }, null, 2) + "\n",
-		"utf8",
-	);
+	writePiWebAccessFixture(dirname(webAccessPath));
 	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(piOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
@@ -503,20 +500,50 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
 
-test("patchPiRuntimeNodeModules leaves unsupported pi-web-access versions untouched", async () => {
+test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions before launch", async () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const webAccessPath = join(webRoot, "index.ts");
-	await mkdir(webRoot, { recursive: true });
+	writePiWebAccessFixture(webRoot, "0.19.0");
+	const originalSource = readFileSync(webAccessPath, "utf8");
+
+	assert.throws(
+		() => patchPiRuntimeNodeModules(appRoot),
+		/expected 0\.18\.0, found 0\.19\.0/,
+	);
+	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
+});
+
+test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
+	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
+	writePiWebAccessFixture(webRoot);
+	const indexPath = join(webRoot, "index.ts");
+	const pageQueryPath = join(webRoot, "page-query.ts");
 	writeFileSync(
-		join(webRoot, "package.json"),
-		JSON.stringify({ name: "pi-web-access", version: "0.19.0" }, null, 2) + "\n",
+		indexPath,
+		readFileSync(indexPath, "utf8").replace(
+			'pi.registerCommand("web-results",',
+			'pi.registerCommand("search",',
+		),
 		"utf8",
 	);
-	writeFileSync(webAccessPath, WEB_ACCESS_INDEX_SOURCE, "utf8");
+	writeFileSync(
+		pageQueryPath,
+		readFileSync(pageQueryPath, "utf8").replace(
+			"modelMatchesScopedModels(model, ctx.scopedModels)",
+			"futureModelScopeCheck(model, ctx)",
+		),
+		"utf8",
+	);
 
-	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
-	assert.equal(readFileSync(webAccessPath, "utf8"), WEB_ACCESS_INDEX_SOURCE);
+	assert.throws(
+		() => patchPiRuntimeNodeModules(appRoot),
+		/page-query\.ts: expected 1 occurrences of modelMatchesScopedModels/,
+	);
+	assert.match(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("search"/);
+	assert.doesNotMatch(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.match(readFileSync(pageQueryPath, "utf8"), /futureModelScopeCheck/);
 });
 
 test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while patching extensions", async () => {

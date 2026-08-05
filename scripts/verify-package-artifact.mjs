@@ -19,6 +19,7 @@ import {
 	readArchiveEntry,
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
+import { assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -460,6 +461,10 @@ const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["p
 if (typeof expectedPiWebAccessVersion !== "string") {
 	fail("committed runtime lock does not pin pi-web-access");
 }
+const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
+if (expectedPiDocparserVersion !== "4.0.0") {
+	fail("committed runtime lock does not pin pi-docparser 4.0.0");
+}
 if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
@@ -696,6 +701,56 @@ requireMarkers(
 	"runtime pi-otel extension",
 	["probeEndpoint(cfg.endpoint, 300, cfg.headers)", "if (!process.env.FEYNMAN_POSTHOG_KEY)"],
 );
+const docparserManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/pi-docparser/package.json",
+);
+if (docparserManifest.version !== expectedPiDocparserVersion) {
+	fail(`runtime pi-docparser is not ${expectedPiDocparserVersion}`);
+}
+if (docparserManifest.engines?.node !== ">=22.19.0") {
+	fail("runtime pi-docparser does not declare the reviewed Node 22.19 floor");
+}
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/native-executor.ts",
+	),
+	"runtime pi-docparser native isolation",
+	[
+		"private readonly queue: QueueEntry[] = [];",
+		"async function terminatePosixTree(",
+		"async function terminateWindowsTree(",
+		"private poison(): void {",
+		"this.poisoned = true;",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/native-worker.mjs",
+	),
+	"runtime pi-docparser worker",
+	[
+		'const liteparse = await import("@llamaindex/liteparse");',
+		'request.operation === "parse"',
+		'request.operation === "search"',
+		"return runScreenshot(request, liteparse);",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/parse-output.mjs",
+	),
+	"runtime pi-docparser bounded output",
+	[
+		"export async function streamParseOutput",
+		"export async function writeParseOutputFile",
+		"maximum = DEFAULT_MAX_BYTES",
+		"new BoundedWriter(stream, maximum)",
+	],
+);
 if (
 	readArchivedJson(
 		archivePath,
@@ -750,11 +805,12 @@ for (const staleMarker of ["readSettings(", 'join(ctx.cwd, ".pi", "settings.json
 		fail(`runtime pi-web-access model scope still contains stale marker: ${staleMarker}`);
 	}
 }
+const webPageQuerySource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/page-query.ts",
+);
 requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/pi-web-access/page-query.ts",
-	),
+	webPageQuerySource,
 	"runtime pi-web-access page-answer model scope",
 	[
 		'import { modelMatchesScopedModels } from "./summary-model-scope.ts";',
@@ -778,6 +834,16 @@ for (const staleMarker of ["loadEnabledModelPatterns", "modelMatchesEnabledPatte
 	if (webSummaryReviewSource.includes(staleMarker)) {
 		fail(`runtime pi-web-access summary review still contains stale marker: ${staleMarker}`);
 	}
+}
+try {
+	assertPiWebAccessPatchedSources(new Map([
+		["index.ts", webSource],
+		["page-query.ts", webPageQuerySource],
+		["summary-model-scope.ts", webModelScopeSource],
+		["summary-review.ts", webSummaryReviewSource],
+	]), "runtime archive");
+} catch (error) {
+	fail(error instanceof Error ? error.message : String(error));
 }
 requireMarkers(
 	readArchivedText(
@@ -863,6 +929,7 @@ console.log(JSON.stringify({
 	ok: true,
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
+	piDocparserVersion: expectedPiDocparserVersion,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,
