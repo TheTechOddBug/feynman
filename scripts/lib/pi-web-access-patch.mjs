@@ -71,11 +71,25 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
 		["modelMatchesScopedModels(model, summaryContext.scopedModels)", 1],
 		["modelMatchesScopedModels(summaryContext.model, summaryContext.scopedModels)", 1],
+		["const SEARCH_CALL_TIMEOUT_MS = 90000;", 1],
+		["function searchWithDeadline(", 1],
+		["await searchWithDeadline(", 2],
+		['pi.registerCommand("web-results",', 1],
+		['params.workflow ?? configWorkflow ?? "none"', 1],
+		["summary-review = open curator with auto summary draft (opt-in)", 1],
+		["Searches return directly by default;", 1],
 	], surface);
 	rejectMarkers(
 		indexSource,
 		"index.ts",
-		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns", "scopedModels: ctx.scopedModels"],
+		[
+			"loadEnabledModelPatterns",
+			"modelMatchesEnabledPatterns",
+			"scopedModels: ctx.scopedModels",
+			'pi.registerCommand("search",',
+			"const response = await search(queryList[qi], {",
+			"const { answer, results, inlineContent, provider } = await search(query, {",
+		],
 		surface,
 	);
 
@@ -127,6 +141,50 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"],
 		surface,
 	);
+
+	const geminiSearchSource = sources.get("gemini-search.ts");
+	requireMarkerCount(
+		geminiSearchSource,
+		"gemini-search.ts",
+		'Opt into Gemini Web browser-cookie access by setting \\"geminiBrowser\\": true in web-search.json',
+		2,
+		surface,
+	);
+	rejectMarkers(
+		geminiSearchSource,
+		"gemini-search.ts",
+		[
+			"  2. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  3. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  4. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  5. Sign into gemini.google.com in a supported Chromium-based browser",
+		],
+		surface,
+	);
+
+	const geminiConfigSource = sources.get("gemini-web-config.ts");
+	requireMarkerCounts(geminiConfigSource, "gemini-web-config.ts", [
+		["\tgeminiBrowser?: boolean;", 1],
+		["\tallowBrowserAuth?: boolean;", 1],
+		["\tbrowserAuth?: boolean;", 1],
+		["function normalizeBooleanFlag(", 1],
+		[
+			"normalizeBooleanFlag(raw.allowBrowserCookies) || normalizeBooleanFlag(raw.geminiBrowser) || normalizeBooleanFlag(raw.allowBrowserAuth) || normalizeBooleanFlag(raw.browserAuth)",
+			1,
+		],
+	], surface);
+
+	const pdfSource = sources.get("pdf-extract.ts");
+	requireMarkerCount(pdfSource, "pdf-extract.ts", PATCHED_PDF_OUTPUT_DIR, 1, surface);
+	rejectMarkers(pdfSource, "pdf-extract.ts", LEGACY_PDF_OUTPUT_DIRS, surface);
+
+	const utilsSource = sources.get("utils.ts");
+	requireMarkerCount(utilsSource, "utils.ts", PATCHED_CONFIG_PATH_HELPER, 1, surface);
+	rejectMarkers(utilsSource, "utils.ts", [CONFIG_PATH_HELPER], surface);
+
+	for (const [relativePath, source] of sources) {
+		rejectMarkers(source, relativePath, [LEGACY_CONFIG_EXPR], surface);
+	}
 }
 
 export function patchPiWebAccessSources(sources, surface = "source tree") {

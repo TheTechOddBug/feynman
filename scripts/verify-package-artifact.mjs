@@ -19,7 +19,10 @@ import {
 	readArchiveEntry,
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
-import { assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
+import {
+	PI_WEB_ACCESS_PATCH_TARGETS,
+	assertPiWebAccessPatchedSources,
+} from "./lib/pi-web-access-patch.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -836,12 +839,18 @@ for (const staleMarker of ["loadEnabledModelPatterns", "modelMatchesEnabledPatte
 	}
 }
 try {
-	assertPiWebAccessPatchedSources(new Map([
-		["index.ts", webSource],
-		["page-query.ts", webPageQuerySource],
-		["summary-model-scope.ts", webModelScopeSource],
-		["summary-review.ts", webSummaryReviewSource],
-	]), "runtime archive");
+	assertPiWebAccessPatchedSources(
+		new Map(
+			PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
+				relativePath,
+				readArchivedText(
+					archivePath,
+					`npm/node_modules/pi-web-access/${relativePath}`,
+				),
+			]),
+		),
+		"runtime archive",
+	);
 } catch (error) {
 	fail(error instanceof Error ? error.message : String(error));
 }

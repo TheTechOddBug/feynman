@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,6 +10,16 @@ import {
 	PI_WEB_ACCESS_REQUIRED_VERSION,
 	patchPiWebAccessSource,
 } from "../scripts/lib/pi-web-access-patch.mjs";
+
+test("package artifact verification checks every pi-web-access patch target", () => {
+	const source = readFileSync(
+		join(import.meta.dirname, "..", "scripts", "verify-package-artifact.mjs"),
+		"utf8",
+	);
+
+	assert.match(source, /PI_WEB_ACCESS_PATCH_TARGETS\.map\(\(relativePath\) =>/);
+	assert.match(source, /`npm\/node_modules\/pi-web-access\/\$\{relativePath\}`/);
+});
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
 	const input = [
