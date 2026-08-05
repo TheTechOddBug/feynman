@@ -1,5 +1,10 @@
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.18.0";
+
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
+	"page-query.ts",
+	"summary-model-scope.ts",
+	"summary-review.ts",
 	"exa.ts",
 	"gemini-api.ts",
 	"gemini-search.ts",
@@ -12,6 +17,195 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"youtube-extract.ts",
 	"utils.ts",
 ];
+
+export function assertPiWebAccessVersion(version, surface) {
+	if (version !== PI_WEB_ACCESS_REQUIRED_VERSION) {
+		throw new Error(
+			`Unsupported pi-web-access patch ${surface}: expected ${PI_WEB_ACCESS_REQUIRED_VERSION}, found ${version ?? "missing"}`,
+		);
+	}
+}
+
+function countOccurrences(source, marker) {
+	return source.split(marker).length - 1;
+}
+
+function requireMarkerCount(source, relativePath, marker, expectedCount, surface) {
+	const actualCount = countOccurrences(source, marker);
+	if (actualCount !== expectedCount) {
+		throw new Error(
+			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface} ${relativePath}: expected ${expectedCount} occurrences of ${marker}, found ${actualCount}`,
+		);
+	}
+}
+
+function requireMarkerCounts(source, relativePath, expectations, surface) {
+	for (const [marker, expectedCount] of expectations) {
+		requireMarkerCount(source, relativePath, marker, expectedCount, surface);
+	}
+}
+
+function rejectMarkers(source, relativePath, markers, surface) {
+	for (const marker of markers) {
+		if (source.includes(marker)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface} ${relativePath}: stale ${marker}`,
+			);
+		}
+	}
+}
+
+export function assertPiWebAccessPatchedSources(sources, surface = "patched source tree") {
+	for (const relativePath of ["index.ts", "page-query.ts", "summary-model-scope.ts", "summary-review.ts"]) {
+		if (!sources.has(relativePath)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface}: missing ${relativePath}`,
+			);
+		}
+	}
+
+	const indexSource = sources.get("index.ts");
+	requireMarkerCounts(indexSource, "index.ts", [
+		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		["get scopedModels() { return ctx.scopedModels; }", 3],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+		["modelMatchesScopedModels(model, summaryContext.scopedModels)", 1],
+		["modelMatchesScopedModels(summaryContext.model, summaryContext.scopedModels)", 1],
+		["const SEARCH_CALL_TIMEOUT_MS = 90000;", 1],
+		["function searchWithDeadline(", 1],
+		["await searchWithDeadline(", 2],
+		['pi.registerCommand("web-results",', 1],
+		['params.workflow ?? configWorkflow ?? "none"', 1],
+		["summary-review = open curator with auto summary draft (opt-in)", 1],
+		["Searches return directly by default;", 1],
+	], surface);
+	rejectMarkers(
+		indexSource,
+		"index.ts",
+		[
+			"loadEnabledModelPatterns",
+			"modelMatchesEnabledPatterns",
+			"scopedModels: ctx.scopedModels",
+			'pi.registerCommand("search",',
+			"const response = await search(queryList[qi], {",
+			"const { answer, results, inlineContent, provider } = await search(query, {",
+		],
+		surface,
+	);
+
+	const pageQuerySource = sources.get("page-query.ts");
+	requireMarkerCounts(pageQuerySource, "page-query.ts", [
+		['import { modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+	], surface);
+	rejectMarkers(
+		pageQuerySource,
+		"page-query.ts",
+		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"],
+		surface,
+	);
+
+	const scopeSource = sources.get("summary-model-scope.ts");
+	for (const marker of [
+		'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);',
+		"\tscopedModels: readonly { model: ModelLike }[];",
+		"export function modelMatchesScopedModels(",
+		"\tif (ctx.scopedModels.length === 0) return null;",
+		"\treturn ctx.scopedModels.map(({ model }) => summaryModelValue(model));",
+	]) {
+		requireMarkerCount(scopeSource, "summary-model-scope.ts", marker, 1, surface);
+	}
+	rejectMarkers(
+		scopeSource,
+		"summary-model-scope.ts",
+		[
+			"function getAgentDir(): string {",
+			"function readSettings(",
+			'join(ctx.cwd, ".pi", "settings.json")',
+		'from "node:fs"',
+			'from "node:os"',
+			'from "node:path"',
+		],
+		surface,
+	);
+
+	const reviewSource = sources.get("summary-review.ts");
+	requireMarkerCounts(reviewSource, "summary-review.ts", [
+		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		['Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">', 1],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+	], surface);
+	rejectMarkers(
+		reviewSource,
+		"summary-review.ts",
+		["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"],
+		surface,
+	);
+
+	const geminiSearchSource = sources.get("gemini-search.ts");
+	requireMarkerCount(
+		geminiSearchSource,
+		"gemini-search.ts",
+		'Opt into Gemini Web browser-cookie access by setting \\"geminiBrowser\\": true in web-search.json',
+		2,
+		surface,
+	);
+	rejectMarkers(
+		geminiSearchSource,
+		"gemini-search.ts",
+		[
+			"  2. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  3. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  4. Sign into gemini.google.com in a supported Chromium-based browser",
+			"  5. Sign into gemini.google.com in a supported Chromium-based browser",
+		],
+		surface,
+	);
+
+	const geminiConfigSource = sources.get("gemini-web-config.ts");
+	requireMarkerCounts(geminiConfigSource, "gemini-web-config.ts", [
+		["\tgeminiBrowser?: boolean;", 1],
+		["\tallowBrowserAuth?: boolean;", 1],
+		["\tbrowserAuth?: boolean;", 1],
+		["function normalizeBooleanFlag(", 1],
+		[
+			"normalizeBooleanFlag(raw.allowBrowserCookies) || normalizeBooleanFlag(raw.geminiBrowser) || normalizeBooleanFlag(raw.allowBrowserAuth) || normalizeBooleanFlag(raw.browserAuth)",
+			1,
+		],
+	], surface);
+
+	const pdfSource = sources.get("pdf-extract.ts");
+	requireMarkerCount(pdfSource, "pdf-extract.ts", PATCHED_PDF_OUTPUT_DIR, 1, surface);
+	rejectMarkers(pdfSource, "pdf-extract.ts", LEGACY_PDF_OUTPUT_DIRS, surface);
+
+	const utilsSource = sources.get("utils.ts");
+	requireMarkerCount(utilsSource, "utils.ts", PATCHED_CONFIG_PATH_HELPER, 1, surface);
+	rejectMarkers(utilsSource, "utils.ts", [CONFIG_PATH_HELPER], surface);
+
+	for (const [relativePath, source] of sources) {
+		rejectMarkers(source, relativePath, [LEGACY_CONFIG_EXPR], surface);
+	}
+}
+
+export function patchPiWebAccessSources(sources, surface = "source tree") {
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		if (!sources.has(relativePath)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface}: missing ${relativePath}`,
+			);
+		}
+	}
+
+	const patchedSources = new Map();
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		patchedSources.set(
+			relativePath,
+			patchPiWebAccessSource(relativePath, sources.get(relativePath)),
+		);
+	}
+	assertPiWebAccessPatchedSources(patchedSources, surface);
+	return patchedSources;
+}
 
 const LEGACY_CONFIG_EXPR = 'join(homedir(), ".pi", "web-search.json")';
 const PATCHED_CONFIG_EXPR =
@@ -249,6 +443,140 @@ function patchWebSearchHangSource(source) {
 	return { source: patched, changed };
 }
 
+function patchSummaryModelScopeSource(source) {
+	let patched = source;
+	let changed = false;
+
+	for (const legacyImport of [
+		'import { existsSync, readFileSync } from "node:fs";\n',
+		'import { homedir } from "node:os";\n',
+		'import { join } from "node:path";\n',
+	]) {
+		if (patched.includes(legacyImport)) {
+			patched = patched.replace(legacyImport, "");
+			changed = true;
+		}
+	}
+
+	const thinkingLevelsOriginal = 'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);';
+	const thinkingLevelsPatched = 'const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);';
+	if (patched.includes(thinkingLevelsOriginal)) {
+		patched = patched.replace(thinkingLevelsOriginal, thinkingLevelsPatched);
+		changed = true;
+	}
+
+	const contextOriginal = [
+		"interface SummaryModelScopeContext {",
+		"\tcwd: string;",
+		"\tisProjectTrusted(): boolean;",
+		"}",
+	].join("\n");
+	const contextPatched = [
+		"interface SummaryModelScopeContext {",
+		"\tscopedModels: readonly { model: ModelLike }[];",
+		"}",
+	].join("\n");
+	if (patched.includes(contextOriginal)) {
+		patched = patched.replace(contextOriginal, contextPatched);
+		changed = true;
+	}
+
+	const legacyHelpers = [
+		"function getAgentDir(): string {",
+		'\treturn process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");',
+		"}",
+		"",
+		"function readSettings(path: string): Record<string, unknown> {",
+		"\tif (!existsSync(path)) return {};",
+		'\tconst raw = readFileSync(path, "utf8");',
+		"\ttry {",
+		"\t\treturn JSON.parse(raw) as Record<string, unknown>;",
+		"\t} catch (err) {",
+		"\t\tconst message = err instanceof Error ? err.message : String(err);",
+		"\t\tthrow new Error(`Failed to parse ${path}: ${message}`);",
+		"\t}",
+		"}",
+		"",
+	].join("\n");
+	if (patched.includes(legacyHelpers)) {
+		patched = patched.replace(legacyHelpers, "");
+		changed = true;
+	}
+
+	const loadOriginal = [
+		"export function loadEnabledModelPatterns(ctx: SummaryModelScopeContext): string[] | null {",
+		'\tconst globalSettings = readSettings(join(getAgentDir(), "settings.json"));',
+		"\tconst projectSettings = ctx.isProjectTrusted()",
+		'\t\t? readSettings(join(ctx.cwd, ".pi", "settings.json"))',
+		"\t\t: {};",
+		'\tconst value = Object.hasOwn(projectSettings, "enabledModels")',
+		"\t\t? projectSettings.enabledModels",
+		"\t\t: globalSettings.enabledModels;",
+		"\tif (value === undefined) return null;",
+		'\tif (!Array.isArray(value)) throw new Error("enabledModels must be an array");',
+		"\treturn value",
+		'\t\t.filter((item): item is string => typeof item === "string")',
+		"\t\t.map(item => item.trim())",
+		"\t\t.filter(Boolean);",
+		"}",
+	].join("\n");
+	const loadPatched = [
+		"export function loadEnabledModelPatterns(ctx: SummaryModelScopeContext): string[] | null {",
+		"\tif (ctx.scopedModels.length === 0) return null;",
+		"\treturn ctx.scopedModels.map(({ model }) => summaryModelValue(model));",
+		"}",
+	].join("\n");
+	if (patched.includes(loadOriginal)) {
+		patched = patched.replace(loadOriginal, loadPatched);
+		changed = true;
+	}
+
+	if (!patched.includes("export function modelMatchesScopedModels(")) {
+		const scopeHelper = [
+			"export function modelMatchesScopedModels(",
+			"\tmodel: ModelLike,",
+			"\tscopedModels: readonly { model: ModelLike }[],",
+			"): boolean {",
+			"\treturn scopedModels.length === 0 || scopedModels.some(({ model: scopedModel }) =>",
+			"\t\tscopedModel.provider === model.provider && scopedModel.id === model.id,",
+			"\t);",
+			"}",
+			"",
+		].join("\n");
+		const anchor = "export function loadEnabledModelPatterns(";
+		if (patched.includes(anchor)) {
+			patched = patched.replace(anchor, `${scopeHelper}${anchor}`);
+			changed = true;
+		}
+	}
+
+	for (const requiredMarker of [
+		thinkingLevelsPatched,
+		contextPatched,
+		loadPatched,
+		"export function modelMatchesScopedModels(",
+	]) {
+		if (!patched.includes(requiredMarker)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} summary model scope layout: missing ${requiredMarker}`,
+			);
+		}
+	}
+	for (const staleMarker of [
+		"function getAgentDir(): string {",
+		"function readSettings(",
+		'join(ctx.cwd, ".pi", "settings.json")',
+	]) {
+		if (patched.includes(staleMarker)) {
+			throw new Error(
+				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} summary model scope layout: stale ${staleMarker}`,
+			);
+		}
+	}
+
+	return { source: patched, changed };
+}
+
 export function patchPiWebAccessSource(relativePath, source) {
 	let patched = source;
 	let changed = false;
@@ -259,6 +587,57 @@ export function patchPiWebAccessSource(relativePath, source) {
 	}
 
 	if (relativePath === "index.ts") {
+		const summaryContextsPatched = patched.replace(
+			/^([ \t]*)modelRegistry: ctx\.modelRegistry,\n(?:\1scopedModels: ctx\.scopedModels,\n)?\1cwd: ctx\.cwd,/gm,
+			(_match, indent) => [
+				`${indent}modelRegistry: ctx.modelRegistry,`,
+				`${indent}get scopedModels() { return ctx.scopedModels; },`,
+				`${indent}cwd: ctx.cwd,`,
+			].join("\n"),
+		);
+		if (summaryContextsPatched !== patched) {
+			patched = summaryContextsPatched;
+			changed = true;
+		}
+
+		const scopeImportOriginal =
+			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";';
+		const scopeImportPatched =
+			'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";';
+		if (patched.includes(scopeImportOriginal)) {
+			patched = patched.replace(scopeImportOriginal, scopeImportPatched);
+			changed = true;
+		}
+		for (const staleLine of [
+			"\t\tconst enabledModelPatterns = loadEnabledModelPatterns(ctx);\n",
+			"\t\tlet enabledModelPatterns: string[] | null = null;\n",
+			"\t\t\tenabledModelPatterns = loadEnabledModelPatterns(summaryContext);\n",
+		]) {
+			if (patched.includes(staleLine)) {
+				patched = patched.replace(staleLine, "");
+				changed = true;
+			}
+		}
+		for (const [legacyCheck, scopedCheck] of [
+			[
+				"if (!model || !modelMatchesEnabledPatterns(model, enabledModelPatterns)) continue;",
+				"if (!model || !modelMatchesScopedModels(model, ctx.scopedModels)) continue;",
+			],
+			[
+				"if (!modelMatchesEnabledPatterns(model, enabledModelPatterns)) continue;",
+				"if (!modelMatchesScopedModels(model, summaryContext.scopedModels)) continue;",
+			],
+			[
+				"modelMatchesEnabledPatterns(summaryContext.model, enabledModelPatterns)",
+				"modelMatchesScopedModels(summaryContext.model, summaryContext.scopedModels)",
+			],
+		]) {
+			if (patched.includes(legacyCheck)) {
+				patched = patched.replace(legacyCheck, scopedCheck);
+				changed = true;
+			}
+		}
+
 		const workflowDefaultOriginal = 'const workflow = resolveWorkflow(params.workflow ?? configWorkflow, ctx?.hasUI !== false);';
 		const workflowDefaultPatched = 'const workflow = resolveWorkflow(params.workflow ?? configWorkflow ?? "none", ctx?.hasUI !== false);';
 		if (patched.includes(workflowDefaultOriginal)) {
@@ -316,6 +695,59 @@ export function patchPiWebAccessSource(relativePath, source) {
 		const searchHangPatch = patchWebSearchHangSource(patched);
 		patched = searchHangPatch.source;
 		changed = changed || searchHangPatch.changed;
+	}
+
+	if (relativePath === "summary-model-scope.ts") {
+		const scopePatch = patchSummaryModelScopeSource(patched);
+		patched = scopePatch.source;
+		changed = changed || scopePatch.changed;
+	}
+
+	if (relativePath === "page-query.ts") {
+		const scopeImportOriginal =
+			'import { loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";';
+		const scopeImportPatched =
+			'import { modelMatchesScopedModels } from "./summary-model-scope.ts";';
+		if (patched.includes(scopeImportOriginal)) {
+			patched = patched.replace(scopeImportOriginal, scopeImportPatched);
+			changed = true;
+		}
+		const scopeCheckOriginal = "modelMatchesEnabledPatterns(model, loadEnabledModelPatterns(ctx))";
+		const scopeCheckPatched = "modelMatchesScopedModels(model, ctx.scopedModels)";
+		if (patched.includes(scopeCheckOriginal)) {
+			patched = patched.replace(scopeCheckOriginal, scopeCheckPatched);
+			changed = true;
+		}
+	}
+
+	if (relativePath === "summary-review.ts") {
+		const scopeImportOriginal =
+			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";';
+		const scopeImportPatched =
+			'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";';
+		if (patched.includes(scopeImportOriginal)) {
+			patched = patched.replace(scopeImportOriginal, scopeImportPatched);
+			changed = true;
+		}
+		const contextOriginal =
+			'export type SummaryGenerationContext = Pick<ExtensionContext, "model" | "modelRegistry" | "cwd" | "isProjectTrusted">;';
+		const contextPatched =
+			'export type SummaryGenerationContext = Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">;';
+		if (patched.includes(contextOriginal)) {
+			patched = patched.replace(contextOriginal, contextPatched);
+			changed = true;
+		}
+		const enabledPatternsOriginal = "\tconst enabledModelPatterns = loadEnabledModelPatterns(ctx);\n";
+		if (patched.includes(enabledPatternsOriginal)) {
+			patched = patched.replace(enabledPatternsOriginal, "");
+			changed = true;
+		}
+		const scopeCheckOriginal = "modelMatchesEnabledPatterns(model, enabledModelPatterns)";
+		const scopeCheckPatched = "modelMatchesScopedModels(model, ctx.scopedModels)";
+		if (patched.includes(scopeCheckOriginal)) {
+			patched = patched.replace(scopeCheckOriginal, scopeCheckPatched);
+			changed = true;
+		}
 	}
 
 	if (relativePath === "gemini-web.ts") {

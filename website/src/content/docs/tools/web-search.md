@@ -27,7 +27,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 
 ## Default behavior
 
-The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. In `auto` mode, Feynman uses API-backed search providers when they are configured: Exa first, then Perplexity, then Gemini API.
+The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, SERPdive, Kagi, Ollama, Perplexity, and Gemini routes in order.
 
 Configure an explicit API key for Exa, Perplexity, TinyFish, or Gemini in `~/.feynman/web-search.json` before running source-heavy workflows like `/deepresearch`. Exa's zero-config MCP fallback remains available without a key.
 

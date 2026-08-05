@@ -24,7 +24,11 @@ import {
 	patchPiInteractiveUpdateNoticeSource,
 	patchPiTuiSource,
 } from "../../scripts/lib/pi-tui-patch.mjs";
-import { PI_WEB_ACCESS_PATCH_TARGETS, patchPiWebAccessSource } from "../../scripts/lib/pi-web-access-patch.mjs";
+import {
+	assertPiWebAccessVersion,
+	PI_WEB_ACCESS_PATCH_TARGETS,
+	patchPiWebAccessSources,
+} from "../../scripts/lib/pi-web-access-patch.mjs";
 
 function patchFileIfPresent(path: string, patchSource: (source: string) => string): boolean {
 	if (!existsSync(path)) {
@@ -51,6 +55,33 @@ function patchPackageFiles(
 			resolve(nodeModulesPath, ...packageName.split("/"), ...relativePath.split("/")),
 			(source) => patchSource(relativePath, source),
 		) || changed;
+	}
+	return changed;
+}
+
+function patchPiWebAccessPackageFiles(nodeModulesPath: string): boolean {
+	const packageRoot = resolve(nodeModulesPath, "pi-web-access");
+	if (!existsSync(packageRoot)) {
+		return false;
+	}
+	assertPiWebAccessVersion(readPackageVersion(packageRoot), packageRoot);
+
+	const sources = new Map<string, string>();
+	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
+		const path = resolve(packageRoot, ...relativePath.split("/"));
+		if (!existsSync(path)) {
+			throw new Error(`pi-web-access patch target is missing: ${path}`);
+		}
+		sources.set(relativePath, readFileSync(path, "utf8"));
+	}
+
+	const patchedSources = patchPiWebAccessSources(sources, packageRoot);
+	let changed = false;
+	for (const [relativePath, patched] of patchedSources) {
+		const source = sources.get(relativePath);
+		if (patched === source) continue;
+		writeFileSync(resolve(packageRoot, ...relativePath.split("/")), patched, "utf8");
+		changed = true;
 	}
 	return changed;
 }
@@ -322,12 +353,7 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
 			patchAlphaHubSearchResultsSource,
 		) || changed;
-		changed = patchPackageFiles(
-			nodeModulesPath,
-			"pi-web-access",
-			PI_WEB_ACCESS_PATCH_TARGETS,
-			patchPiWebAccessSource,
-		) || changed;
+		changed = patchPiWebAccessPackageFiles(nodeModulesPath) || changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"pi-subagents",

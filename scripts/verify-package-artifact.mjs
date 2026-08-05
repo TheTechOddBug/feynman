@@ -19,6 +19,10 @@ import {
 	readArchiveEntry,
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
+import {
+	PI_WEB_ACCESS_PATCH_TARGETS,
+	assertPiWebAccessPatchedSources,
+} from "./lib/pi-web-access-patch.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -51,6 +55,13 @@ function requireMarkers(source, label, markers) {
 		if (!source.includes(marker)) {
 			fail(`${label} is missing required marker: ${marker}`);
 		}
+	}
+}
+
+function requireMarkerCount(source, label, marker, expectedCount) {
+	const actualCount = source.split(marker).length - 1;
+	if (actualCount !== expectedCount) {
+		fail(`${label} expected ${expectedCount} occurrences of ${marker}, found ${actualCount}`);
 	}
 }
 
@@ -453,6 +464,10 @@ const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["p
 if (typeof expectedPiWebAccessVersion !== "string") {
 	fail("committed runtime lock does not pin pi-web-access");
 }
+const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
+if (expectedPiDocparserVersion !== "4.0.0") {
+	fail("committed runtime lock does not pin pi-docparser 4.0.0");
+}
 if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
@@ -689,6 +704,56 @@ requireMarkers(
 	"runtime pi-otel extension",
 	["probeEndpoint(cfg.endpoint, 300, cfg.headers)", "if (!process.env.FEYNMAN_POSTHOG_KEY)"],
 );
+const docparserManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/pi-docparser/package.json",
+);
+if (docparserManifest.version !== expectedPiDocparserVersion) {
+	fail(`runtime pi-docparser is not ${expectedPiDocparserVersion}`);
+}
+if (docparserManifest.engines?.node !== ">=22.19.0") {
+	fail("runtime pi-docparser does not declare the reviewed Node 22.19 floor");
+}
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/native-executor.ts",
+	),
+	"runtime pi-docparser native isolation",
+	[
+		"private readonly queue: QueueEntry[] = [];",
+		"async function terminatePosixTree(",
+		"async function terminateWindowsTree(",
+		"private poison(): void {",
+		"this.poisoned = true;",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/native-worker.mjs",
+	),
+	"runtime pi-docparser worker",
+	[
+		'const liteparse = await import("@llamaindex/liteparse");',
+		'request.operation === "parse"',
+		'request.operation === "search"',
+		"return runScreenshot(request, liteparse);",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-docparser/extensions/docparser/parse-output.mjs",
+	),
+	"runtime pi-docparser bounded output",
+	[
+		"export async function streamParseOutput",
+		"export async function writeParseOutputFile",
+		"maximum = DEFAULT_MAX_BYTES",
+		"new BoundedWriter(stream, maximum)",
+	],
+);
 if (
 	readArchivedJson(
 		archivePath,
@@ -697,11 +762,12 @@ if (
 ) {
 	fail(`runtime pi-web-access is not ${expectedPiWebAccessVersion}`);
 }
+const webSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/index.ts",
+);
 requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/pi-web-access/index.ts",
-	),
+	webSource,
 	"runtime pi-web-access research tools",
 	[
 		'StringEnum(["readable", "raw", "answer"]',
@@ -711,8 +777,83 @@ requireMarkers(
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
 		"Searches return directly by default",
+		"get scopedModels() { return ctx.scopedModels; }",
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
 	],
 );
+requireMarkerCount(
+	webSource,
+	"runtime pi-web-access live nested model scope",
+	"get scopedModels() { return ctx.scopedModels; }",
+	3,
+);
+const webModelScopeSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/summary-model-scope.ts",
+);
+requireMarkers(
+	webModelScopeSource,
+	"runtime pi-web-access model scope",
+	[
+		"ctx.scopedModels.length === 0",
+		"ctx.scopedModels.map(({ model }) => summaryModelValue(model))",
+		"export function modelMatchesScopedModels(",
+		"scopedModel.provider === model.provider && scopedModel.id === model.id",
+		'"xhigh", "max"',
+	],
+);
+for (const staleMarker of ["readSettings(", 'join(ctx.cwd, ".pi", "settings.json")']) {
+	if (webModelScopeSource.includes(staleMarker)) {
+		fail(`runtime pi-web-access model scope still contains stale marker: ${staleMarker}`);
+	}
+}
+const webPageQuerySource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/page-query.ts",
+);
+requireMarkers(
+	webPageQuerySource,
+	"runtime pi-web-access page-answer model scope",
+	[
+		'import { modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+	],
+);
+const webSummaryReviewSource = readArchivedText(
+	archivePath,
+	"npm/node_modules/pi-web-access/summary-review.ts",
+);
+requireMarkers(
+	webSummaryReviewSource,
+	"runtime pi-web-access summary review model scope",
+	[
+		'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		'Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">',
+		"modelMatchesScopedModels(model, ctx.scopedModels)",
+	],
+);
+for (const staleMarker of ["loadEnabledModelPatterns", "modelMatchesEnabledPatterns"]) {
+	if (webSummaryReviewSource.includes(staleMarker)) {
+		fail(`runtime pi-web-access summary review still contains stale marker: ${staleMarker}`);
+	}
+}
+try {
+	assertPiWebAccessPatchedSources(
+		new Map(
+			PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
+				relativePath,
+				readArchivedText(
+					archivePath,
+					`npm/node_modules/pi-web-access/${relativePath}`,
+				),
+			]),
+		),
+		"runtime archive",
+	);
+} catch (error) {
+	fail(error instanceof Error ? error.message : String(error));
+}
 requireMarkers(
 	readArchivedText(
 		archivePath,
@@ -797,6 +938,7 @@ console.log(JSON.stringify({
 	ok: true,
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
+	piDocparserVersion: expectedPiDocparserVersion,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,
