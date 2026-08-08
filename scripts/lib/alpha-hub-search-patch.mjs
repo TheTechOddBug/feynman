@@ -16,6 +16,26 @@ const AGENTIC_SEARCH = [
 	"}",
 ].join("\n");
 
+const LEGACY_ANSWER_PDF_QUERY = [
+	"export async function answerPdfQuery(url, query) {",
+	"  try {",
+	"    return await callTool('answer_pdf_queries', { urls: [url], queries: [query] });",
+	"  } catch (err) {",
+	"    const message = err instanceof Error ? err.message : String(err);",
+	"    if (message.includes('Input validation error') || message.includes('Invalid arguments')) {",
+	"      return await callTool('answer_pdf_queries', { url, query });",
+	"    }",
+	"    throw err;",
+	"  }",
+	"}",
+].join("\n");
+
+const PATCHED_ANSWER_PDF_QUERY = [
+	"export async function answerPdfQuery(url, query) {",
+	"  return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+	"}",
+].join("\n");
+
 const FALLBACK_HELPERS = `
 function shouldFallbackToDiscoverPapers(err) {
   const message = getErrorMessage(err);
@@ -150,35 +170,41 @@ const PATCHED_AGENTIC_SEARCH = [
 ].join("\n");
 
 export function patchAlphaHubSearchSource(source) {
-	if (source.includes("async function searchRestFast(")) {
-		return source;
-	}
-	const hasSearchFunctions =
-		source.includes(SEARCH_BY_EMBEDDING) ||
-		source.includes(SEARCH_BY_KEYWORD) ||
-		source.includes(AGENTIC_SEARCH) ||
-		source.includes(OLD_PATCHED_SEARCH_BY_EMBEDDING) ||
-		source.includes(OLD_PATCHED_SEARCH_BY_KEYWORD) ||
-		source.includes(OLD_PATCHED_AGENTIC_SEARCH);
-	if (!hasSearchFunctions) {
-		return source;
+	let patched = source;
+	if (!patched.includes("async function searchRestFast(")) {
+		const hasSearchFunctions =
+			patched.includes(SEARCH_BY_EMBEDDING) ||
+			patched.includes(SEARCH_BY_KEYWORD) ||
+			patched.includes(AGENTIC_SEARCH) ||
+			patched.includes(OLD_PATCHED_SEARCH_BY_EMBEDDING) ||
+			patched.includes(OLD_PATCHED_SEARCH_BY_KEYWORD) ||
+			patched.includes(OLD_PATCHED_AGENTIC_SEARCH);
+		if (hasSearchFunctions) {
+			const anchor = "async function callTool(name, args) {";
+			if (patched.includes(anchor)) {
+				const helpers = patched.includes("function shouldFallbackToDiscoverPapers(")
+					? REST_FALLBACK_HELPERS
+					: `${FALLBACK_HELPERS}\n${REST_FALLBACK_HELPERS}`;
+				patched = patched.replace(anchor, `${helpers}\n${anchor}`);
+			}
+			patched = patched
+				.replace(OLD_PATCHED_SEARCH_BY_EMBEDDING, PATCHED_SEARCH_BY_EMBEDDING)
+				.replace(OLD_PATCHED_SEARCH_BY_KEYWORD, PATCHED_SEARCH_BY_KEYWORD)
+				.replace(OLD_PATCHED_AGENTIC_SEARCH, PATCHED_AGENTIC_SEARCH)
+				.replace(SEARCH_BY_EMBEDDING, PATCHED_SEARCH_BY_EMBEDDING)
+				.replace(SEARCH_BY_KEYWORD, PATCHED_SEARCH_BY_KEYWORD)
+				.replace(AGENTIC_SEARCH, PATCHED_AGENTIC_SEARCH);
+		}
 	}
 
-	let patched = source;
-	const anchor = "async function callTool(name, args) {";
-	if (patched.includes(anchor)) {
-		const helpers = patched.includes("function shouldFallbackToDiscoverPapers(")
-			? REST_FALLBACK_HELPERS
-			: `${FALLBACK_HELPERS}\n${REST_FALLBACK_HELPERS}`;
-		patched = patched.replace(anchor, `${helpers}\n${anchor}`);
+	if (!patched.includes(PATCHED_ANSWER_PDF_QUERY)) {
+		if (patched.includes(LEGACY_ANSWER_PDF_QUERY)) {
+			patched = patched.replace(LEGACY_ANSWER_PDF_QUERY, PATCHED_ANSWER_PDF_QUERY);
+		} else if (patched.includes("export async function answerPdfQuery(")) {
+			throw new Error("Unsupported alpha-hub answerPdfQuery layout");
+		}
 	}
-	patched = patched
-		.replace(OLD_PATCHED_SEARCH_BY_EMBEDDING, PATCHED_SEARCH_BY_EMBEDDING)
-		.replace(OLD_PATCHED_SEARCH_BY_KEYWORD, PATCHED_SEARCH_BY_KEYWORD)
-		.replace(OLD_PATCHED_AGENTIC_SEARCH, PATCHED_AGENTIC_SEARCH)
-		.replace(SEARCH_BY_EMBEDDING, PATCHED_SEARCH_BY_EMBEDDING)
-		.replace(SEARCH_BY_KEYWORD, PATCHED_SEARCH_BY_KEYWORD)
-		.replace(AGENTIC_SEARCH, PATCHED_AGENTIC_SEARCH);
+
 	return patched;
 }
 

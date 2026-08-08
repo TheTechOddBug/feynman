@@ -161,6 +161,18 @@ export async function searchByKeyword(query) {
 export async function agenticSearch(query) {
   return await callTool('agentic_paper_retrieval', { query });
 }
+
+export async function answerPdfQuery(url, query) {
+  try {
+    return await callTool('answer_pdf_queries', { urls: [url], queries: [query] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Input validation error') || message.includes('Invalid arguments')) {
+      return await callTool('answer_pdf_queries', { url, query });
+    }
+    throw err;
+  }
+}
 `;
 
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.18.0");
@@ -422,6 +434,10 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 			"2.0.12",
 		);
 	assert.match(readFileSync(alphaSearchPath, "utf8"), /async function searchRestFast/);
+	assert.match(
+		readFileSync(alphaSearchPath, "utf8"),
+		/return await callTool\('answer_pdf_queries', \{ paper: url, queries: \[query\] \}\)/,
+	);
 	assert.match(readFileSync(sessionSearchPath, "utf8"), /process\.env\.FEYNMAN_SESSION_DIR/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
@@ -764,7 +780,7 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 	mkdirSync(safeBraceRoot, { recursive: true });
 	writeFileSync(
 		join(safeUndiciRoot, "package.json"),
-		JSON.stringify({ name: "undici", version: "8.9.0" }),
+		JSON.stringify({ name: "undici", version: "8.10.0" }),
 	);
 	writeFileSync(join(safeUndiciRoot, "index.js"), "export const proxyFixed = true;\n");
 	writeFileSync(
@@ -839,11 +855,11 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), true);
 	assert.equal(
 		JSON.parse(readFileSync(join(globalPi.nestedUndiciRoot, "package.json"), "utf8")).version,
-		"8.9.0",
+		"8.10.0",
 	);
 	assert.equal(
 		JSON.parse(readFileSync(join(agentPi.nestedUndiciRoot, "package.json"), "utf8")).version,
-		"8.9.0",
+		"8.10.0",
 	);
 	assert.equal(
 		JSON.parse(readFileSync(join(staleAgentPi.nestedUndiciRoot, "package.json"), "utf8")).version,

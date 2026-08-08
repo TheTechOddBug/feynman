@@ -287,6 +287,7 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -374,11 +375,13 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
           global_node_modules=$(npm root --global --prefix "$global_prefix")
           if command -v cygpath >/dev/null 2>&1; then
             global_node_modules=$(cygpath -u "$global_node_modules")
           fi
           node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
 
   publish-npm:
     needs:
@@ -498,6 +501,7 @@ jobs:
           head -20 /tmp/feynman-help.out
           node scripts/verify-stale-pi-upgrade.mjs "$bundle/feynman"
           "$bundle/node/bin/node" "$bundle/app/scripts/verify-installed-runtime.mjs" "$bundle/feynman"
+          "$bundle/node/bin/node" "$bundle/app/scripts/verify-installed-docparser.mjs"
       - name: Smoke native bundle (Windows)
         if: matrix.id == 'win32-x64'
         shell: pwsh
@@ -520,6 +524,11 @@ jobs:
             (Join-Path $bundleRoot "feynman.cmd")
           if ($LASTEXITCODE -ne 0) {
             throw "Windows native launcher failed installed-runtime verification: $LASTEXITCODE"
+          }
+          & (Join-Path $bundleRoot "node/node.exe") `
+            (Join-Path $bundleRoot "app/scripts/verify-installed-docparser.mjs")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows native launcher failed installed pi-docparser verification: $LASTEXITCODE"
           }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -727,6 +736,7 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
           global_prefix="$RUNNER_TEMP/published-global"
           npm install --global --prefix "$global_prefix" --omit=dev --no-audit \
             "@companion-ai/feynman@$VERSION"
@@ -735,6 +745,7 @@ jobs:
           "$global_bin" --help >/dev/null
           global_node_modules=$(npm root --global --prefix "$global_prefix")
           node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
 
           release_dir="$RUNNER_TEMP/published-release"
           mkdir -p "$release_dir"
@@ -792,3 +803,5 @@ jobs:
           "$native_bundle_root/node/bin/node" \
             "$native_bundle_root/app/scripts/verify-installed-runtime.mjs" \
             "$native"
+          "$native_bundle_root/node/bin/node" \
+            "$native_bundle_root/app/scripts/verify-installed-docparser.mjs"

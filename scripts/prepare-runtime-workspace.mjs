@@ -87,8 +87,9 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-node": "0.221.0",
 	"@opentelemetry/sdk-trace-base": "2.10.0",
 	"@opentelemetry/sdk-trace-node": "2.10.0",
+	"@llamaindex/liteparse": "2.11.0",
 	"brace-expansion": "5.0.9",
-	undici: "8.9.0",
+	undici: "8.10.0",
 };
 const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",

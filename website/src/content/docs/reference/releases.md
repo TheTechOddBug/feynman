@@ -9,13 +9,13 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.12 - 2026-08-04
+## v0.3.12 - 2026-08-08
 
 ### Document research
 
 - Updated `pi-docparser` to `4.0.0`. Native PDFium and OCR work now runs in isolated, cancellable child processes, so parser crashes and memory failures become bounded tool errors instead of terminating the research session.
 - Added strict page, worker, DPI, search, screenshot, and output limits. Parse publication is atomic, JSON output has a stable `{ pages, text }` shape, screenshots default to page 1, and each call accepts at most four explicit pages.
-- Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.10.1`. Document parsing now requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
+- Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.11.0`. The document runtime now includes stronger table extraction, RTL/LTR text ordering, and source-provenance metadata support. Document parsing requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
 
 ### Web research
 
@@ -25,11 +25,18 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ### Reliability
 
+- Fixed `feynman alpha ask` sending obsolete `urls`/`url` arguments to alphaXiv. Paper Q&A now sends the current `paper` plus `queries` schema.
 - Kept PDF scratch Markdown in the active project's `.feynman/cache/fetch-content`, kept browser-cookie access opt-in, retained the bounded primary search deadline, and adopted upstream's per-call curator isolation and no-browser timeout rather than carrying superseded local patches.
 - Bound page-answer, search-rewrite, and curator summary model selection to Pi's resolved session model scope, including `--models` overrides, instead of rereading an adjacent settings file.
+- Bound web-search configuration reads and writes to the same Feynman-managed path, including custom `FEYNMAN_WEB_SEARCH_CONFIG` locations, and create that file's parent before saving.
+- Updated Feynman's direct, nested Pi, and packaged runtime copies of Undici to `8.10.0` for current idle-connection, readable-body, retry, HTTP/2, proxy IPv6, and DNS-origin fixes.
 - Removed macOS ACL, file-flag, Apple metadata, and extended-attribute records from bundled runtime archives so those host records no longer change package bytes.
 - Updated audited Hono, `fast-uri`, `ip-address`, `express-rate-limit`, and website `brace-expansion` overrides after new registry advisories, and removed a streamed checksum-file handle from the Windows installer verifier.
 - Restored automatic package reconciliation for workspaces retaining the `0.3.11`, `0.3.10`, or older `0.3.6` bundled package defaults.
+
+### Validation
+
+- Added an installed document-tool gate that loads the shipped TypeScript extension through Pi's bundled Jiti, then executes `document_parse`, `document_search`, and `document_screenshot` against a generated PDF.
 
 ## v0.3.11 - 2026-08-01
 

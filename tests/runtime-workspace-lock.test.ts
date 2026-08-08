@@ -44,13 +44,25 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 		runtimeLock.packages["node_modules/@hono/node-server"]?.version,
 		"2.0.12",
 	);
-	assert.equal(runtimeLock.packages["node_modules/undici"]?.version, "8.9.0");
+	assert.deepEqual(
+		{
+			version: runtimeLock.packages["node_modules/@llamaindex/liteparse"]?.version,
+			resolved: (runtimeLock.packages["node_modules/@llamaindex/liteparse"] as { resolved?: string })?.resolved,
+			integrity: (runtimeLock.packages["node_modules/@llamaindex/liteparse"] as { integrity?: string })?.integrity,
+		},
+		{
+			version: "2.11.0",
+			resolved: "https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-2.11.0.tgz",
+			integrity: "sha512-L3Db1C7JaEpTcmD6uChnnLElL5VZwKtqVtd7mio6h7xeoDhtjvN5a+nHH3pXqrMhvNWtc9azBmHwxWxBN/pZBg==",
+		},
+	);
+	assert.equal(runtimeLock.packages["node_modules/undici"]?.version, "8.10.0");
 	for (const [packagePath, entry] of Object.entries(runtimeLock.packages)) {
 		if (packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion")) {
 			assert.equal(entry.version, "5.0.9");
 		}
 		if (packagePath.endsWith("/pi-coding-agent/node_modules/undici")) {
-			assert.equal(entry.version, "8.9.0");
+			assert.equal(entry.version, "8.10.0");
 		}
 	}
 });

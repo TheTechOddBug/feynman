@@ -40,6 +40,7 @@
     "scripts/sync-website-installers.mjs",
     "scripts/verify-package-artifact.mjs",
     "scripts/verify-package-budget.mjs",
+    "scripts/verify-installed-docparser.mjs",
     "scripts/verify-installed-runtime.mjs",
     "skills/",
     "src/config/paths.ts",
@@ -130,7 +131,7 @@
     "semver": "^7.8.5",
     "tidytree": "^0.7.0",
     "typebox": "1.3.7",
-    "undici": "8.9.0"
+    "undici": "8.10.0"
   },
   "overrides": {
     "basic-ftp": "5.3.1",
@@ -160,7 +161,7 @@
     "esbuild": "0.28.1",
     "fast-xml-builder": "1.2.0",
     "protobufjs": "7.6.5",
-    "undici": "8.9.0"
+    "undici": "8.10.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

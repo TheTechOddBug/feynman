@@ -4,6 +4,24 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-08 05:10 EDT — intake-sweep-alpha-ask-0.3.12
+
+- Objective: Fix issue `#214`, reconcile the preserved `0.3.12` candidate, and complete its unpublished release without adding a new product surface.
+- Intake: Issue `#214` is the only open issue and no PR is open. Live `main` remains `daa7f47`; GitHub and npm still serve `0.3.11`. Recent active forks either match or trail `main`; `fuzzywigg` security commits are superseded, and `randomm` documents its provider-specific `parallel-cli` bundle as fork-only, so neither earns a port.
+- Root cause: `@companion-ai/alpha-hub@0.1.3` sends `answer_pdf_queries` first as `{ urls, queries }`, then retries as `{ url, query }`. The current alphaXiv contract requires `{ paper, queries }`, matching the provider's reported validation schema.
+- Changed: The removable alpha-hub package patch now sends `{ paper: url, queries: [query] }`, repairs an already search-patched runtime, fails closed on unknown Q&A layouts, and is enforced in source and archived package verification. Public `0.3.12` release notes now describe the user-visible repair.
+- Verified so far: Changed-path regressions passed `61/61`; the exact archived alpha-hub client contains one current Q&A call and no legacy argument forms. The installed document verifier parsed one page, found one exact phrase hit, and wrote a nonempty `22,539`-byte PNG. Package-artifact verification passed with runtime SHA-256 `5407880b624b9928573e87c0a4feab581ecf8883d410aa3d81fc69407c66d7a0`.
+- State: `verified` for focused local paths and `unverified` for an exact dependency install, unrestricted full suite, Daytona, PR CI, merge, and published delivery. Next: run the clean cumulative ladder, push the exact candidate, merge only green CI, then verify npm, GitHub, native assets, live installers, and issue closure.
+
+### 2026-08-05 01:00 EDT — intake-sweep-0.3.12-release-hardening
+
+- Objective: Repair the remaining packaged web-config and document-tool verification gaps, adopt current research-runtime dependencies, and complete the unpublished `0.3.12` release.
+- Intake: Open issues and PRs are empty. `main` and `origin/main` match merge `daa7f47`; npm and GitHub still serve `0.3.11`. Recent forks are behind `main` except NioZow's stale one-commit Nix packaging branch, which is broad platform work with no current research defect or current-release validation and is not ported. The Lima worktree is clean and has no unique commit.
+- Changed: Web configuration now reads and writes through `getWebSearchConfigPath()` and creates that exact file's parent. Added an installed verifier that loads `pi-docparser` through Pi's bundled Jiti and executes parse, search, and screenshot tools in package, consumer, native, publish, and live-delivery gates. Updated direct, nested Pi, and runtime Undici to `8.10.0`; overrode `pi-docparser`'s LiteParse `2.10.1` pin with removable runtime version `2.11.0`.
+- Source proof: Undici `8.10.0` is official release commit `c8d80e6` with idle-loop, readable-body, retry, HTTP/2, proxy IPv6, and DNS-origin fixes. LiteParse `2.11.0` is official package commit `0f579ee`; its reviewed range adds document provenance, RTL/LTR ordering, table extraction improvements, and PDFium `1.5.0`. `pi-docparser@4.0.0` and its current upstream `main` still pin LiteParse `2.10.1`, which defines the override removal condition.
+- Verified so far: Dependency, runtime, package-seeding, exact web-fixture, release-workflow, and runtime-lock regressions passed `59/59`. The installed document verifier parsed one page, found one exact phrase hit, and wrote a nonempty `22,539`-byte PNG. Package-artifact verification passed with runtime SHA-256 `a7211debc8cc2cd254bf4e4b7cfb613d5e7332f6f3917fd159ae1e8995fbb093`.
+- State: `verified` for focused local paths and `unverified` for the cumulative local ladder, exact-commit Daytona, PR CI, merge, and published delivery. Next: complete every local gate, commit the exact candidate, prove it in Daytona and CI, then merge and verify npm, GitHub, native assets, and live installers.
+
 ### 2026-08-04 21:21 EDT — intake-sweep-0.3.12-final-candidate
 
 - Objective: Finish the open `0.3.12` web-runtime follow-up after its Windows installer verifier failed, refresh the complete maintainer intake, and add the smallest current document-research and security repairs before publication.

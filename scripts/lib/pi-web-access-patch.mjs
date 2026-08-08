@@ -66,6 +66,10 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 
 	const indexSource = sources.get("index.ts");
 	requireMarkerCounts(indexSource, "index.ts", [
+		[INDEX_CONFIG_HELPER_IMPORT_PATCHED, 1],
+		[INDEX_CONFIG_PATH_BINDING_PATCHED, 1],
+		[INDEX_CONFIG_WRITE_BLOCK_PATCHED, 1],
+		['import { dirname, join } from "node:path";', 1],
 		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
 		["get scopedModels() { return ctx.scopedModels; }", 3],
 		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
@@ -83,6 +87,11 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		indexSource,
 		"index.ts",
 		[
+			INDEX_CONFIG_HELPER_IMPORT_ORIGINAL,
+			INDEX_CONFIG_PATH_BINDING_LEGACY,
+			INDEX_CONFIG_PATH_BINDING_PARTIAL,
+			INDEX_CONFIG_WRITE_DIRECTORY_LEGACY,
+			INDEX_CONFIG_WRITE_DIRECTORY_CURRENT,
 			"loadEnabledModelPatterns",
 			"modelMatchesEnabledPatterns",
 			"scopedModels: ctx.scopedModels",
@@ -228,6 +237,29 @@ const PATCHED_CONFIG_PATH_HELPER = [
 	"\tconst configuredPath = process.env.FEYNMAN_WEB_SEARCH_CONFIG?.trim() || process.env.PI_WEB_SEARCH_CONFIG?.trim();",
 	'\treturn configuredPath || join(getWebSearchConfigDir(), "web-search.json");',
 	"}",
+].join("\n");
+const INDEX_CONFIG_HELPER_IMPORT_ORIGINAL =
+	'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";';
+const INDEX_CONFIG_HELPER_IMPORT_PATCHED =
+	'import { formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";';
+const INDEX_CONFIG_PATH_BINDING_PATCHED =
+	"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();";
+const INDEX_CONFIG_PATH_BINDING_LEGACY =
+	`const WEB_SEARCH_CONFIG_PATH = ${LEGACY_CONFIG_EXPR};`;
+const INDEX_CONFIG_PATH_BINDING_PARTIAL =
+	'const WEB_SEARCH_CONFIG_PATH = join(getWebSearchConfigDir(), "web-search.json");';
+const INDEX_CONFIG_PATH_BINDING_ENV =
+	`const WEB_SEARCH_CONFIG_PATH = ${PATCHED_CONFIG_EXPR};`;
+const INDEX_CONFIG_WRITE_DIRECTORY_LEGACY =
+	'const dir = join(homedir(), ".pi");';
+const INDEX_CONFIG_WRITE_DIRECTORY_CURRENT =
+	"const dir = getWebSearchConfigDir();";
+const INDEX_CONFIG_WRITE_DIRECTORY_PATCHED =
+	"const dir = dirname(WEB_SEARCH_CONFIG_PATH);";
+const INDEX_CONFIG_WRITE_BLOCK_PATCHED = [
+	`\t${INDEX_CONFIG_WRITE_DIRECTORY_PATCHED}`,
+	"\tif (!existsSync(dir)) mkdirSync(dir, { recursive: true });",
+	'\twriteFileSync(WEB_SEARCH_CONFIG_PATH, JSON.stringify(config, null, 2) + "\\n");',
 ].join("\n");
 
 function patchGeminiWebSource(source) {
@@ -587,6 +619,40 @@ export function patchPiWebAccessSource(relativePath, source) {
 	}
 
 	if (relativePath === "index.ts") {
+		for (const staleBinding of [
+			INDEX_CONFIG_PATH_BINDING_LEGACY,
+			INDEX_CONFIG_PATH_BINDING_PARTIAL,
+			INDEX_CONFIG_PATH_BINDING_ENV,
+		]) {
+			if (patched.includes(staleBinding)) {
+				patched = patched.replace(staleBinding, INDEX_CONFIG_PATH_BINDING_PATCHED);
+				changed = true;
+			}
+		}
+		for (const staleDirectory of [
+			INDEX_CONFIG_WRITE_DIRECTORY_LEGACY,
+			INDEX_CONFIG_WRITE_DIRECTORY_CURRENT,
+		]) {
+			if (patched.includes(staleDirectory)) {
+				patched = patched.replace(staleDirectory, INDEX_CONFIG_WRITE_DIRECTORY_PATCHED);
+				changed = true;
+			}
+		}
+		if (patched.includes(INDEX_CONFIG_HELPER_IMPORT_ORIGINAL)) {
+			patched = patched.replace(
+				INDEX_CONFIG_HELPER_IMPORT_ORIGINAL,
+				INDEX_CONFIG_HELPER_IMPORT_PATCHED,
+			);
+			changed = true;
+		}
+		if (patched.includes('import { join } from "node:path";')) {
+			patched = patched.replace(
+				'import { join } from "node:path";',
+				'import { dirname, join } from "node:path";',
+			);
+			changed = true;
+		}
+
 		const summaryContextsPatched = patched.replace(
 			/^([ \t]*)modelRegistry: ctx\.modelRegistry,\n(?:\1scopedModels: ctx\.scopedModels,\n)?\1cwd: ctx\.cwd,/gm,
 			(_match, indent) => [
@@ -679,11 +745,6 @@ export function patchPiWebAccessSource(relativePath, source) {
 			);
 			changed = true;
 		}
-	}
-
-	if (relativePath === "index.ts" && changed) {
-		patched = patched.replace('import { join } from "node:path";', 'import { dirname, join } from "node:path";');
-		patched = patched.replace('const dir = join(homedir(), ".pi");', "const dir = dirname(WEB_SEARCH_CONFIG_PATH);");
 	}
 
 	if (relativePath === "index.ts" && patched.includes('pi.registerCommand("search",')) {

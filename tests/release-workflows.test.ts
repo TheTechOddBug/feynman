@@ -4,8 +4,10 @@ import test from "node:test";
 
 const e2eWorkflow = readFileSync(".github/workflows/e2e.yml", "utf8");
 const publishWorkflow = readFileSync(".github/workflows/publish.yml", "utf8");
+const packageArtifactVerifier = readFileSync("scripts/verify-package-artifact.mjs", "utf8");
 const packageManifest = JSON.parse(readFileSync("package.json", "utf8")) as {
 	bundleDependencies?: string[];
+	files?: string[];
 };
 
 test("pull-request release gates validate the merge candidate", () => {
@@ -84,6 +86,39 @@ test("installed package gates verify Feynman commands, tools, and TypeBox schema
 	assert.match(
 		publishWorkflow,
 		/"\$native_bundle_root\/node\/bin\/node"\s+\\\n\s+"\$native_bundle_root\/app\/scripts\/verify-installed-runtime\.mjs"/,
+	);
+});
+
+test("installed package and native gates execute pi-docparser tools through the shipped verifier", () => {
+	assert.ok(
+		packageManifest.files?.includes("scripts/verify-installed-docparser.mjs"),
+		"package files must include the installed pi-docparser verifier",
+	);
+	assert.match(
+		packageArtifactVerifier,
+		/resolve\(packageRoot, "scripts", "verify-installed-docparser\.mjs"\)/,
+	);
+	for (const [label, workflow, expectedCount] of [
+		["PR", e2eWorkflow, 6],
+		["publish", publishWorkflow, 8],
+	] as const) {
+		const runtimeCalls = [...workflow.matchAll(/verify-installed-runtime\.mjs/g)];
+		const docparserCalls = [...workflow.matchAll(/verify-installed-docparser\.mjs/g)];
+		assert.equal(runtimeCalls.length, expectedCount, `${label} installed-runtime verifier count`);
+		assert.equal(docparserCalls.length, expectedCount, `${label} pi-docparser verifier count`);
+		for (let index = 0; index < runtimeCalls.length; index += 1) {
+			const runtimeOffset = runtimeCalls[index]?.index ?? -1;
+			const docparserOffset = docparserCalls[index]?.index ?? -1;
+			assert.ok(
+				docparserOffset > runtimeOffset && docparserOffset - runtimeOffset < 600,
+				`${label} pi-docparser verifier ${index + 1} must follow its installed-runtime verifier`,
+			);
+		}
+	}
+	assert.match(e2eWorkflow, /& \$nativeNode \$nativeDocparserVerifier/);
+	assert.match(
+		publishWorkflow,
+		/"\$native_bundle_root\/node\/bin\/node"\s+\\\n\s+"\$native_bundle_root\/app\/scripts\/verify-installed-docparser\.mjs"/,
 	);
 });
 

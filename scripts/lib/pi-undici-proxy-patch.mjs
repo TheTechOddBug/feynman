@@ -4,12 +4,13 @@ import { dirname, resolve } from "node:path";
 
 const require = createRequire(import.meta.url);
 
-export const FEYNMAN_UNDICI_VERSION = "8.9.0";
+export const FEYNMAN_UNDICI_VERSION = "8.10.0";
 const UPSTREAM_PI_UNDICI_VERSION = "8.5.0";
+const PRIOR_FEYNMAN_UNDICI_VERSION = "8.9.0";
 const FEYNMAN_UNDICI_LOCK_ENTRY = {
 	version: FEYNMAN_UNDICI_VERSION,
 	resolved: `https://registry.npmjs.org/undici/-/undici-${FEYNMAN_UNDICI_VERSION}.tgz`,
-	integrity: "sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA==",
+	integrity: "sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==",
 	license: "MIT",
 	engines: { node: ">=22.19.0" },
 };
@@ -23,7 +24,13 @@ function readPackageVersion(packageRoot) {
 }
 
 function assertSupportedUndiciVersion(version, surface) {
-	if (![UPSTREAM_PI_UNDICI_VERSION, FEYNMAN_UNDICI_VERSION].includes(version)) {
+	if (
+		![
+			UPSTREAM_PI_UNDICI_VERSION,
+			PRIOR_FEYNMAN_UNDICI_VERSION,
+			FEYNMAN_UNDICI_VERSION,
+		].includes(version)
+	) {
 		throw new Error(`Unsupported Pi Undici ${surface}: ${version ?? "missing"}`);
 	}
 }
@@ -126,10 +133,9 @@ export function patchPiUndiciPackageLockSource(source, requiredPiVersion) {
 
 /**
  * Pi 0.83.0 shrinkwraps Undici 8.5.0, whose EnvHttpProxyAgent tunnels plain
- * HTTP requests by default. Replace that nested tree with 8.9.0 so Feynman and
- * Pi both inherit Undici's fixed absolute-form forwarding. Remove this patch
- * after a supported Pi release depends on Undici >=8.9.0, the first release
- * outside every currently published advisory range affecting Pi's copy.
+ * HTTP requests by default. Replace that nested tree with 8.10.0 so Feynman
+ * and Pi inherit the fixed proxy forwarding plus retrieval reliability fixes.
+ * Remove this patch after a supported Pi release depends on Undici >=8.10.0.
  */
 export function patchPiUndiciProxyTree(nodeModulesPath, fallbackPackagePath, requiredPiVersion) {
 	const piRoots = ["@earendil-works", "@mariozechner"]

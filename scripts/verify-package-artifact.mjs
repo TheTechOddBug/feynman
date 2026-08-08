@@ -27,6 +27,8 @@ import {
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
+const FEYNMAN_LITEPARSE_VERSION = "2.11.0";
+const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-L3Db1C7JaEpTcmD6uChnnLElL5VZwKtqVtd7mio6h7xeoDhtjvN5a+nHH3pXqrMhvNWtc9azBmHwxWxBN/pZBg==";
 const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
 const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
 const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
@@ -163,6 +165,23 @@ requireMarkers(
 		"valid-typebox-probe",
 		"malformed-typebox-probe",
 		"terminateChildProcessTree",
+	],
+);
+requireMarkers(
+	readText(
+		resolve(packageRoot, "scripts", "verify-installed-docparser.mjs"),
+		"installed pi-docparser verifier",
+	),
+	"installed pi-docparser verifier",
+	[
+		'piRequire.resolve("jiti")',
+		"createMinimalPdf",
+		'"document_parse"',
+		'"document_search"',
+		'"document_screenshot"',
+		"assertDocumentParseResult",
+		"assertDocumentSearchResult",
+		"assertDocumentScreenshotResult",
 	],
 );
 
@@ -380,7 +399,11 @@ requireMarkers(
 requireMarkers(
 	readText(resolve(alphaLib, "alphaxiv.js"), "bundled alpha-hub search"),
 	"bundled alpha-hub search",
-	["async function searchRestFast(", "return await fallbackSearch("],
+	[
+		"async function searchRestFast(",
+		"return await fallbackSearch(",
+		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+	],
 );
 requireMarkers(
 	readText(resolve(alphaLib, "index.js"), "bundled alpha-hub parser"),
@@ -472,6 +495,15 @@ if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
 	fail("committed runtime lock does not pin @hono/node-server 2.0.12");
+}
+const liteparseLockEntry = runtimeLock.packages?.["node_modules/@llamaindex/liteparse"];
+if (
+	liteparseLockEntry?.version !== FEYNMAN_LITEPARSE_VERSION ||
+	liteparseLockEntry?.resolved !==
+		`https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-${FEYNMAN_LITEPARSE_VERSION}.tgz` ||
+	liteparseLockEntry?.integrity !== FEYNMAN_LITEPARSE_INTEGRITY
+) {
+	fail(`committed runtime lock does not resolve exact LiteParse ${FEYNMAN_LITEPARSE_VERSION}`);
 }
 if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`committed runtime lock does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
@@ -685,6 +717,18 @@ requireMarkers(
 requireMarkers(
 	readArchivedText(
 		archivePath,
+		"npm/node_modules/@companion-ai/alpha-hub/src/lib/alphaxiv.js",
+	),
+	"runtime alpha-hub client",
+	[
+		"async function searchRestFast(",
+		"return await fallbackSearch(",
+		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
 		"npm/node_modules/pi-otel/dist/otel/sdk.js",
 	),
 	"runtime pi-otel SDK",
@@ -713,6 +757,21 @@ if (docparserManifest.version !== expectedPiDocparserVersion) {
 }
 if (docparserManifest.engines?.node !== ">=22.19.0") {
 	fail("runtime pi-docparser does not declare the reviewed Node 22.19 floor");
+}
+const liteparseManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/@llamaindex/liteparse/package.json",
+);
+if (liteparseManifest.version !== FEYNMAN_LITEPARSE_VERSION) {
+	fail(`runtime LiteParse is not ${FEYNMAN_LITEPARSE_VERSION}`);
+}
+for (const [packageName, version] of Object.entries(liteparseManifest.optionalDependencies ?? {})) {
+	if (
+		packageName.startsWith("@llamaindex/liteparse-") &&
+		version !== FEYNMAN_LITEPARSE_VERSION
+	) {
+		fail(`runtime LiteParse optional package ${packageName} is not ${FEYNMAN_LITEPARSE_VERSION}`);
+	}
 }
 requireMarkers(
 	readArchivedText(
@@ -777,6 +836,8 @@ requireMarkers(
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
 		"Searches return directly by default",
+		"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
+		"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
 		"get scopedModels() { return ctx.scopedModels; }",
 		"modelMatchesScopedModels(model, ctx.scopedModels)",
 		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
@@ -939,6 +1000,7 @@ console.log(JSON.stringify({
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
 	piDocparserVersion: expectedPiDocparserVersion,
+	liteparseVersion: FEYNMAN_LITEPARSE_VERSION,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,
