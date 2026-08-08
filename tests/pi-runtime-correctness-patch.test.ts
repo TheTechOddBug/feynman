@@ -218,6 +218,9 @@ test("Pi 0.84.1 correctness patch migrates the pre-review eager persistence layo
 test("package artifact verification rejects a mixed Pi runtime train", () => {
 	const packageRoot = mkdtempSync(resolve(tmpdir(), "feynman-mixed-pi-artifact-"));
 	try {
+		const appManifest = JSON.parse(
+			readFileSync(resolve(appRoot, "package.json"), "utf8"),
+		) as { optionalDependencies?: Record<string, string> };
 		mkdirSync(resolve(packageRoot, "node_modules"), { recursive: true });
 		writeFileSync(
 			resolve(packageRoot, "package.json"),
@@ -230,6 +233,7 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 					"@earendil-works/pi-tui": "0.84.1",
 					"brace-expansion": "5.0.9",
 				},
+				optionalDependencies: appManifest.optionalDependencies,
 				overrides: { "brace-expansion": "5.0.9" },
 			}),
 		);

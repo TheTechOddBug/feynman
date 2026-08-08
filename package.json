@@ -193,5 +193,14 @@
   "directories": {
     "test": "tests"
   },
-  "author": ""
+  "author": "",
+  "optionalDependencies": {
+    "@llamaindex/liteparse-darwin-arm64": "2.11.1",
+    "@llamaindex/liteparse-darwin-x64": "2.11.1",
+    "@llamaindex/liteparse-linux-arm64-gnu": "2.11.1",
+    "@llamaindex/liteparse-linux-x64-gnu": "2.11.1",
+    "@llamaindex/liteparse-linux-x64-musl": "2.11.1",
+    "@llamaindex/liteparse-win32-arm64-msvc": "2.11.1",
+    "@llamaindex/liteparse-win32-x64-msvc": "2.11.1"
+  }
 }

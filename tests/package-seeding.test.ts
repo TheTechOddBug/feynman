@@ -99,9 +99,14 @@ test("published manifest pins the Undici override for npm 10 consumers", async (
 test("release manifests pin current document and website security repairs", () => {
 	const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
 		dependencies?: Record<string, string>;
+		optionalDependencies?: Record<string, string>;
 	};
 	const lock = JSON.parse(readFileSync(resolve(process.cwd(), "package-lock.json"), "utf8")) as {
-		packages?: Record<string, { version?: string }>;
+		packages?: Record<string, {
+			optional?: boolean;
+			optionalDependencies?: Record<string, string>;
+			version?: string;
+		}>;
 	};
 	const websiteManifest = JSON.parse(readFileSync(resolve(process.cwd(), "website", "package.json"), "utf8")) as {
 		overrides?: Record<string, string>;
@@ -112,6 +117,20 @@ test("release manifests pin current document and website security repairs", () =
 
 	assert.equal(manifest.dependencies?.["pdfjs-dist"], "^6.2.108");
 	assert.equal(lock.packages?.["node_modules/pdfjs-dist"]?.version, "6.2.108");
+	for (const packageName of [
+		"@llamaindex/liteparse-darwin-arm64",
+		"@llamaindex/liteparse-darwin-x64",
+		"@llamaindex/liteparse-linux-arm64-gnu",
+		"@llamaindex/liteparse-linux-x64-gnu",
+		"@llamaindex/liteparse-linux-x64-musl",
+		"@llamaindex/liteparse-win32-arm64-msvc",
+		"@llamaindex/liteparse-win32-x64-msvc",
+	]) {
+		assert.equal(manifest.optionalDependencies?.[packageName], "2.11.1");
+		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.11.1");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.11.1");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.optional, true);
+	}
 	assert.equal(websiteManifest.overrides?.["js-yaml"], "4.3.1");
 	assert.equal(websiteLock.packages?.["node_modules/js-yaml"]?.version, "4.3.1");
 	assert.equal(websiteManifest.overrides?.nanoid, "3.3.17");

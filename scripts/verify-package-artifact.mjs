@@ -29,6 +29,15 @@ const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
 const FEYNMAN_LITEPARSE_VERSION = "2.11.1";
 const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-VxTSYDYYrweAQ03Eq3G34TKu7kgVBmstIgbjF2pFaeA+loMoYjEQKvw5l89a9smWfT/F0aZSSl0yRICiCzUxVw==";
+const FEYNMAN_LITEPARSE_NATIVE_PACKAGES = [
+	"@llamaindex/liteparse-darwin-arm64",
+	"@llamaindex/liteparse-darwin-x64",
+	"@llamaindex/liteparse-linux-arm64-gnu",
+	"@llamaindex/liteparse-linux-x64-gnu",
+	"@llamaindex/liteparse-linux-x64-musl",
+	"@llamaindex/liteparse-win32-arm64-msvc",
+	"@llamaindex/liteparse-win32-x64-msvc",
+];
 const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
 const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
 const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
@@ -109,6 +118,11 @@ if (manifest.dependencies?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSI
 }
 if (manifest.overrides?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION) {
 	fail(`package.json does not override brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
+for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
+	if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
+		fail(`package.json does not request ${packageName} ${FEYNMAN_LITEPARSE_VERSION}`);
+	}
 }
 
 for (const name of [

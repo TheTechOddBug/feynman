@@ -21,6 +21,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 - Updated `pi-docparser` to `4.0.0`. Native PDFium and OCR work now runs in isolated, cancellable child processes, so parser crashes and memory failures become bounded tool errors instead of terminating the research session.
 - Added strict page, worker, DPI, search, screenshot, and output limits. Parse publication is atomic, JSON output has a stable `{ pages, text }` shape, screenshots default to page 1, and each call accepts at most four explicit pages.
 - Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.11.1`. The document runtime now includes stronger table extraction, RTL/LTR text ordering, and source-provenance metadata support. Document parsing requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
+- Added LiteParse's platform-native packages as optional npm dependencies, so one published Feynman tarball can parse documents on supported macOS, Linux, and Windows consumers.
 
 ### Web research
 
