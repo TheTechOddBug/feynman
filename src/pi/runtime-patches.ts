@@ -282,11 +282,26 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 			patchPiTuiSource,
 			bundledPiVersion,
 		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-tui",
+			"dist/tui-main-screen.js",
+			patchPiTuiSource,
+			bundledPiVersion,
+		) || changed;
 		changed = patchNestedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-coding-agent",
 			"pi-tui",
 			"dist/tui.js",
+			patchPiTuiSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-tui",
+			"dist/tui-main-screen.js",
 			patchPiTuiSource,
 			bundledPiVersion,
 		) || changed;

@@ -37,6 +37,10 @@ export type WorkbenchPromptStreamUpdate = {
 	toolEvents?: WorkbenchToolEvent[];
 };
 
+type PiWorkbenchPromptStreamUpdate = WorkbenchPromptStreamUpdate & {
+	contentDelta?: string;
+};
+
 type ChildMode = "rpc";
 
 type WorkbenchPiChild = ReturnType<typeof spawn>;
@@ -653,11 +657,18 @@ class WorkbenchPiRpcClient {
 			activeRun.resolve();
 			return;
 		}
-		activeRun.pendingUpdates.push(handlePiJsonLine(line, activeRun.toolEvents, async (update) => {
-			if (update.content !== undefined) activeRun.content = update.content;
-			if (update.status) activeRun.status = update.status;
-			await activeRun.onUpdate(update);
-		}));
+			activeRun.pendingUpdates.push(handlePiJsonLine(line, activeRun.toolEvents, async (update) => {
+				const normalized: WorkbenchPromptStreamUpdate = { ...update };
+				if (update.contentDelta !== undefined) {
+					activeRun.content += update.contentDelta;
+					normalized.content = activeRun.content;
+					delete (normalized as PiWorkbenchPromptStreamUpdate).contentDelta;
+				} else if (update.content !== undefined) {
+					activeRun.content = update.content;
+				}
+				if (normalized.status) activeRun.status = normalized.status;
+				await activeRun.onUpdate(normalized);
+			}));
 	}
 
 	private rejectPending(error: Error): void {
@@ -807,13 +818,27 @@ export async function abortFeynmanWorkbenchPrompt(request: WorkbenchPromptReques
 export async function handlePiJsonLine(
 	line: string,
 	toolEvents: Map<string, WorkbenchToolEvent>,
-	onUpdate: (update: WorkbenchPromptStreamUpdate) => void | Promise<void>,
+	onUpdate: (update: PiWorkbenchPromptStreamUpdate) => void | Promise<void>,
 ): Promise<void> {
 	let event: Record<string, unknown>;
 	try {
 		event = JSON.parse(line) as Record<string, unknown>;
 	} catch {
 		return;
+	}
+	if (event.type === "message_update") {
+		const assistantMessageEvent = unknownRecord(event.assistantMessageEvent);
+		if (
+			assistantMessageEvent?.type === "text_delta" &&
+			typeof assistantMessageEvent.delta === "string"
+		) {
+			await onUpdate({
+				contentDelta: assistantMessageEvent.delta,
+				status: "running",
+				toolEvents: [...toolEvents.values()],
+			});
+			return;
+		}
 	}
 	if (event.type === "message_update" || event.type === "message_end") {
 		const message = event.message;

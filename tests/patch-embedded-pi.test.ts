@@ -18,8 +18,13 @@ test("embedded Pi patch covers nested release-bundle copies before artifact veri
 	assert.match(source, /const nestedTuiPaths = resolveNestedPiFiles\(piPackageRoot, "pi-tui"/);
 	assert.match(
 		source,
+		/const nestedTuiMainScreenPaths = resolveNestedPiFiles\(piPackageRoot, "pi-tui"/,
+	);
+	assert.match(
+		source,
 		/const workspaceNestedTuiPaths = resolveWorkspaceNestedPiFiles\(workspaceRoot, "pi-tui"/,
 	);
+	assert.match(source, /const workspaceNestedTuiMainScreenPaths = resolveWorkspaceNestedPiFiles\(/);
 	assert.match(source, /const nestedEditorPaths = resolveNestedPiFiles\(piPackageRoot, "pi-tui"/);
 	assert.match(source, /const workspaceNestedEditorPaths = workspaceNestedTuiPaths\.map/);
 	assert.match(
@@ -28,7 +33,7 @@ test("embedded Pi patch covers nested release-bundle copies before artifact veri
 	);
 	assert.match(
 		source,
-		/\[\s*tuiPath,\s*\.\.\.nestedTuiPaths,\s*workspaceTuiPath,\s*\.\.\.workspaceNestedTuiPaths,/,
+		/\[\s*tuiPath,\s*tuiMainScreenPath,\s*\.\.\.nestedTuiPaths,\s*\.\.\.nestedTuiMainScreenPaths,\s*workspaceTuiPath,\s*workspaceTuiMainScreenPath,\s*\.\.\.workspaceNestedTuiPaths,\s*\.\.\.workspaceNestedTuiMainScreenPaths,/,
 	);
 	assert.match(
 		source,

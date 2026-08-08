@@ -57,7 +57,7 @@ const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const workspaceArchiveDigestPath = resolve(feynmanDir, "runtime-workspace.sha256");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.83.0";
+const PI_RUNTIME_FALLBACK_VERSION = "0.84.1";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@modelcontextprotocol/sdk": {
@@ -87,7 +87,7 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-node": "0.221.0",
 	"@opentelemetry/sdk-trace-base": "2.10.0",
 	"@opentelemetry/sdk-trace-node": "2.10.0",
-	"@llamaindex/liteparse": "2.11.0",
+	"@llamaindex/liteparse": "2.11.1",
 	"brace-expansion": "5.0.9",
 	undici: "8.10.0",
 };
@@ -559,10 +559,17 @@ function patchBundledPiLlamaUsage() {
 function patchBundledPiTui() {
 	let changed = false;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/tui.js", patchPiTuiSource) || changed;
+	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/tui-main-screen.js", patchPiTuiSource) || changed;
 	changed = patchNestedPiWorkspaceFile(
 		"pi-coding-agent",
 		"pi-tui",
 		"dist/tui.js",
+		patchPiTuiSource,
+	) || changed;
+	changed = patchNestedPiWorkspaceFile(
+		"pi-coding-agent",
+		"pi-tui",
+		"dist/tui-main-screen.js",
 		patchPiTuiSource,
 	) || changed;
 	changed = patchScopedPiWorkspaceFile("pi-tui", "dist/components/editor.js", patchPiEditorSource) || changed;

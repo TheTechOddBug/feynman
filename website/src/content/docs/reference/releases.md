@@ -11,16 +11,22 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## v0.3.12 - 2026-08-08
 
+### Research runtime
+
+- Updated the bundled Pi runtime to `0.84.1`. Provider authentication preflights, bounded blocked-tool termination, provider refresh transactions, and active-run reset protection now use Pi's current contracts.
+- Updated Workbench chat for Pi's delta-only RPC stream. Live assistant text now accumulates correctly while the final `message_end` remains authoritative.
+
 ### Document research
 
 - Updated `pi-docparser` to `4.0.0`. Native PDFium and OCR work now runs in isolated, cancellable child processes, so parser crashes and memory failures become bounded tool errors instead of terminating the research session.
 - Added strict page, worker, DPI, search, screenshot, and output limits. Parse publication is atomic, JSON output has a stable `{ pages, text }` shape, screenshots default to page 1, and each call accepts at most four explicit pages.
-- Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.11.0`. The document runtime now includes stronger table extraction, RTL/LTR text ordering, and source-provenance metadata support. Document parsing requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
+- Removed the ImageMagick requirement for supported image inputs and updated LiteParse to `2.11.1`. The document runtime now includes stronger table extraction, RTL/LTR text ordering, and source-provenance metadata support. Document parsing requires Node.js `22.19.0` or newer; Feynman's supported Node floor already satisfies it.
 
 ### Web research
 
-- Updated `pi-web-access` to `0.18.0`. `fetch_content` can now return raw textual HTTP responses, answer a question against one page while retaining its source text, retrieve direct PNG/JPEG/WebP/GIF images, and paginate long content on cleaner boundaries.
-- Added exact, case-insensitive, and fuzzy passage lookup over stored page content through `findText` and `findMode`, plus current Kagi, Ollama Cloud, xAI, Bright Data, SerpBase, and authenticated SearXNG routes.
+- Updated `pi-web-access` to `0.19.0`. `fetch_content` can now return raw textual HTTP responses, answer a question against one page while retaining its source text, retrieve direct PNG/JPEG/WebP/GIF images, and paginate long content on cleaner boundaries.
+- Added exact, case-insensitive, and fuzzy passage lookup over stored page content through `findText` and `findMode`, plus current Jina Search, Kagi, Ollama Cloud, xAI, Bright Data, SerpBase, and authenticated SearXNG routes.
+- Adopted current Kagi Search and Extract contracts, Gemini relay routing for local video requests, xAI quota fallback classification, and `:max` scoped summary-model matching.
 - Preserved routed-provider model selection and hardened Git clone cancellation from upstream, including non-interactive credential handling and process-tree termination.
 
 ### Reliability
@@ -30,6 +36,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 - Bound page-answer, search-rewrite, and curator summary model selection to Pi's resolved session model scope, including `--models` overrides, instead of rereading an adjacent settings file.
 - Bound web-search configuration reads and writes to the same Feynman-managed path, including custom `FEYNMAN_WEB_SEARCH_CONFIG` locations, and create that file's parent before saving.
 - Updated Feynman's direct, nested Pi, and packaged runtime copies of Undici to `8.10.0` for current idle-connection, readable-body, retry, HTTP/2, proxy IPv6, and DNS-origin fixes.
+- Updated PDF.js to `6.2.108` and the website's audited JS-YAML and Nano ID trees to close current malicious-document and denial-of-service advisories.
 - Removed macOS ACL, file-flag, Apple metadata, and extended-attribute records from bundled runtime archives so those host records no longer change package bytes.
 - Updated audited Hono, `fast-uri`, `ip-address`, `express-rate-limit`, and website `brace-expansion` overrides after new registry advisories, and removed a streamed checksum-file handle from the Windows installer verifier.
 - Restored automatic package reconciliation for workspaces retaining the `0.3.11`, `0.3.10`, or older `0.3.6` bundled package defaults.

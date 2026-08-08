@@ -1,12 +1,9 @@
-export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.83.0";
+export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.84.1";
 export const PI_LLAMA_USAGE_PATCH_MARKER =
-	"Feynman Pi 0.83.0 llama.cpp cached usage migration";
+	"Feynman Pi 0.84.1 llama.cpp cached usage migration";
 
 const STATIC_USAGE_REQUIRED = "            supportsUsageInStreaming: true,";
 const MODEL_FACTORY_ANCHOR = "function toPiModel(model, serverUrl) {";
-const MODEL_STATE_ORIGINAL = "    let models = [];\n";
-const MODEL_STATE_PATCHED =
-	"    let models = [];\n    let feynmanLlamaRefreshQueue = Promise.resolve();\n";
 const REPAIR_HELPER = `// ${PI_LLAMA_USAGE_PATCH_MARKER}
 // Pi PR #7258 fixes new catalogs, while this repair also upgrades cached
 // models-store.json entries created before the upstream change.
@@ -18,69 +15,34 @@ function repairFeynmanLlamaUsage(model) {
         : model;
 }
 `;
-const STORED_MODELS_ORIGINAL = `        refreshModels: async (context) => {
-            const stored = await context.store.read();
-            if (stored) {
-                models = stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
-            }
-            if (!context.allowNetwork || context.signal?.aborted || context.credential?.type !== "api_key")
-                return;
-            const serverUrl = credentialServerUrl(context.credential);
-            if (!serverUrl)
-                return;
-            const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });
-            setCatalog(catalog, serverUrl);
-            if (!context.signal?.aborted)
-                await context.store.write({ models, checkedAt: Date.now() });
-        },`;
-const LEGACY_STORED_MODELS_PATCHED = `        refreshModels: async (context) => {
-            const stored = await context.store.read();
-            if (stored) {
-                const repairedStoredModels = stored.models.map(repairFeynmanLlamaUsage);
-                models = repairedStoredModels.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
-                if (repairedStoredModels.some((model, index) => model !== stored.models[index])) {
-                    await context.store.write({ ...stored, models: repairedStoredModels });
-                }
-            }
-            if (!context.allowNetwork || context.signal?.aborted || context.credential?.type !== "api_key")
-                return;
-            const serverUrl = credentialServerUrl(context.credential);
-            if (!serverUrl)
-                return;
-            const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });
-            setCatalog(catalog, serverUrl);
-            if (!context.signal?.aborted)
-                await context.store.write({ models, checkedAt: Date.now() });
-        },`;
-const STORED_MODELS_PATCHED = `        refreshModels: (context) => {
-            const refresh = feynmanLlamaRefreshQueue.catch(() => {}).then(async () => {
-                const stored = await context.store.read();
-                if (stored) {
-                    const repairedStoredModels = stored.models.map(repairFeynmanLlamaUsage);
-                    models = repairedStoredModels.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
-                    if (repairedStoredModels.some((model, index) => model !== stored.models[index])) {
-                        await context.store.write({ ...stored, models: repairedStoredModels });
-                    }
-                }
-                if (!context.allowNetwork || context.signal?.aborted || context.credential?.type !== "api_key")
+const STORED_MODELS_ORIGINAL = `            if (context.stored) {
+                const restored = context.stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
+                if (!(await context.publish({
+                    update: () => {
+                        models = restored;
+                    },
+                }))) {
                     return;
-                const serverUrl = credentialServerUrl(context.credential);
-                if (!serverUrl)
+                }
+            }`;
+const STORED_MODELS_PATCHED = `            if (context.stored) {
+                const repairedStoredModels = context.stored.models.map(repairFeynmanLlamaUsage);
+                const restored = repairedStoredModels.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
+                const repaired = repairedStoredModels.some((model, index) => model !== context.stored.models[index]);
+                if (!(await context.publish({
+                    ...(repaired ? { persist: { ...context.stored, models: repairedStoredModels } } : {}),
+                    update: () => {
+                        models = restored;
+                    },
+                }))) {
                     return;
-                const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });
-                setCatalog(catalog, serverUrl);
-                if (!context.signal?.aborted)
-                    await context.store.write({ models, checkedAt: Date.now() });
-            });
-            feynmanLlamaRefreshQueue = refresh;
-            return refresh;
-        },`;
+                }
+            }`;
 
 export const PI_LLAMA_USAGE_REQUIRED_FRAGMENTS = Object.freeze([
 	PI_LLAMA_USAGE_PATCH_MARKER,
 	REPAIR_HELPER.trimEnd(),
 	STATIC_USAGE_REQUIRED,
-	MODEL_STATE_PATCHED.trimEnd(),
 	STORED_MODELS_PATCHED,
 ]);
 
@@ -88,7 +50,6 @@ const ORDERED_FRAGMENTS = Object.freeze([
 	REPAIR_HELPER.trimEnd(),
 	MODEL_FACTORY_ANCHOR,
 	STATIC_USAGE_REQUIRED,
-	MODEL_STATE_PATCHED.trimEnd(),
 	STORED_MODELS_PATCHED,
 ]);
 
@@ -134,32 +95,15 @@ export function assertPiLlamaUsagePatchSource(source, surface = "llama.cpp provi
 }
 
 /**
- * Pi 0.83.0 includes PR #7258 for newly discovered llama.cpp models, but
+ * Pi 0.84.1 includes PR #7258 for newly discovered llama.cpp models, but
  * existing models-store.json entries preserve the old false capability.
  * Remove this patch after a supported Pi release repairs or invalidates stale
  * llama.cpp model metadata.
  */
 export function patchPiLlamaUsageSource(source) {
 	if (source.includes(PI_LLAMA_USAGE_PATCH_MARKER)) {
-		try {
-			assertPiLlamaUsagePatchSource(source);
-			return source;
-		} catch {
-			let upgraded = replaceRequired(
-				source,
-				MODEL_STATE_ORIGINAL,
-				MODEL_STATE_PATCHED,
-				"legacy refresh queue anchor was not found",
-			);
-			upgraded = replaceRequired(
-				upgraded,
-				LEGACY_STORED_MODELS_PATCHED,
-				STORED_MODELS_PATCHED,
-				"legacy stored model repair was not found",
-			);
-			assertPiLlamaUsagePatchSource(upgraded);
-			return upgraded;
-		}
+		assertPiLlamaUsagePatchSource(source);
+		return source;
 	}
 	const staticUsageIndex = source.indexOf(STATIC_USAGE_REQUIRED);
 	if (
@@ -175,12 +119,6 @@ export function patchPiLlamaUsageSource(source) {
 		MODEL_FACTORY_ANCHOR,
 		`${REPAIR_HELPER}${MODEL_FACTORY_ANCHOR}`,
 		"model factory anchor was not found",
-	);
-	patched = replaceRequired(
-		patched,
-		MODEL_STATE_ORIGINAL,
-		MODEL_STATE_PATCHED,
-		"refresh queue anchor was not found",
 	);
 	patched = replaceRequired(
 		patched,

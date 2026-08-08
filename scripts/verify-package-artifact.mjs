@@ -27,8 +27,8 @@ import {
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
-const FEYNMAN_LITEPARSE_VERSION = "2.11.0";
-const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-L3Db1C7JaEpTcmD6uChnnLElL5VZwKtqVtd7mio6h7xeoDhtjvN5a+nHH3pXqrMhvNWtc9azBmHwxWxBN/pZBg==";
+const FEYNMAN_LITEPARSE_VERSION = "2.11.1";
+const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-VxTSYDYYrweAQ03Eq3G34TKu7kgVBmstIgbjF2pFaeA+loMoYjEQKvw5l89a9smWfT/F0aZSSl0yRICiCzUxVw==";
 const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
 const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
 const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
@@ -299,15 +299,15 @@ requireMarkers(
 		"bundled Pi ModelRegistry",
 	),
 	"bundled Pi ModelRegistry",
-	[
-		"function assertHeaderSafeRequestConfig(",
-		"assertHeaderSafeRequestConfig(model.provider, undefined, headers);",
-		"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
+		[
+			"function assertHeaderSafeRequestConfig(",
+			"assertHeaderSafeRequestConfig(model.provider, undefined, compatibility.headers);",
+			"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, resolution.auth.headers);",
 	],
 );
 requireMarkers(
 	readText(
-		resolve(packageRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "tui.js"),
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "tui-main-screen.js"),
 		"bundled Pi TUI",
 	),
 	"bundled Pi TUI",
@@ -337,7 +337,7 @@ requireMarkers(
 			"@earendil-works",
 			"pi-tui",
 			"dist",
-			"tui.js",
+			"tui-main-screen.js",
 		),
 		"bundled nested Pi TUI",
 	),
@@ -659,10 +659,10 @@ requireMarkers(
 		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/model-registry.js",
 	),
 	"runtime Pi ModelRegistry",
-	[
-		"function assertHeaderSafeRequestConfig(",
-		"assertHeaderSafeRequestConfig(model.provider, undefined, headers);",
-		"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
+		[
+			"function assertHeaderSafeRequestConfig(",
+			"assertHeaderSafeRequestConfig(model.provider, undefined, compatibility.headers);",
+			"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, resolution.auth.headers);",
 	],
 );
 assertPiInteractiveUpdateNoticeSource(
@@ -688,7 +688,7 @@ requireMarkers(
 requireMarkers(
 	readArchivedText(
 		archivePath,
-		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/tui.js",
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/tui-main-screen.js",
 	),
 	"runtime nested Pi TUI",
 	["line = sliceByColumn(line, 0, width, true);"],

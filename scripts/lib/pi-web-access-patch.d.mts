@@ -1,4 +1,4 @@
-export declare const PI_WEB_ACCESS_REQUIRED_VERSION: "0.18.0";
+export declare const PI_WEB_ACCESS_REQUIRED_VERSION: "0.19.0";
 export const PI_WEB_ACCESS_PATCH_TARGETS: string[];
 export declare function assertPiWebAccessVersion(version: string | undefined, surface: string): void;
 export declare function assertPiWebAccessPatchedSources(

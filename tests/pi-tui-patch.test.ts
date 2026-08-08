@@ -125,12 +125,15 @@ test("patchPiTuiSource truncates the current upstream overflow check after clear
 	assert.doesNotMatch(patched, /throw new Error\(errorMsg\)/);
 });
 
-test("embedded Pi 0.82 TUI and editor patches apply without dropping Unicode behavior", () => {
-	const tui = readFileSync(join(process.cwd(), "node_modules", "@earendil-works", "pi-tui", "dist", "tui.js"), "utf8");
+test("embedded Pi TUI and editor patches apply without dropping Unicode behavior", () => {
+	const tuiMainScreen = readFileSync(
+		join(process.cwd(), "node_modules", "@earendil-works", "pi-tui", "dist", "tui-main-screen.js"),
+		"utf8",
+	);
 	const editor = readFileSync(join(process.cwd(), "node_modules", "@earendil-works", "pi-tui", "dist", "components", "editor.js"), "utf8");
 
-	assert.match(tui, /line = sliceByColumn\(line, 0, width, true\)/);
-	assert.doesNotMatch(tui, /Rendered line .* exceeds terminal width/);
+	assert.match(tuiMainScreen, /line = sliceByColumn\(line, 0, width, true\)/);
+	assert.doesNotMatch(tuiMainScreen, /Rendered line .* exceeds terminal width/);
 	assert.match(editor, /applyBackgroundToLine, cjkBreakRegex/);
 	assert.match(editor, /const styleInput = typeof this\.theme\.input === "function"/);
 	assert.match(editor, /createScrollBorder/);

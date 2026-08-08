@@ -7,6 +7,15 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
+	createModels,
+	hasApi,
+	InMemoryCredentialStore,
+	type Model,
+	type ModelsStore,
+	type ModelsStoreEntry,
+} from "@earendil-works/pi-ai";
+
+import {
 	assertPiLlamaUsagePatchSource,
 	assertPiLlamaUsageVersion,
 	PI_LLAMA_USAGE_PATCH_MARKER,
@@ -28,7 +37,7 @@ const providerPath = resolve(
 	"provider.js",
 );
 
-test("Pi 0.83.0 llama.cpp patch is exact, idempotent, and version-gated", () => {
+test("Pi 0.84.1 llama.cpp patch is exact, idempotent, and version-gated", () => {
 	patchPiRuntimeNodeModules(appRoot);
 	const source = readFileSync(providerPath, "utf8");
 	assert.match(source, new RegExp(PI_LLAMA_USAGE_PATCH_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -39,11 +48,11 @@ test("Pi 0.83.0 llama.cpp patch is exact, idempotent, and version-gated", () => 
 	);
 	assert.throws(
 		() => assertPiLlamaUsageVersion("0.82.1", "test"),
-		/expected 0\.83\.0, found 0\.82\.1/,
+		/expected 0\.84\.1, found 0\.82\.1/,
 	);
 	assert.throws(
 		() => assertPiLlamaUsageVersion("0.84.0", "test"),
-		/expected 0\.83\.0, found 0\.84\.0/,
+		/expected 0\.84\.1, found 0\.84\.0/,
 	);
 	assert.throws(
 		() => assertPiLlamaUsagePatchSource(source.replace("supportsUsageInStreaming: true,", "")),
@@ -56,7 +65,7 @@ test("Pi 0.83.0 llama.cpp patch is exact, idempotent, and version-gated", () => 
 					.replace(PI_LLAMA_USAGE_PATCH_MARKER, "")
 					.replace("supportsUsageInStreaming: true,", "supportsUsageInStreaming: false,"),
 			),
-		/0\.83\.0 llama\.cpp layout: upstream streaming usage capability was not found exactly once/,
+		/0\.84\.1 llama\.cpp layout: upstream streaming usage capability was not found exactly once/,
 	);
 	for (const fragment of PI_LLAMA_USAGE_REQUIRED_FRAGMENTS) {
 		assert.throws(
@@ -67,10 +76,10 @@ test("Pi 0.83.0 llama.cpp patch is exact, idempotent, and version-gated", () => 
 	assert.throws(
 		() =>
 			assertPiLlamaUsagePatchSource(
-				source.replace(
-					"models = repairedStoredModels.filter((model) => model.provider === LLAMA_PROVIDER_ID",
-					"models = stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID",
-				),
+					source.replace(
+						"const restored = repairedStoredModels.filter((model) => model.provider === LLAMA_PROVIDER_ID",
+						"const restored = context.stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID",
+					),
 			),
 		/Incomplete Pi llama\.cpp usage patch/,
 	);
@@ -78,22 +87,22 @@ test("Pi 0.83.0 llama.cpp patch is exact, idempotent, and version-gated", () => 
 		() =>
 			assertPiLlamaUsagePatchSource(
 				source.replace(
-					"if (repairedStoredModels.some((model, index) => model !== stored.models[index])) {",
-					"if (false && repairedStoredModels.some((model, index) => model !== stored.models[index])) {",
+					"...(repaired ? { persist: { ...context.stored, models: repairedStoredModels } } : {}),",
+					"...(false ? { persist: { ...context.stored, models: repairedStoredModels } } : {}),",
 				),
 			),
 		/Incomplete Pi llama\.cpp usage patch/,
 	);
 });
 
-const staleModel = {
+const staleModel: Model<"openai-completions"> = {
 	id: "local-model",
 	name: "Local model",
 	api: "openai-completions" as const,
 	provider: "llama.cpp",
 	baseUrl: "http://127.0.0.1:8080/v1",
 	reasoning: false,
-	input: ["text"] as const,
+	input: ["text"],
 	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	contextWindow: 4096,
 	maxTokens: 4096,
@@ -161,15 +170,14 @@ test("llama.cpp cache migration uses the real file store and preserves other pro
 			),
 		);
 		const fileStore = new FileModelsStore(storePath);
-		await provider.refreshModels?.({
+		const models = createModels({ modelsStore: fileStore });
+		models.setProvider(provider);
+		const refresh = await models.refresh({
 			allowNetwork: false,
-			credential: undefined,
-			store: {
-				read: () => fileStore.read("llama.cpp"),
-				write: (entry: unknown) => fileStore.write("llama.cpp", entry),
-				delete: () => fileStore.delete("llama.cpp"),
-			},
+			providers: ["llama.cpp"],
 		});
+		assert.equal(refresh.aborted, false);
+		assert.deepEqual([...refresh.errors], []);
 
 		const model = provider.getModels()[0];
 		assert.equal(model?.compat?.supportsUsageInStreaming, true);
@@ -213,7 +221,7 @@ test("llama.cpp serializes cache repair with a concurrent network refresh", asyn
 			`${pathToFileURL(providerPath).href}?feynman-llama-race`
 		);
 		const { provider } = createLlamaProvider();
-		let state = { models: [staleModel], checkedAt: 123 };
+		let state: ModelsStoreEntry = { models: [staleModel], checkedAt: 123 };
 		let enterFirstWrite: (() => void) | undefined;
 		const firstWriteEntered = new Promise<void>((resolveEntered) => {
 			enterFirstWrite = resolveEntered;
@@ -223,32 +231,35 @@ test("llama.cpp serializes cache repair with a concurrent network refresh", asyn
 			releaseFirstWrite = resolveGate;
 		});
 		let writeCount = 0;
-		const store = {
+		const store: ModelsStore = {
 			read: async () => structuredClone(state),
-			write: async (entry: typeof state) => {
+			write: async (_providerId: string, entry: ModelsStoreEntry, options) => {
 				writeCount += 1;
 				if (writeCount === 1) {
 					enterFirstWrite?.();
 					await firstWriteGate;
 				}
+				options?.signal?.throwIfAborted();
 				state = structuredClone(entry);
 			},
 			delete: async () => {},
 		};
-		const offlineRefresh = provider.refreshModels?.({
+		const credentials = new InMemoryCredentialStore();
+		await credentials.modify("llama.cpp", async () => ({
+			type: "api_key",
+			key: "local",
+			env: { LLAMA_BASE_URL: server.url },
+		}));
+		const models = createModels({ credentials, modelsStore: store });
+		models.setProvider(provider);
+		const offlineRefresh = models.refresh({
 			allowNetwork: false,
-			credential: undefined,
-			store,
+			providers: ["llama.cpp"],
 		});
 		await firstWriteEntered;
-		const networkRefresh = provider.refreshModels?.({
+		const networkRefresh = models.refresh({
 			allowNetwork: true,
-			credential: {
-				type: "api_key",
-				key: "local",
-				env: { LLAMA_BASE_URL: server.url },
-			},
-			store,
+			providers: ["llama.cpp"],
 		});
 		await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
 		assert.equal(catalogRequests, 0);
@@ -256,8 +267,11 @@ test("llama.cpp serializes cache repair with a concurrent network refresh", asyn
 		await Promise.all([offlineRefresh, networkRefresh]);
 
 		assert.equal(catalogRequests, 1);
-		assert.equal(state.models[0]?.id, "fresh-model");
-		assert.equal(state.models[0]?.compat?.supportsUsageInStreaming, true);
+		const freshModel = state.models[0];
+		assert.ok(freshModel);
+		assert.ok(hasApi(freshModel, "openai-completions"));
+		assert.equal(freshModel.id, "fresh-model");
+		assert.equal(freshModel.compat?.supportsUsageInStreaming, true);
 	} finally {
 		await server.close();
 	}

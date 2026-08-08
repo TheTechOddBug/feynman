@@ -80,7 +80,7 @@ The `model set` command accepts both `provider/model` and `provider:model` forma
 
 ## Web search configuration
 
-Research workflows use `~/.feynman/web-search.json` for web-search routing. The default `auto` route uses API-backed providers only: Exa, then Perplexity, then Gemini API. It does not read Chromium or Chrome cookies, so it should not trigger a macOS Keychain prompt.
+Research workflows use `~/.feynman/web-search.json` for web-search routing. The default `auto` route uses configured API-backed providers, including Exa, Jina, Perplexity, and Gemini API. It does not read Chromium or Chrome cookies, so it should not trigger a macOS Keychain prompt.
 
 Example:
 
@@ -89,6 +89,7 @@ Example:
   "provider": "auto",
   "searchProvider": "auto",
   "exaApiKey": "exa_...",
+  "jinaApiKey": "jina_...",
   "perplexityApiKey": "pplx-...",
   "geminiApiKey": "AIza..."
 }

@@ -63,6 +63,17 @@ test("PR and publish workflows require clean package and consumer audits", () =>
 	}
 });
 
+test("package verification checks the current nested Pi TUI render module", () => {
+	assert.match(
+		packageArtifactVerifier,
+		/"pi-coding-agent",\s*"node_modules",\s*"@earendil-works",\s*"pi-tui",\s*"dist",\s*"tui-main-screen\.js"/,
+	);
+	assert.doesNotMatch(
+		packageArtifactVerifier,
+		/"pi-coding-agent",\s*"node_modules",\s*"@earendil-works",\s*"pi-tui",\s*"dist",\s*"tui\.js"/,
+	);
+});
+
 test("package and native release gates exercise persisted Pi user-package upgrades", () => {
 	const staleUpgradeVerifier = /node scripts\/verify-stale-pi-upgrade\.mjs/g;
 	assert.equal((e2eWorkflow.match(staleUpgradeVerifier) ?? []).length, 1);

@@ -175,8 +175,8 @@ export async function answerPdfQuery(url, query) {
 }
 `;
 
-const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.18.0");
-function writePiWebAccessFixture(webRoot: string, version = "0.18.0", patched = false): void {
+const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.19.0");
+function writePiWebAccessFixture(webRoot: string, version = "0.19.0", patched = false): void {
 	mkdirSync(webRoot, { recursive: true });
 	const sources = new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
@@ -276,24 +276,23 @@ function toPiModel(model, serverUrl) {
 }
 export function createLlamaProvider() {
     let models = [];
-	    return {
-	        refreshModels: async (context) => {
-	            const stored = await context.store.read();
-	            if (stored) {
-	                models = stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
-	            }
-	            if (!context.allowNetwork || context.signal?.aborted || context.credential?.type !== "api_key")
-	                return;
-	            const serverUrl = credentialServerUrl(context.credential);
-	            if (!serverUrl)
-	                return;
-	            const catalog = await new LlamaClient(serverUrl, context.credential.key).list({ signal: context.signal });
-	            setCatalog(catalog, serverUrl);
-	            if (!context.signal?.aborted)
-	                await context.store.write({ models, checkedAt: Date.now() });
-	        },
-	    };
-	}
+    return {
+        refreshModels: async (context) => {
+            if (context.stored) {
+                const restored = context.stored.models.filter((model) => model.provider === LLAMA_PROVIDER_ID && model.api === "openai-completions");
+                if (!(await context.publish({
+                    update: () => {
+                        models = restored;
+                    },
+                }))) {
+                    return;
+                }
+            }
+            if (!context.allowNetwork || context.signal.aborted || context.credential?.type !== "api_key")
+                return;
+        },
+    };
+}
 `.replaceAll("\t", "");
 
 test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () => {
@@ -360,29 +359,29 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 		packageJsonPath,
 		JSON.stringify({
 			name: "@earendil-works/pi-coding-agent",
-			version: "0.83.0",
+			version: "0.84.1",
 			piConfig: { configDir: ".pi" },
 		}, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(agentLoopPath)), "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(tuiPath)), "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(nestedAgentLoopPath)), "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(nestedTuiPath)), "package.json"),
-		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(modelRegistryPath, MODEL_REGISTRY_SOURCE, "utf8");
@@ -475,19 +474,19 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 		packageJsonPath,
 		JSON.stringify({
 			name: "@mariozechner/pi-coding-agent",
-			version: "0.83.0",
+			version: "0.84.1",
 			piConfig: { configDir: ".pi" },
 		}, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(agentLoopPath)), "package.json"),
-		JSON.stringify({ name: "@mariozechner/pi-agent-core", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@mariozechner/pi-agent-core", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
 		join(dirname(dirname(tuiPath)), "package.json"),
-		JSON.stringify({ name: "@mariozechner/pi-tui", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@mariozechner/pi-tui", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writePiWebAccessFixture(dirname(webAccessPath));
@@ -524,12 +523,12 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const webAccessPath = join(webRoot, "index.ts");
-	writePiWebAccessFixture(webRoot, "0.19.0");
+	writePiWebAccessFixture(webRoot, "0.20.0");
 	const originalSource = readFileSync(webAccessPath, "utf8");
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/expected 0\.18\.0, found 0\.19\.0/,
+		/expected 0\.19\.0, found 0\.20\.0/,
 	);
 	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
 });
@@ -537,7 +536,7 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.18.0", true);
+	writePiWebAccessFixture(webRoot, "0.19.0", true);
 	const indexPath = join(webRoot, "index.ts");
 	const pageQueryPath = join(webRoot, "page-query.ts");
 	writeFileSync(
@@ -569,7 +568,7 @@ test("patchPiRuntimeNodeModules validates the complete web patch before writing 
 test("patchPiRuntimeNodeModules validates non-model web invariants before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-non-model-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.18.0", true);
+	writePiWebAccessFixture(webRoot, "0.19.0", true);
 	const indexPath = join(webRoot, "index.ts");
 	writeFileSync(
 		indexPath,
@@ -716,7 +715,7 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	writeFileSync(agentSessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 	writeFileSync(
 		bundledPiManifestPath,
-		JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.83.0" }, null, 2) + "\n",
+		JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.1" }, null, 2) + "\n",
 		"utf8",
 	);
 	writeFileSync(
@@ -835,16 +834,16 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 		return { llamaProviderPath, nestedUndiciRoot, updateNoticePath };
 	};
 
-	const rootPi = writePiUndiciFixture(rootNodeModules, "@earendil-works", "0.83.0");
+	const rootPi = writePiUndiciFixture(rootNodeModules, "@earendil-works", "0.84.1");
 	const globalPi = writePiUndiciFixture(
 		globalNodeModules,
 		"@earendil-works",
-		"0.83.0",
+		"0.84.1",
 	);
 	const agentPi = writePiUndiciFixture(
 		agentNodeModules,
 		"@earendil-works",
-		"0.83.0",
+		"0.84.1",
 	);
 	const staleAgentPi = writePiUndiciFixture(
 		agentNodeModules,
@@ -866,7 +865,7 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 		"8.5.0",
 	);
 	for (const providerPath of [globalPi.llamaProviderPath, agentPi.llamaProviderPath]) {
-		assert.match(readFileSync(providerPath, "utf8"), /Feynman Pi 0\.83\.0 llama\.cpp cached usage migration/);
+		assert.match(readFileSync(providerPath, "utf8"), /Feynman Pi 0\.84\.1 llama\.cpp cached usage migration/);
 	}
 	for (const updateNoticePath of [rootPi.updateNoticePath, globalPi.updateNoticePath, agentPi.updateNoticePath]) {
 		const source = readFileSync(updateNoticePath, "utf8");
@@ -898,7 +897,7 @@ test("patchPiRuntimeNodeModules fails closed for unreviewed older and newer bund
 
 			assert.throws(
 				() => patchPiRuntimeNodeModules(appRoot),
-				new RegExp(`expected 0\\.83\\.0, found ${version.replaceAll(".", "\\.")}`),
+				new RegExp(`expected 0\\.84\\.1, found ${version.replaceAll(".", "\\.")}`),
 			);
 		} finally {
 			rmSync(appRoot, { recursive: true, force: true });
@@ -929,7 +928,7 @@ test("patchPiRuntimeNodeModules skips mismatched nested Pi package versions", ()
 			mkdirSync(dirname(targetPath), { recursive: true });
 			writeFileSync(
 				join(codingRoot, "package.json"),
-				JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.83.0" }),
+				JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.1" }),
 			);
 			writeFileSync(
 				join(nestedRoot, "package.json"),
