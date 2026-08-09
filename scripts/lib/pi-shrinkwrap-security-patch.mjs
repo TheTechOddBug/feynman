@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
+import { gte as semverGte, valid as validSemver } from "semver";
 
 const require = createRequire(import.meta.url);
 
@@ -12,6 +13,13 @@ const SAFE_BRACE_EXPANSION = {
 	dependencies: { "balanced-match": "^4.0.2" },
 	engines: { node: "20 || >=22" },
 };
+
+const PATCHABLE_BRACE_EXPANSION_VERSIONS = ["5.0.6", "5.0.7", "5.0.8"];
+
+function isSafeBraceExpansionVersion(version) {
+	const parsedVersion = validSemver(version);
+	return parsedVersion !== null && semverGte(parsedVersion, SAFE_BRACE_EXPANSION.version);
+}
 
 function readPackageVersion(packageRoot) {
 	try {
@@ -37,10 +45,10 @@ function resolveSafePackagePath(nodeModulesPath, fallbackSafePackagePath) {
 export function patchPiCodingAgentShrinkwrapSource(source) {
 	const shrinkwrap = JSON.parse(source);
 	const entry = shrinkwrap.packages?.["node_modules/brace-expansion"];
-	if (entry?.version === SAFE_BRACE_EXPANSION.version) {
+	if (isSafeBraceExpansionVersion(entry?.version)) {
 		return source;
 	}
-	if (!entry || !["5.0.6", "5.0.7", "5.0.8"].includes(entry.version)) {
+	if (!entry || !PATCHABLE_BRACE_EXPANSION_VERSIONS.includes(entry.version)) {
 		throw new Error(`Unsupported Pi brace-expansion shrinkwrap entry: ${entry?.version ?? "missing"}`);
 	}
 	shrinkwrap.packages["node_modules/brace-expansion"] = SAFE_BRACE_EXPANSION;
@@ -54,10 +62,10 @@ export function patchPiPackageLockSource(source) {
 		if (!packagePath.endsWith("/pi-coding-agent/node_modules/brace-expansion")) {
 			continue;
 		}
-		if (entry?.version === SAFE_BRACE_EXPANSION.version) {
+		if (isSafeBraceExpansionVersion(entry?.version)) {
 			continue;
 		}
-		if (!entry || !["5.0.6", "5.0.7", "5.0.8"].includes(entry.version)) {
+		if (!entry || !PATCHABLE_BRACE_EXPANSION_VERSIONS.includes(entry.version)) {
 			throw new Error(`Unsupported Pi brace-expansion package-lock entry: ${entry?.version ?? "missing"}`);
 		}
 		lockfile.packages[packagePath] = SAFE_BRACE_EXPANSION;
@@ -69,7 +77,7 @@ export function patchPiPackageLockSource(source) {
 /**
  * Older Pi releases shrinkwrap an affected brace-expansion release. Replace
  * only reviewed 5.0.6-5.0.8 trees with verified 5.0.9 for stale user runtimes.
- * Current Pi already ships 5.0.9, so this path is a no-op for bundled packages.
+ * Versions at or above 5.0.9 are outside the advisory range and remain intact.
  */
 export function patchPiBraceExpansionTree(nodeModulesPath, fallbackSafePackagePath) {
 	const piRoots = ["@earendil-works", "@mariozechner"]
@@ -87,8 +95,8 @@ export function patchPiBraceExpansionTree(nodeModulesPath, fallbackSafePackagePa
 		const patchedShrinkwrap = patchPiCodingAgentShrinkwrapSource(shrinkwrapSource);
 		const nestedPackagePath = resolve(piRoot, "node_modules", "brace-expansion");
 		const nestedVersion = readPackageVersion(nestedPackagePath);
-		if (nestedVersion !== SAFE_BRACE_EXPANSION.version) {
-			if (nestedVersion && !["5.0.6", "5.0.7", "5.0.8"].includes(nestedVersion)) {
+		if (!isSafeBraceExpansionVersion(nestedVersion)) {
+			if (nestedVersion && !PATCHABLE_BRACE_EXPANSION_VERSIONS.includes(nestedVersion)) {
 				throw new Error(`Unsupported installed Pi brace-expansion version: ${nestedVersion}`);
 			}
 			const safePackagePath = resolveSafePackagePath(nodeModulesPath, fallbackSafePackagePath);

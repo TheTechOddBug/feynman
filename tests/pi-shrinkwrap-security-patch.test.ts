@@ -38,6 +38,16 @@ test("Pi shrinkwrap security patch upgrades only vulnerable brace-expansion entr
 		},
 	}, null, 2)}\n`;
 	assert.equal(patchPiCodingAgentShrinkwrapSource(alreadySafe), alreadySafe);
+	for (const version of ["5.0.10", "6.0.0"]) {
+		const futureSafe = `${JSON.stringify({
+			packages: {
+				"node_modules/brace-expansion": {
+					version,
+				},
+			},
+		}, null, 2)}\n`;
+		assert.equal(patchPiCodingAgentShrinkwrapSource(futureSafe), futureSafe);
+	}
 	assert.throws(
 		() => patchPiCodingAgentShrinkwrapSource(JSON.stringify({
 			packages: { "node_modules/brace-expansion": { version: "4.0.0" } },
@@ -61,6 +71,14 @@ test("Pi shrinkwrap security patch upgrades the owning package lock", () => {
 		"5.0.9",
 	);
 	assert.equal(patchPiPackageLockSource(patchPiPackageLockSource(source)), patchPiPackageLockSource(source));
+	const futureSafe = `${JSON.stringify({
+		packages: {
+			"node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion": {
+				version: "5.0.10",
+			},
+		},
+	}, null, 2)}\n`;
+	assert.equal(patchPiPackageLockSource(futureSafe), futureSafe);
 });
 
 test("Pi shrinkwrap security patch replaces the nested package tree and is idempotent", () => {
@@ -108,6 +126,34 @@ test("Pi shrinkwrap security patch accepts a safe nested tree when npm hoists th
 	}));
 
 	assert.equal(patchPiBraceExpansionTree(nodeModules), false);
+});
+
+test("Pi shrinkwrap security patch leaves newer agent-managed trees intact", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-pi-security-future-"));
+	const nodeModules = join(root, "node_modules");
+	const piRoot = join(nodeModules, "@earendil-works", "pi-coding-agent");
+	const nestedPackage = join(piRoot, "node_modules", "brace-expansion");
+	mkdirSync(nestedPackage, { recursive: true });
+	writeFileSync(join(nestedPackage, "package.json"), JSON.stringify({ name: "brace-expansion", version: "5.0.10" }));
+	writeFileSync(join(nestedPackage, "index.js"), "export const future = true;\n");
+	writeFileSync(join(piRoot, "npm-shrinkwrap.json"), JSON.stringify({
+		packages: { "node_modules/brace-expansion": { version: "5.0.10" } },
+	}));
+	writeFileSync(join(root, "package-lock.json"), JSON.stringify({
+		packages: {
+			"node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion": {
+				version: "5.0.10",
+			},
+		},
+	}));
+
+	assert.equal(patchPiBraceExpansionTree(nodeModules), false);
+	assert.equal(JSON.parse(readFileSync(join(nestedPackage, "package.json"), "utf8")).version, "5.0.10");
+	assert.equal(
+		JSON.parse(readFileSync(join(piRoot, "npm-shrinkwrap.json"), "utf8"))
+			.packages["node_modules/brace-expansion"].version,
+		"5.0.10",
+	);
 });
 
 test("embedded Pi dependency tree uses patched brace-expansion", () => {

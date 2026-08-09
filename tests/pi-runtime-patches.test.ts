@@ -878,6 +878,59 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
 });
 
+test("patchPiRuntimeNodeModules accepts newer brace-expansion in Pi's agent-managed root", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-agent-brace-forward-"));
+	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-agent-brace-home-"));
+	const agentDir = join(homeRoot, ".feynman", "agent");
+	const bundledPiRoot = join(
+		appRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+	);
+	const agentPiRoot = join(
+		agentDir,
+		"npm",
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+	);
+	const agentBraceRoot = join(agentPiRoot, "node_modules", "brace-expansion");
+	const shrinkwrapSource = `${JSON.stringify({
+		lockfileVersion: 3,
+		packages: {
+			"node_modules/brace-expansion": {
+				version: "5.0.10",
+			},
+		},
+	}, null, 2)}\n`;
+	const manifestSource = `${JSON.stringify({
+		name: "brace-expansion",
+		version: "5.0.10",
+	}, null, 2)}\n`;
+	try {
+		mkdirSync(bundledPiRoot, { recursive: true });
+		mkdirSync(agentBraceRoot, { recursive: true });
+		writeFileSync(
+			join(bundledPiRoot, "package.json"),
+			JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.1" }),
+		);
+		writeFileSync(
+			join(agentPiRoot, "package.json"),
+			JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.80.6" }),
+		);
+		writeFileSync(join(agentPiRoot, "npm-shrinkwrap.json"), shrinkwrapSource);
+		writeFileSync(join(agentBraceRoot, "package.json"), manifestSource);
+
+		patchPiRuntimeNodeModules(appRoot, agentDir);
+		assert.equal(readFileSync(join(agentPiRoot, "npm-shrinkwrap.json"), "utf8"), shrinkwrapSource);
+		assert.equal(readFileSync(join(agentBraceRoot, "package.json"), "utf8"), manifestSource);
+	} finally {
+		rmSync(appRoot, { recursive: true, force: true });
+		rmSync(homeRoot, { recursive: true, force: true });
+	}
+});
+
 test("patchPiRuntimeNodeModules fails closed for unreviewed older and newer bundled Pi versions", () => {
 	for (const version of ["0.82.1", "0.84.0"]) {
 		const appRoot = mkdtempSync(join(tmpdir(), "feynman-unreviewed-pi-patches-"));

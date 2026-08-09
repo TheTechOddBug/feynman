@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-09 05:15 EDT — intake-sweep-brace-forward-compat-0.3.13
+
+- Objective: Resolve issue `#217` without weakening Pi's launch-time dependency repair, then release the exact verified candidate.
+- Intake: Issue `#217` is the only open issue and no PR is open. Two forks changed after the automation cutoff; both still match upstream `main`. The other `1,014` inspected forks add no current port target. The preserved Lima worktree is `92` commits behind `main` with no unique commit. The unrelated nested website repository remains dirty and unchanged outside the tracked release page.
+- Root cause: The security patch accepted only exact reviewed `brace-expansion` versions. Pi's agent-managed `<agentDir>/npm` tree can resolve a later secure release, so the next registry update would stop Feynman before CLI startup. Advisory `GHSA-rgw5-rvv9-x895` confirms `5.0.9` as the patched 5.x floor.
+- Changed: Valid semantic versions at or above `5.0.9` now remain intact in Pi shrinkwraps, owning locks, and installed trees. Reviewed vulnerable `5.0.6` through `5.0.8` trees still upgrade to exact `5.0.9`; malformed and older unsupported versions still fail closed. Added source, package-lock, installed-tree, and exact agent-managed runtime regressions. Bumped the candidate and public release notes to `0.3.13`.
+- Verified locally: Focused regressions passed `70/70`; all tests passed `750/750`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, npm registry signatures, and `git diff --check` passed. Clean local and global tarball installs passed version/help/package/search, stale-Pi upgrade, source and installed artifact verification, installed RPC/TypeBox tools, document parse/search/screenshot, and a fabricated agent-managed `brace-expansion@5.0.10` launch.
+- Package proof: Dry and real packs matched at `121,011,306` bytes, `342,270,111` unpacked bytes, and `40,223` entries. The tarball SHA-256 is `c7d1a439af9a9d70e3f90375efd03ba776f4af85e1d8346192861b3d4987c7e0`; the embedded runtime SHA-256 is `d803f701a3e32ff90a38d175891b413d83ca4f722ecf20f89f6b0ae2715f058d`.
+- Freshness: `pi-subagents@0.45.0` was reviewed but not adopted. Versions after bundled `0.40.0` remove public task/chain surfaces, make launches asynchronous by default, and add schedules, missions, Herdr, and administration paths. That broad contract migration has no issue-specific security or research-loop requirement. Other root and website drift has no current advisory or proven defect.
+- State: `verified` locally and `unverified` for the exact commit in Daytona, PR CI, merge, and npm/GitHub/native publication. Next: commit the candidate, prove that exact SHA in Daytona and CI, then merge, publish, verify delivery, and close `#217`.
+
 ### 2026-08-08 21:44 EDT — intake-sweep-0.3.12-release-completion
 
 - Objective: Complete issue `#214` through merge, publication, live delivery proof, and queue cleanup.
