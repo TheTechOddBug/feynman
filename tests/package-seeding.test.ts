@@ -100,6 +100,7 @@ test("release manifests pin current document and website security repairs", () =
 	const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
 		dependencies?: Record<string, string>;
 		optionalDependencies?: Record<string, string>;
+		overrides?: Record<string, string>;
 	};
 	const lock = JSON.parse(readFileSync(resolve(process.cwd(), "package-lock.json"), "utf8")) as {
 		packages?: Record<string, {
@@ -117,6 +118,8 @@ test("release manifests pin current document and website security repairs", () =
 
 	assert.equal(manifest.dependencies?.["pdfjs-dist"], "^6.2.108");
 	assert.equal(lock.packages?.["node_modules/pdfjs-dist"]?.version, "6.2.108");
+	assert.equal(manifest.overrides?.nanoid, "3.3.18");
+	assert.equal(lock.packages?.["node_modules/nanoid"]?.version, "3.3.18");
 	for (const packageName of [
 		"@llamaindex/liteparse-darwin-arm64",
 		"@llamaindex/liteparse-darwin-x64",
@@ -133,8 +136,8 @@ test("release manifests pin current document and website security repairs", () =
 	}
 	assert.equal(websiteManifest.overrides?.["js-yaml"], "4.3.1");
 	assert.equal(websiteLock.packages?.["node_modules/js-yaml"]?.version, "4.3.1");
-	assert.equal(websiteManifest.overrides?.nanoid, "3.3.17");
-	assert.equal(websiteLock.packages?.["node_modules/nanoid"]?.version, "3.3.17");
+	assert.equal(websiteManifest.overrides?.nanoid, "3.3.18");
+	assert.equal(websiteLock.packages?.["node_modules/nanoid"]?.version, "3.3.18");
 });
 
 test("prepare runtime workspace links legacy Pi aliases instead of installing duplicates", async () => {
