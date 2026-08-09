@@ -27,6 +27,17 @@ import {
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
+const FEYNMAN_LITEPARSE_VERSION = "2.11.1";
+const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-VxTSYDYYrweAQ03Eq3G34TKu7kgVBmstIgbjF2pFaeA+loMoYjEQKvw5l89a9smWfT/F0aZSSl0yRICiCzUxVw==";
+const FEYNMAN_LITEPARSE_NATIVE_PACKAGES = [
+	"@llamaindex/liteparse-darwin-arm64",
+	"@llamaindex/liteparse-darwin-x64",
+	"@llamaindex/liteparse-linux-arm64-gnu",
+	"@llamaindex/liteparse-linux-x64-gnu",
+	"@llamaindex/liteparse-linux-x64-musl",
+	"@llamaindex/liteparse-win32-arm64-msvc",
+	"@llamaindex/liteparse-win32-x64-msvc",
+];
 const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
 const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
 const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
@@ -108,6 +119,11 @@ if (manifest.dependencies?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSI
 if (manifest.overrides?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION) {
 	fail(`package.json does not override brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
 }
+for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
+	if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
+		fail(`package.json does not request ${packageName} ${FEYNMAN_LITEPARSE_VERSION}`);
+	}
+}
 
 for (const name of [
 	"@earendil-works/pi-agent-core",
@@ -163,6 +179,23 @@ requireMarkers(
 		"valid-typebox-probe",
 		"malformed-typebox-probe",
 		"terminateChildProcessTree",
+	],
+);
+requireMarkers(
+	readText(
+		resolve(packageRoot, "scripts", "verify-installed-docparser.mjs"),
+		"installed pi-docparser verifier",
+	),
+	"installed pi-docparser verifier",
+	[
+		'piRequire.resolve("jiti")',
+		"createMinimalPdf",
+		'"document_parse"',
+		'"document_search"',
+		'"document_screenshot"',
+		"assertDocumentParseResult",
+		"assertDocumentSearchResult",
+		"assertDocumentScreenshotResult",
 	],
 );
 
@@ -280,15 +313,15 @@ requireMarkers(
 		"bundled Pi ModelRegistry",
 	),
 	"bundled Pi ModelRegistry",
-	[
-		"function assertHeaderSafeRequestConfig(",
-		"assertHeaderSafeRequestConfig(model.provider, undefined, headers);",
-		"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
+		[
+			"function assertHeaderSafeRequestConfig(",
+			"assertHeaderSafeRequestConfig(model.provider, undefined, compatibility.headers);",
+			"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, resolution.auth.headers);",
 	],
 );
 requireMarkers(
 	readText(
-		resolve(packageRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "tui.js"),
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-tui", "dist", "tui-main-screen.js"),
 		"bundled Pi TUI",
 	),
 	"bundled Pi TUI",
@@ -318,7 +351,7 @@ requireMarkers(
 			"@earendil-works",
 			"pi-tui",
 			"dist",
-			"tui.js",
+			"tui-main-screen.js",
 		),
 		"bundled nested Pi TUI",
 	),
@@ -380,7 +413,11 @@ requireMarkers(
 requireMarkers(
 	readText(resolve(alphaLib, "alphaxiv.js"), "bundled alpha-hub search"),
 	"bundled alpha-hub search",
-	["async function searchRestFast(", "return await fallbackSearch("],
+	[
+		"async function searchRestFast(",
+		"return await fallbackSearch(",
+		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+	],
 );
 requireMarkers(
 	readText(resolve(alphaLib, "index.js"), "bundled alpha-hub parser"),
@@ -472,6 +509,15 @@ if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
 	fail("committed runtime lock does not pin @hono/node-server 2.0.12");
+}
+const liteparseLockEntry = runtimeLock.packages?.["node_modules/@llamaindex/liteparse"];
+if (
+	liteparseLockEntry?.version !== FEYNMAN_LITEPARSE_VERSION ||
+	liteparseLockEntry?.resolved !==
+		`https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-${FEYNMAN_LITEPARSE_VERSION}.tgz` ||
+	liteparseLockEntry?.integrity !== FEYNMAN_LITEPARSE_INTEGRITY
+) {
+	fail(`committed runtime lock does not resolve exact LiteParse ${FEYNMAN_LITEPARSE_VERSION}`);
 }
 if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`committed runtime lock does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
@@ -627,10 +673,10 @@ requireMarkers(
 		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/model-registry.js",
 	),
 	"runtime Pi ModelRegistry",
-	[
-		"function assertHeaderSafeRequestConfig(",
-		"assertHeaderSafeRequestConfig(model.provider, undefined, headers);",
-		"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
+		[
+			"function assertHeaderSafeRequestConfig(",
+			"assertHeaderSafeRequestConfig(model.provider, undefined, compatibility.headers);",
+			"assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, resolution.auth.headers);",
 	],
 );
 assertPiInteractiveUpdateNoticeSource(
@@ -656,7 +702,7 @@ requireMarkers(
 requireMarkers(
 	readArchivedText(
 		archivePath,
-		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/tui.js",
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/tui-main-screen.js",
 	),
 	"runtime nested Pi TUI",
 	["line = sliceByColumn(line, 0, width, true);"],
@@ -681,6 +727,18 @@ requireMarkers(
 	),
 	"runtime alpha-hub auth",
 	["https://api.alphaxiv.org/auth", "waitForCallback(server, state)", "OAuth state mismatch"],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@companion-ai/alpha-hub/src/lib/alphaxiv.js",
+	),
+	"runtime alpha-hub client",
+	[
+		"async function searchRestFast(",
+		"return await fallbackSearch(",
+		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+	],
 );
 requireMarkers(
 	readArchivedText(
@@ -713,6 +771,21 @@ if (docparserManifest.version !== expectedPiDocparserVersion) {
 }
 if (docparserManifest.engines?.node !== ">=22.19.0") {
 	fail("runtime pi-docparser does not declare the reviewed Node 22.19 floor");
+}
+const liteparseManifest = readArchivedJson(
+	archivePath,
+	"npm/node_modules/@llamaindex/liteparse/package.json",
+);
+if (liteparseManifest.version !== FEYNMAN_LITEPARSE_VERSION) {
+	fail(`runtime LiteParse is not ${FEYNMAN_LITEPARSE_VERSION}`);
+}
+for (const [packageName, version] of Object.entries(liteparseManifest.optionalDependencies ?? {})) {
+	if (
+		packageName.startsWith("@llamaindex/liteparse-") &&
+		version !== FEYNMAN_LITEPARSE_VERSION
+	) {
+		fail(`runtime LiteParse optional package ${packageName} is not ${FEYNMAN_LITEPARSE_VERSION}`);
+	}
 }
 requireMarkers(
 	readArchivedText(
@@ -777,6 +850,8 @@ requireMarkers(
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
 		"Searches return directly by default",
+		"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
+		"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
 		"get scopedModels() { return ctx.scopedModels; }",
 		"modelMatchesScopedModels(model, ctx.scopedModels)",
 		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
@@ -939,6 +1014,7 @@ console.log(JSON.stringify({
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
 	piDocparserVersion: expectedPiDocparserVersion,
+	liteparseVersion: FEYNMAN_LITEPARSE_VERSION,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,
 	runtimePackages: runtimeManifest.packageSpecs.length,

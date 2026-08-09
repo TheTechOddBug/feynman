@@ -6,10 +6,31 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+	assertPiWebAccessPatchedSources,
 	assertPiWebAccessVersion,
+	PI_WEB_ACCESS_PATCH_TARGETS,
 	PI_WEB_ACCESS_REQUIRED_VERSION,
 	patchPiWebAccessSource,
+	patchPiWebAccessSources,
 } from "../scripts/lib/pi-web-access-patch.mjs";
+
+const PI_WEB_ACCESS_FIXTURE_ROOT = join(
+	import.meta.dirname,
+	"fixtures",
+	"pi-web-access-0.19.0",
+);
+
+function readPiWebAccessFixtureSources(): Map<string, string> {
+	return new Map(
+		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
+			relativePath,
+			readFileSync(
+				join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`),
+				"utf8",
+			),
+		]),
+	);
+}
 
 test("package artifact verification checks every pi-web-access patch target", () => {
 	const source = readFileSync(
@@ -19,6 +40,14 @@ test("package artifact verification checks every pi-web-access patch target", ()
 
 	assert.match(source, /PI_WEB_ACCESS_PATCH_TARGETS\.map\(\(relativePath\) =>/);
 	assert.match(source, /`npm\/node_modules\/pi-web-access\/\$\{relativePath\}`/);
+	assert.match(
+		source,
+		/"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);"/,
+	);
+	assert.match(
+		source,
+		/"const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);"/,
+	);
 });
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
@@ -56,13 +85,17 @@ test("patchPiWebAccessSource keeps current upstream config helpers on Feynman's 
 	assert.equal(patchPiWebAccessSource("utils.ts", patched), patched);
 });
 
-test("patchPiWebAccessSource updates index.ts directory handling", () => {
+test("patchPiWebAccessSource repairs partial index.ts config-path handling", () => {
 	const input = [
 		'import { existsSync, mkdirSync } from "node:fs";',
 		'import { join } from "node:path";',
-		'import { homedir } from "node:os";',
-		'const WEB_SEARCH_CONFIG_PATH = join(homedir(), ".pi", "web-search.json");',
-		'const dir = join(homedir(), ".pi");',
+		'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+		'const WEB_SEARCH_CONFIG_PATH = join(getWebSearchConfigDir(), "web-search.json");',
+		"function saveConfig(config: Record<string, unknown>): void {",
+		"\tconst dir = getWebSearchConfigDir();",
+		"\tif (!existsSync(dir)) mkdirSync(dir, { recursive: true });",
+		'\twriteFileSync(WEB_SEARCH_CONFIG_PATH, JSON.stringify(config, null, 2) + "\\n");',
+		"}",
 		'pi.registerCommand("search", { description: "Browse stored web search results" });',
 		"",
 	].join("\n");
@@ -70,9 +103,160 @@ test("patchPiWebAccessSource updates index.ts directory handling", () => {
 	const patched = patchPiWebAccessSource("index.ts", input);
 
 	assert.match(patched, /import \{ dirname, join \} from "node:path";/);
+	assert.match(
+		patched,
+		/import \{ formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig \} from "\.\/utils\.ts";/,
+	);
+	assert.match(
+		patched,
+		/const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);/,
+	);
 	assert.match(patched, /const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);/);
+	assert.doesNotMatch(
+		patched,
+		/const WEB_SEARCH_CONFIG_PATH = join\(getWebSearchConfigDir\(\), "web-search\.json"\);/,
+	);
+	assert.doesNotMatch(patched, /const dir = getWebSearchConfigDir\(\);/);
 	assert.match(patched, /pi\.registerCommand\("web-results",/);
 	assert.doesNotMatch(patched, /pi\.registerCommand\("search",/);
+});
+
+test("exact pi-web-access fixture binds config reads and writes to Feynman's path", () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"exact fixture",
+	);
+	const indexSource = patchedSources.get("index.ts") ?? "";
+
+	assert.match(
+		indexSource,
+		/import \{ formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig \} from "\.\/utils\.ts";/,
+	);
+	assert.match(
+		indexSource,
+		/const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);/,
+	);
+	assert.match(
+		indexSource,
+		/const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);\n\tif \(!existsSync\(dir\)\) mkdirSync\(dir, \{ recursive: true \}\);\n\twriteFileSync\(WEB_SEARCH_CONFIG_PATH,/,
+	);
+	assert.doesNotThrow(() =>
+		assertPiWebAccessPatchedSources(patchedSources, "exact fixture"),
+	);
+	assert.deepEqual(
+		patchPiWebAccessSources(patchedSources, "exact fixture second pass"),
+		patchedSources,
+	);
+});
+
+test("patchPiWebAccessSources repairs partial config-path patch state", () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"partial patch baseline",
+	);
+	const patchedIndex = patchedSources.get("index.ts") ?? "";
+	for (const partial of [
+		{
+			label: "current helper directory",
+			binding:
+				'const WEB_SEARCH_CONFIG_PATH = join(getWebSearchConfigDir(), "web-search.json");',
+			directory: "const dir = getWebSearchConfigDir();",
+			helperImport:
+				'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+		},
+		{
+			label: "legacy home directory",
+			binding:
+				'const WEB_SEARCH_CONFIG_PATH = join(homedir(), ".pi", "web-search.json");',
+			directory: 'const dir = join(homedir(), ".pi");',
+			helperImport:
+				'import { formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+		},
+		{
+			label: "environment expression",
+			binding:
+				'const WEB_SEARCH_CONFIG_PATH = process.env.FEYNMAN_WEB_SEARCH_CONFIG ?? process.env.PI_WEB_SEARCH_CONFIG ?? join(homedir(), ".pi", "web-search.json");',
+			directory: "const dir = getWebSearchConfigDir();",
+			helperImport:
+				'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+		},
+	]) {
+		const partialSources = new Map(patchedSources);
+		partialSources.set(
+			"index.ts",
+			patchedIndex
+				.replace(
+					"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
+					partial.binding,
+				)
+				.replace(
+					"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
+					partial.directory,
+				)
+				.replace(
+					'import { formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+					partial.helperImport,
+				),
+		);
+
+		const repairedSources = patchPiWebAccessSources(
+			partialSources,
+			`partial patch repair: ${partial.label}`,
+		);
+		const repairedIndex = repairedSources.get("index.ts") ?? "";
+		assert.match(
+			repairedIndex,
+			/const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);/,
+			partial.label,
+		);
+		assert.match(
+			repairedIndex,
+			/const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);/,
+			partial.label,
+		);
+		assert.equal(repairedIndex.includes(partial.binding), false, partial.label);
+		assert.equal(repairedIndex.includes(partial.directory), false, partial.label);
+	}
+});
+
+test("pi-web-access validator fails closed on config-path drift", () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"validator baseline",
+	);
+	const stalePathSources = new Map(patchedSources);
+	stalePathSources.set(
+		"index.ts",
+		(stalePathSources.get("index.ts") ?? "").replace(
+			"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
+			'const WEB_SEARCH_CONFIG_PATH = join(getWebSearchConfigDir(), "web-search.json");',
+		),
+	);
+	assert.throws(
+		() =>
+			assertPiWebAccessPatchedSources(
+				stalePathSources,
+				"stale config path",
+			),
+		/expected 1 occurrences of const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);, found 0/,
+	);
+
+	const staleDirectorySources = new Map(patchedSources);
+	staleDirectorySources.set(
+		"index.ts",
+		(staleDirectorySources.get("index.ts") ?? "").replace(
+			"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
+			"const dir = getWebSearchConfigDir();",
+		),
+	);
+	assert.throws(
+		() =>
+			assertPiWebAccessPatchedSources(
+				staleDirectorySources,
+				"stale config directory",
+			),
+		/expected 1 occurrences of .*const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);.*found 0/s,
+	);
 });
 
 test("patchPiWebAccessSource defaults workflow to none for index.ts without disabling explicit summary-review", () => {
@@ -371,11 +555,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.18.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.18.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.19.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.19.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.19.0", "future"),
-		/expected 0\.18\.0, found 0\.19\.0/,
+		() => assertPiWebAccessVersion("0.20.0", "future"),
+		/expected 0\.19\.0, found 0\.20\.0/,
 	);
 
 	const futureSource = [
@@ -395,7 +579,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.18\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.19\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

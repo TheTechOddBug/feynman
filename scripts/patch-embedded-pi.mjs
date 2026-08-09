@@ -130,9 +130,11 @@ const nestedTransformMessagesPaths = piPackageRoot
 const agentLoopPath = piAgentCoreRoot ? resolve(piAgentCoreRoot, "dist", "agent-loop.js") : null;
 const nestedAgentLoopPaths = resolveNestedPiFiles(piPackageRoot, "pi-agent-core", "dist", "agent-loop.js");
 const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
+const tuiMainScreenPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui-main-screen.js") : null;
 const terminalPath = piTuiRoot ? resolve(piTuiRoot, "dist", "terminal.js") : null;
 const editorPath = piTuiRoot ? resolve(piTuiRoot, "dist", "components", "editor.js") : null;
 const nestedTuiPaths = resolveNestedPiFiles(piPackageRoot, "pi-tui", "dist", "tui.js");
+const nestedTuiMainScreenPaths = resolveNestedPiFiles(piPackageRoot, "pi-tui", "dist", "tui-main-screen.js");
 const nestedEditorPaths = resolveNestedPiFiles(piPackageRoot, "pi-tui", "dist", "components", "editor.js");
 const workspaceRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
 function resolveWorkspacePiFile(packageName, ...segments) {
@@ -206,8 +208,15 @@ for (const entryPath of nestedTuiPaths) {
 	assertPiPackageVersion(resolve(entryPath, "..", ".."), "bundled nested pi-tui");
 }
 const workspaceTuiPath = resolveWorkspacePiFile("pi-tui", "dist", "tui.js");
+const workspaceTuiMainScreenPath = resolveWorkspacePiFile("pi-tui", "dist", "tui-main-screen.js");
 const workspaceEditorPath = resolveWorkspacePiFile("pi-tui", "dist", "components", "editor.js");
 const workspaceNestedTuiPaths = resolveWorkspaceNestedPiFiles(workspaceRoot, "pi-tui", "dist", "tui.js");
+const workspaceNestedTuiMainScreenPaths = resolveWorkspaceNestedPiFiles(
+	workspaceRoot,
+	"pi-tui",
+	"dist",
+	"tui-main-screen.js",
+);
 const workspaceNestedEditorPaths = workspaceNestedTuiPaths.map((entryPath) =>
 	resolve(entryPath, "..", "components", "editor.js")
 );
@@ -997,9 +1006,13 @@ for (const entryPath of [llamaProviderPath, workspaceLlamaProviderPath].filter(B
 
 patchFilesIfPresent([
 	tuiPath,
+	tuiMainScreenPath,
 	...nestedTuiPaths,
+	...nestedTuiMainScreenPaths,
 	workspaceTuiPath,
+	workspaceTuiMainScreenPath,
 	...workspaceNestedTuiPaths,
+	...workspaceNestedTuiMainScreenPaths,
 ], patchPiTuiSource);
 
 patchFilesIfPresent(

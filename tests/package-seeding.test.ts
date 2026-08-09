@@ -67,9 +67,22 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
-	assert.match(runtimeWorkspaceSource, /undici: "8\.9\.0"/);
+	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.11\.1"/);
+	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
+});
+
+test("0.3.12 release notes name the exact LiteParse runtime override", () => {
+	for (const path of [
+		resolve(process.cwd(), "RELEASES.md"),
+		resolve(process.cwd(), "website", "src", "content", "docs", "reference", "releases.md"),
+	]) {
+		const releases = readFileSync(path, "utf8");
+		const currentRelease = releases.match(/## v0\.3\.12[\s\S]*?(?=\n## v0\.3\.11)/)?.[0] ?? "";
+		assert.match(currentRelease, /LiteParse to `2\.11\.1`/);
+		assert.doesNotMatch(currentRelease, /LiteParse to `2\.11\.0`/);
+	}
 });
 
 test("published manifest pins the Undici override for npm 10 consumers", async () => {
@@ -78,9 +91,50 @@ test("published manifest pins the Undici override for npm 10 consumers", async (
 		overrides?: Record<string, unknown>;
 	};
 
-	assert.equal(manifest.dependencies?.undici, "8.9.0");
+	assert.equal(manifest.dependencies?.undici, "8.10.0");
 	assert.equal(manifest.overrides?.undici, manifest.dependencies?.undici);
 	assert.doesNotMatch(String(manifest.overrides?.undici), /^\$/);
+});
+
+test("release manifests pin current document and website security repairs", () => {
+	const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
+		dependencies?: Record<string, string>;
+		optionalDependencies?: Record<string, string>;
+	};
+	const lock = JSON.parse(readFileSync(resolve(process.cwd(), "package-lock.json"), "utf8")) as {
+		packages?: Record<string, {
+			optional?: boolean;
+			optionalDependencies?: Record<string, string>;
+			version?: string;
+		}>;
+	};
+	const websiteManifest = JSON.parse(readFileSync(resolve(process.cwd(), "website", "package.json"), "utf8")) as {
+		overrides?: Record<string, string>;
+	};
+	const websiteLock = JSON.parse(readFileSync(resolve(process.cwd(), "website", "package-lock.json"), "utf8")) as {
+		packages?: Record<string, { version?: string }>;
+	};
+
+	assert.equal(manifest.dependencies?.["pdfjs-dist"], "^6.2.108");
+	assert.equal(lock.packages?.["node_modules/pdfjs-dist"]?.version, "6.2.108");
+	for (const packageName of [
+		"@llamaindex/liteparse-darwin-arm64",
+		"@llamaindex/liteparse-darwin-x64",
+		"@llamaindex/liteparse-linux-arm64-gnu",
+		"@llamaindex/liteparse-linux-x64-gnu",
+		"@llamaindex/liteparse-linux-x64-musl",
+		"@llamaindex/liteparse-win32-arm64-msvc",
+		"@llamaindex/liteparse-win32-x64-msvc",
+	]) {
+		assert.equal(manifest.optionalDependencies?.[packageName], "2.11.1");
+		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.11.1");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.11.1");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.optional, true);
+	}
+	assert.equal(websiteManifest.overrides?.["js-yaml"], "4.3.1");
+	assert.equal(websiteLock.packages?.["node_modules/js-yaml"]?.version, "4.3.1");
+	assert.equal(websiteManifest.overrides?.nanoid, "3.3.17");
+	assert.equal(websiteLock.packages?.["node_modules/nanoid"]?.version, "3.3.17");
 });
 
 test("prepare runtime workspace links legacy Pi aliases instead of installing duplicates", async () => {

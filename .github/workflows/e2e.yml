@@ -236,6 +236,8 @@ jobs:
           "$bundle/node/bin/node" \
             "$bundle/app/scripts/verify-installed-runtime.mjs" \
             "$bin"
+          "$bundle/node/bin/node" \
+            "$bundle/app/scripts/verify-installed-docparser.mjs"
 
       - name: Install the published native bundle through the live Windows installer
         if: runner.os == 'Windows'
@@ -272,6 +274,11 @@ jobs:
             $bin
           if ($LASTEXITCODE -ne 0) {
             throw "Installed Windows runtime verification failed."
+          }
+          & (Join-Path $bundle "node\node.exe") `
+            (Join-Path $bundle "app\scripts\verify-installed-docparser.mjs")
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installed Windows pi-docparser verification failed."
           }
 
   release-candidate-pr:
@@ -333,6 +340,7 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -427,11 +435,13 @@ jobs:
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-package-artifact.mjs" \
             "$consumer/node_modules/@companion-ai/feynman"
           node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$bin"
+          node "$consumer/node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
           global_node_modules=$(npm root --global --prefix "$global_prefix")
           if command -v cygpath >/dev/null 2>&1; then
             global_node_modules=$(cygpath -u "$global_node_modules")
           fi
           node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-runtime.mjs" "$global_bin"
+          node "$global_node_modules/@companion-ai/feynman/scripts/verify-installed-docparser.mjs"
 
   windows-native-installer-pr:
     if: github.event_name == 'pull_request'
@@ -482,6 +492,11 @@ jobs:
           & $nativeNode $nativeVerifier $native
           if ($LASTEXITCODE -ne 0) {
             throw "Windows native launcher failed installed-runtime verification: $LASTEXITCODE"
+          }
+          $nativeDocparserVerifier = Join-Path $bundleRoot "app/scripts/verify-installed-docparser.mjs"
+          & $nativeNode $nativeDocparserVerifier
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows native launcher failed installed pi-docparser verification: $LASTEXITCODE"
           }
 
       - name: Install candidate with Windows PowerShell 5.1

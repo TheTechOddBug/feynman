@@ -402,6 +402,14 @@ export function patchPiTuiSource(source) {
 	if (source.includes("line = sliceByColumn(line, 0, width, true);")) {
 		return source;
 	}
+	// Pi 0.84 split main-screen rendering out of tui.js. The base controller
+	// no longer owns the overflow check; patch tui-main-screen.js separately.
+	if (
+		source.includes("export class TuiBase extends Container") &&
+		source.includes("export const VIEWPORT_TUI")
+	) {
+		return source;
+	}
 	if (source.includes(OVERFLOW_THROW_BLOCK)) {
 		return source.replace(OVERFLOW_THROW_BLOCK, OVERFLOW_TRUNCATE_BLOCK);
 	}

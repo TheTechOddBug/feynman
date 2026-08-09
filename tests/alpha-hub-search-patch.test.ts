@@ -23,6 +23,18 @@ export async function searchByKeyword(query) {
 export async function agenticSearch(query) {
   return await callTool('agentic_paper_retrieval', { query });
 }
+
+export async function answerPdfQuery(url, query) {
+  try {
+    return await callTool('answer_pdf_queries', { urls: [url], queries: [query] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Input validation error') || message.includes('Invalid arguments')) {
+      return await callTool('answer_pdf_queries', { url, query });
+    }
+    throw err;
+  }
+}
 `;
 
 test("patchAlphaHubSearchSource falls back to discover_papers for removed alphaXiv search tools", () => {
@@ -43,6 +55,12 @@ test("patchAlphaHubSearchSource falls back to discover_papers for removed alphaX
 	assert.match(patched, /return await fallbackSearch\(query, 'semantic', err\)/);
 	assert.match(patched, /return await fallbackSearch\(query, 'keyword', err\)/);
 	assert.match(patched, /return await fallbackSearch\(query, 'agentic', err\)/);
+	assert.match(
+		patched,
+		/return await callTool\('answer_pdf_queries', \{ paper: url, queries: \[query\] \}\)/,
+	);
+	assert.doesNotMatch(patched, /\{ urls: \[url\], queries: \[query\] \}/);
+	assert.doesNotMatch(patched, /\{ url, query \}/);
 });
 
 test("patchAlphaHubSearchSource is idempotent", () => {
@@ -65,6 +83,66 @@ test("patchAlphaHubSearchSource upgrades the discover_papers-only fallback", () 
 	assert.match(upgraded, /return await fallbackSearch\(query, 'semantic', err\)/);
 	assert.match(upgraded, /return await fallbackSearch\(query, 'keyword', err\)/);
 	assert.match(upgraded, /return await fallbackSearch\(query, 'agentic', err\)/);
+});
+
+test("patchAlphaHubSearchSource sends the current alphaXiv paper Q&A schema", async () => {
+	const patched = patchAlphaHubSearchSource(SOURCE);
+	const moduleUrl = `data:text/javascript;base64,${Buffer.from(patched).toString("base64")}`;
+	const { answerPdfQuery } = await import(moduleUrl);
+
+	assert.deepEqual(
+		await answerPdfQuery("https://arxiv.org/abs/2401.12345", "What optimizer did they use?"),
+		{
+			name: "answer_pdf_queries",
+			args: {
+				paper: "https://arxiv.org/abs/2401.12345",
+				queries: ["What optimizer did they use?"],
+			},
+		},
+	);
+});
+
+test("patchAlphaHubSearchSource repairs Q&A after the search fallback was already patched", () => {
+	const searchPatched = patchAlphaHubSearchSource(SOURCE).replace(
+		[
+			"export async function answerPdfQuery(url, query) {",
+			"  return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
+			"}",
+		].join("\n"),
+		[
+			"export async function answerPdfQuery(url, query) {",
+			"  try {",
+			"    return await callTool('answer_pdf_queries', { urls: [url], queries: [query] });",
+			"  } catch (err) {",
+			"    const message = err instanceof Error ? err.message : String(err);",
+			"    if (message.includes('Input validation error') || message.includes('Invalid arguments')) {",
+			"      return await callTool('answer_pdf_queries', { url, query });",
+			"    }",
+			"    throw err;",
+			"  }",
+			"}",
+		].join("\n"),
+	);
+
+	const repaired = patchAlphaHubSearchSource(searchPatched);
+	assert.match(
+		repaired,
+		/return await callTool\('answer_pdf_queries', \{ paper: url, queries: \[query\] \}\)/,
+	);
+	assert.equal(repaired.includes("async function searchRestFast("), true);
+});
+
+test("patchAlphaHubSearchSource fails closed on unknown Q&A layouts", () => {
+	assert.throws(
+		() =>
+			patchAlphaHubSearchSource(
+				SOURCE.replace(
+					"return await callTool('answer_pdf_queries', { urls: [url], queries: [query] });",
+					"return await callTool('answer_pdf_queries', { document: url, questions: [query] });",
+				),
+			),
+		/Unsupported alpha-hub answerPdfQuery layout/,
+	);
 });
 
 test("patchAlphaHubSearchResultsSource parses structured JSON search payloads", async () => {

@@ -67,10 +67,9 @@ export function patchPiPackageLockSource(source) {
 }
 
 /**
- * Pi 0.83.0 still shrinkwraps an older brace-expansion release. Replace only
- * the reviewed 5.0.6-5.0.8 trees with verified 5.0.9 and update Pi's published
- * shrinkwrap metadata. Remove this patch after Pi ships brace-expansion >=5.0.8,
- * the first release outside the advisory range.
+ * Older Pi releases shrinkwrap an affected brace-expansion release. Replace
+ * only reviewed 5.0.6-5.0.8 trees with verified 5.0.9 for stale user runtimes.
+ * Current Pi already ships 5.0.9, so this path is a no-op for bundled packages.
  */
 export function patchPiBraceExpansionTree(nodeModulesPath, fallbackSafePackagePath) {
 	const piRoots = ["@earendil-works", "@mariozechner"]

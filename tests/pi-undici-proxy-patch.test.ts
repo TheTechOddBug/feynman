@@ -13,12 +13,12 @@ import {
 	patchPiUndiciProxyTree,
 } from "../scripts/lib/pi-undici-proxy-patch.mjs";
 
-const upstreamVersion = "8.5.0";
+const upstreamVersion = "8.9.0";
 
 function piPackageJson(version = upstreamVersion): string {
 	return JSON.stringify({
 		name: "@earendil-works/pi-coding-agent",
-		version: "0.83.0",
+		version: "0.84.1",
 		dependencies: { undici: version, yaml: "2.9.0" },
 	});
 }
@@ -95,7 +95,7 @@ test("Pi Undici package-lock repair skips stale Pi versions", () => {
 	const source = JSON.stringify({
 		packages: {
 			"node_modules/@earendil-works/pi-coding-agent": {
-				version: "0.83.0",
+				version: "0.84.1",
 				dependencies: { undici: upstreamVersion },
 			},
 			"node_modules/@earendil-works/pi-coding-agent/node_modules/undici": {
@@ -110,7 +110,7 @@ test("Pi Undici package-lock repair skips stale Pi versions", () => {
 			},
 		},
 	});
-	const patched = JSON.parse(patchPiUndiciPackageLockSource(source, "0.83.0"));
+	const patched = JSON.parse(patchPiUndiciPackageLockSource(source, "0.84.1"));
 	assert.equal(
 		patched.packages["node_modules/@earendil-works/pi-coding-agent"].dependencies.undici,
 		FEYNMAN_UNDICI_VERSION,

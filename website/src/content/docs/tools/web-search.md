@@ -21,15 +21,16 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 | `perplexity` | Force Perplexity Sonar for all web searches |
 | `exa` | Force Exa for all web searches |
 | `gemini` | Force Gemini API grounding |
+| `jina` | Force Jina Search; can return provider-fetched page Markdown with results |
 | `xai` | Explicit-only xAI/Grok hosted search |
 | `brightdata` | Explicit-only Bright Data SERP search; requires a SERP zone |
 | `serpbase` | Explicit-only SerpBase Google SERP search |
 
 ## Default behavior
 
-The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, SERPdive, Kagi, Ollama, Perplexity, and Gemini routes in order.
+The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Jina, SERPdive, Kagi, Ollama, Perplexity, and Gemini routes in order.
 
-Configure an explicit API key for Exa, Perplexity, TinyFish, or Gemini in `~/.feynman/web-search.json` before running source-heavy workflows like `/deepresearch`. Exa's zero-config MCP fallback remains available without a key.
+Configure an explicit API key for Exa, Perplexity, TinyFish, Jina, or Gemini in `~/.feynman/web-search.json` before running source-heavy workflows like `/deepresearch`. Exa's zero-config MCP fallback remains available without a key.
 
 ## Configuration
 
@@ -48,13 +49,14 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "exaApiKey": "exa_...",
   "perplexityApiKey": "pplx-...",
   "tinyfishApiKey": "sk-tinyfish-...",
+  "jinaApiKey": "jina_...",
   "geminiApiKey": "AIza...",
   "kagiApiKey": "kagi-...",
   "ollamaApiKey": "ollama-..."
 }
 ```
 
-Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `kagi`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set.
+Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
 
 Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust authentication. Bright Data search requires `brightdataSerpZone`; its optional Web Unlocker extraction fallback uses a separate `brightdataUnlockerZone`.
 

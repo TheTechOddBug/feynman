@@ -56,6 +56,25 @@ const CURRENT_RESOLVED_RETURN_PATCHED = [
 	"            assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, headers);",
 	CURRENT_RESOLVED_RETURN_ORIGINAL,
 ].join("\n");
+const MODERN_COMPATIBILITY_RETURN_ORIGINAL =
+	"                return { ok: true, headers: compatibility.headers };";
+const MODERN_COMPATIBILITY_RETURN_PATCHED = [
+	"                assertHeaderSafeRequestConfig(model.provider, undefined, compatibility.headers);",
+	MODERN_COMPATIBILITY_RETURN_ORIGINAL,
+].join("\n");
+const MODERN_RESOLVED_RETURN_ORIGINAL = [
+	"            return {",
+	"                ok: true,",
+	"                apiKey: resolution.auth.apiKey,",
+	"                headers: resolution.auth.headers,",
+	"                ...(resolution.auth.baseUrl ? { baseUrl: resolution.auth.baseUrl } : {}),",
+	"                env: resolution.env,",
+	"            };",
+].join("\n");
+const MODERN_RESOLVED_RETURN_PATCHED = [
+	"            assertHeaderSafeRequestConfig(model.provider, resolution.auth.apiKey, resolution.auth.headers);",
+	MODERN_RESOLVED_RETURN_ORIGINAL,
+].join("\n");
 const RUNTIME_HELPER_ANCHOR = "function mergeHeaders(base, override) {";
 const RUNTIME_REQUEST_AUTH = [
 	"        if (transformHeaders)",
@@ -87,6 +106,25 @@ export function patchPiModelRegistrySource(source) {
 		patched = patched.replace(
 			CURRENT_RESOLVED_RETURN_ORIGINAL,
 			CURRENT_RESOLVED_RETURN_PATCHED,
+		);
+		patched = patched.replace(
+			CURRENT_REGISTRY_HELPER_ANCHOR,
+			`${LATIN1_GUARD_HELPER}\n${CURRENT_REGISTRY_HELPER_ANCHOR}`,
+		);
+		return patched;
+	}
+	if (
+		source.includes(MODERN_COMPATIBILITY_RETURN_ORIGINAL) &&
+		source.includes(MODERN_RESOLVED_RETURN_ORIGINAL) &&
+		source.includes(CURRENT_REGISTRY_HELPER_ANCHOR)
+	) {
+		let patched = source.replace(
+			MODERN_COMPATIBILITY_RETURN_ORIGINAL,
+			MODERN_COMPATIBILITY_RETURN_PATCHED,
+		);
+		patched = patched.replace(
+			MODERN_RESOLVED_RETURN_ORIGINAL,
+			MODERN_RESOLVED_RETURN_PATCHED,
 		);
 		patched = patched.replace(
 			CURRENT_REGISTRY_HELPER_ANCHOR,

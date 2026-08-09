@@ -1,11 +1,10 @@
 /**
- * Temporary Pi 0.83.0 correctness patches for:
- * - https://github.com/earendil-works/pi/issues/7150
+ * Temporary Pi 0.84.1 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7053
  *
  * Removal condition: delete this patch once a supported released Pi version
- * rejects prompts during standalone/manual compaction and eagerly persists
- * finalized parallel tool results while restoring them in tool-call order.
+ * eagerly persists finalized parallel tool results while restoring them in
+ * tool-call order.
  */
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
@@ -14,11 +13,11 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	]),
 	piAi: Object.freeze(["dist/api/transform-messages.js"]),
 });
-export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.83.0";
+export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.1";
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
-	agentSession: "Feynman Pi 0.83.0 correctness patch: issues #7150 and #7053",
-	sessionManager: "Feynman Pi 0.83.0 correctness patch: restore eager tool results",
-	transformMessages: "Feynman Pi 0.83.0 correctness patch: order eager tool results",
+	agentSession: "Feynman Pi 0.84.1 correctness patch: issue #7053",
+	sessionManager: "Feynman Pi 0.84.1 correctness patch: restore eager tool results",
+	transformMessages: "Feynman Pi 0.84.1 correctness patch: order eager tool results",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
@@ -30,8 +29,6 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 		"event.message.toolCallId = feynmanToolResultIdBeforeExtensions;",
 		"const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;",
 		"this.sessionManager.replaceMessage(eagerlyPersisted.entryId, event.message);",
-		"if (this._compactionAbortController !== undefined && !this.isStreaming) {",
-		'throw new Error("Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.");',
 	]),
 	sessionManager: Object.freeze([
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager,
@@ -232,14 +229,6 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
                 this.sessionManager.appendMessage(event.message);
             }`;
 
-const MANUAL_COMPACTION_GUARD = `            // Manual compaction rebuilds agent state from SessionManager on completion.
-            // Reject prompts that would otherwise enter detached state and then be lost.
-            // Auto-compaction uses a separate controller and keeps queued steer/follow-up behavior.
-            if (this._compactionAbortController !== undefined && !this.isStreaming) {
-                throw new Error("Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry.");
-            }
-`;
-
 export function patchPiAgentSessionSource(source) {
 	if (source.includes(AGENT_SESSION_MARKER)) {
 		try {
@@ -297,12 +286,6 @@ ${AGENT_SESSION_LEGACY_EAGER_PERSISTENCE}`,
 		ORIGINAL_MESSAGE_PERSISTENCE,
 		PATCHED_MESSAGE_PERSISTENCE,
 		"agent-session message persistence",
-	);
-	patched = replaceRequired(
-		patched,
-		"            // Emit input event for extension interception (before skill/template expansion)\n",
-		`${MANUAL_COMPACTION_GUARD}            // Emit input event for extension interception (before skill/template expansion)\n`,
-		"agent-session prompt preflight",
 	);
 	assertPiRuntimeCorrectnessPatchSource(patched, "agentSession");
 	return patched;

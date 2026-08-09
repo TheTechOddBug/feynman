@@ -136,10 +136,13 @@ test("embedded Pi ModelRegistry compatibility facade carries both request guards
 		"utf8",
 	);
 	assert.match(source, /function assertHeaderSafeRequestConfig\(/);
-	assert.match(source, /assertHeaderSafeRequestConfig\(model\.provider, undefined, headers\);/);
 	assert.match(
 		source,
-		/assertHeaderSafeRequestConfig\(model\.provider, resolution\.auth\.apiKey, headers\);/,
+		/assertHeaderSafeRequestConfig\(model\.provider, undefined, compatibility\.headers\);/,
+	);
+	assert.match(
+		source,
+		/assertHeaderSafeRequestConfig\(model\.provider, resolution\.auth\.apiKey, resolution\.auth\.headers\);/,
 	);
 });
 
