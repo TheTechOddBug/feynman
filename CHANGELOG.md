@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-09 07:50 EDT — intake-sweep-brace-forward-compat-0.3.13-release
+
+- Objective: Carry issue `#217` through exact-candidate verification, merge, publication, delivery proof, and cleanup.
+- Persistence: PR `#218` exact head `5177a12785972d09a023b35c418b8e57ea2390b9` passed the complete install matrix and merged as `f7ead4144746ff34cd8f6dc18c1cb2e2a9f6c891`. The source and remote release branches were deleted.
+- Clean-machine proof: Daytona sandbox `99ff14c2-8913-405a-a45b-11f27518bd76` checked out exact head `5177a12` on Node `25.9.0` and passed `750/750` tests, typecheck, build, architecture, website checks, all production audits, pack and consumer/global installation, package/runtime/RPC/document verification, stale-Pi repair, and a fabricated `brace-expansion@5.0.10` launch. Its sandbox and the earlier undersized exit-`137` sandbox were deleted.
+- CI and delivery: PR run `31306432848` passed the release candidate, six Node `22`/`24`/`25` Linux/macOS/Windows consumers, and Windows PowerShell `5.1`/Core native installation. Main run `31308625569` passed source/package verification, the same consumer matrix, five native builds, npm publication, GitHub release creation, provenance, checksums, and published-state verification.
+- Release identity: npm `@companion-ai/feynman@0.3.13` has integrity `sha512-UkXPQz+jv1OTI42pIwNW5jr0IwUc1RErwsFulaj50Xfml2KQ3jmEPRNw47oc9wq+4kKmAzduDTnb/dhObcsK7Q==`; its attestation resolves to `f7ead414`. GitHub `v0.3.13` targets the same commit and exposes exactly five nonempty native archives plus `SHA256SUMS`; each provider digest matches the checksum manifest.
+- Published smoke: Fresh local and global npm installs passed zero-vulnerability consumer audit, version/help/package/search commands, package-artifact verification, installed runtime verification, and document parse/search/screenshot. Issue `#217` was commented with these receipts and closed.
+- Intake and cleanup: The issue and PR queues are empty. No duplicate PR, temporary tarball, consumer, process, release branch, or Daytona sandbox remains. The unrelated dirty nested website repository and prunable Lima worktree record remain preserved.
+- State: `verified` and production-live. `pi-subagents@0.45.0` remains intentionally unadopted because its broad task/chain, async, schedules, missions, Herdr, worktree, and administration migration does not serve this issue-specific research-runtime fix.
+
 ### 2026-08-09 05:15 EDT — intake-sweep-brace-forward-compat-0.3.13
 
 - Objective: Resolve issue `#217` without weakening Pi's launch-time dependency repair, then release the exact verified candidate.
