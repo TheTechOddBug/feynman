@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-08 21:44 EDT — intake-sweep-0.3.12-release-completion
+
+- Objective: Complete issue `#214` through merge, publication, live delivery proof, and queue cleanup.
+- Persistence: PR `#216` exact head `3922342c4e9f8576627a661eadc953b5ee0e514e` merged as `bf6e415c83d702c6b3c280b463ed7a7e998861d3`. PR `#215` closed as superseded because it retained the obsolete alphaXiv fallback and added no unique repair. Origin now exposes only `main`.
+- Delivery: Publish run `31285624271` passed every source, package, Linux, macOS, Windows, native-bundle, provenance, release, and published-state job. npm `0.3.12` is `latest`; its attestation resolves to the merge commit. GitHub `v0.3.12` targets that commit with five nonempty native archives and matching `SHA256SUMS`.
+- User path: A clean global install of the published package authenticated with alphaXiv. The exact reported `feynman alpha ask 2401.12345 "What optimizer did they use?"` command returned paper content without MCP error `-32602`.
+- Live verification: Post-release run `31288182374` passed six npm consumers on Linux, macOS, and Windows across Node 22, 24, and 25. It also passed all three live native installers plus every enabled one-shot model, text-model, and subagent call.
+- Intake: Issue `#214` closed with delivery receipts and no issue or PR remains open. The sweep checked all `1,015` forks and every branch in the 20 forks active since August 1. The duplicate alphaXiv branch was superseded; stale security branches were already covered; the fork-only parallel-search prompt bundle remained outside the focused research-runtime fix.
+- State: `verified` and production-live. Root, website, runtime, and installed-consumer audits found zero vulnerabilities. The next daily sweep should start from npm/GitHub `0.3.12`, clean `main`, and an empty issue/PR queue.
+
 ### 2026-08-08 05:10 EDT — intake-sweep-alpha-ask-0.3.12
 
 - Objective: Fix issue `#214`, reconcile the preserved `0.3.12` candidate, and complete its unpublished release without adding a new product surface.
