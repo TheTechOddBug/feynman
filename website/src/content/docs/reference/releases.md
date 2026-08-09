@@ -9,6 +9,17 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.13 - 2026-08-09
+
+### Reliability
+
+- Kept Pi agent-managed `brace-expansion` versions at or above the current secure `5.0.9` floor intact. A newer registry release can no longer stop Feynman during launch, while stale `5.0.6` through `5.0.8` trees still upgrade to the verified `5.0.9` package.
+- Kept malformed and older unsupported versions fail-closed instead of weakening the launch-time security repair.
+
+### Validation
+
+- Added source, package-lock, installed-tree, and exact agent-managed runtime regressions for future `brace-expansion` versions.
+
 ## v0.3.12 - 2026-08-08
 
 ### Research runtime
