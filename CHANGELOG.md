@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-09 18:19 EDT — intake-sweep-nanoid-3.3.18-audit-repair
+
+- Objective: Refresh the complete maintainer intake and clear every current production audit finding without broadening Feynman's research scope.
+- Intake: Open issues and PRs were empty. All `1,016` forks were refreshed; `nagyist`, `pseudoctor`, and `TheTechOddBug` matched upstream, while `sk-surya` exposed only stale Dependabot branches `196` commits behind. Dependabot and repository-advisory queues were empty. Code scanning has no analysis, and secret scanning is disabled.
+- Root cause: Root and website locks still selected `nanoid@3.3.16`, affected by `GHSA-2v37-7h3g-55p8`. Upstream `3.3.17` repaired most zero-size loops, while `3.3.18` also repaired the omitted React Native async path.
+- Changed: Root and website overrides now require exact `nanoid@3.3.18`; both locks were refreshed, and the package security regression enforces the patched resolution. Kept `pi-subagents@0.40.0`; current `0.45.1` removes Feynman's task/chain contract and adds async missions, schedules, Herdr, worktrees, and administration without fixing a current defect.
+- Local and clean-machine proof: Focused regressions passed `15/15`; the cumulative suite passed `750/750`. Typecheck, build, architecture, website lint/typecheck/build, actionlint, root/site/runtime audits, registry signatures, dry and real pack, clean consumer/global installs, package/runtime/RPC/TypeBox checks, and document parse/search/screenshot passed. Exact head `ed067e14bb29e1aad88b81b59d563fa04f883e9c` passed the same ladder in Daytona on Node `25.9.0`; its `122,763,413`-byte tarball had SHA-256 `31dcd53fcb6147f0ab87b675531a6679287300f6291366b714448d76f331e683`.
+- Persistence: PR `#219` passed run `31336147879`, including all Linux/macOS/Windows Node `22`/`24`/`25` consumers and Windows PowerShell `5.1`/Core native installation. It merged as `c0231bf8edfda15d72e9cdd63c63ba9812a23c45`; the local and remote repair branches were deleted.
+- Release state: Main run `31338927707` passed version identity and correctly skipped republication because version `0.3.13` already exists. npm `0.3.13` and GitHub `v0.3.13` remain unchanged, and a fresh published consumer audit found zero vulnerabilities. Vercel reported a successful exact-main deployment.
+- Cleanup: The exact-head Daytona sandbox and current-run consumer were deleted. The unrelated nested dirty website repository remains unchanged at `67186845` with `51` paths. State: `verified` on main with empty intake queues and no fixable residual item. Next: start the next sweep from clean synchronized `main`.
+
 ### 2026-08-09 07:50 EDT — intake-sweep-brace-forward-compat-0.3.13-release
 
 - Objective: Carry issue `#217` through exact-candidate verification, merge, publication, delivery proof, and cleanup.
