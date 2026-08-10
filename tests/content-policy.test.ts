@@ -494,6 +494,7 @@ test("setup docs and LiteLLM fallback do not pin a stale OpenAI model slug", () 
 	const commandMetadata = readFileSync(join(repoRoot, "metadata", "commands.mjs"), "utf8");
 	const modelCommands = readFileSync(join(repoRoot, "src", "model", "commands.ts"), "utf8");
 	const modelCatalog = readFileSync(join(repoRoot, "src", "model", "catalog.ts"), "utf8");
+	const setupSource = readFileSync(join(repoRoot, "src", "setup", "setup.ts"), "utf8");
 
 	for (const [label, content] of [
 		["configuration docs", configurationDocs],
@@ -503,20 +504,24 @@ test("setup docs and LiteLLM fallback do not pin a stale OpenAI model slug", () 
 		assert.doesNotMatch(content, /openai[/:]gpt-5\.5/i, `${label} must point to model list output instead of a hardcoded OpenAI model`);
 		assert.match(content, /model list|current model/i, `${label} must guide users to choose a current model`);
 	}
-	assert.match(configurationDocs, /main non-Pro default model/i);
-	assert.match(configurationDocs, /different non-Pro model to a specific bundled subagent/i);
-	assert.match(setupDocs, /preferred non-Pro default model/i);
-	assert.match(installationDocs, /selecting a non-Pro default model/i);
-	assert.match(modelCommands, /Non-Pro default model set to/);
+	assert.match(configurationDocs, /main approved research model/i);
+	assert.match(configurationDocs, /different approved model to a specific bundled subagent/i);
+	assert.match(setupDocs, /preferred approved research model/i);
+	assert.match(installationDocs, /selecting an approved research model/i);
+	assert.match(modelCommands, /Research default model set to/);
 	assert.doesNotMatch(modelCommands, /modelIdsDefault = "gpt-5\.5"/, "LiteLLM fallback must not silently seed a hardcoded OpenAI model id");
 	assert.match(modelCommands, /modelIdsDefault = "your-litellm-model"/);
 	assert.doesNotMatch(modelCatalog, /spec: "openai\/gpt-5\.5"/, "OpenAI recommendation must come from Pi's current model list, not an exact catalog pin");
 	assert.doesNotMatch(modelCatalog, /spec: "openai-codex\/gpt-5\.5"/, "OpenAI Codex recommendation must come from Pi's current model list, not an exact catalog pin");
 	assert.doesNotMatch(modelCatalog, /spec: "openrouter\/openai\/gpt-[^"]+"/, "OpenRouter OpenAI fallback must come from Pi's current model list, not an exact catalog pin");
-	assert.match(commandMetadata, /Set the default non-Pro model/i);
-	assert.match(commandMetadata, /Force a specific non-Pro model/i);
-	assert.match(slashDocs, /Open the non-Pro model picker/i);
-	assert.match(slashDocs, /different non-Pro model to a bundled subagent/i);
+	assert.match(commandMetadata, /Set the default approved research model/i);
+	assert.match(commandMetadata, /Force a specific approved research model/i);
+	assert.match(slashDocs, /Open the approved research model picker/i);
+	assert.match(slashDocs, /different approved model to a bundled subagent/i);
+	assert.match(configurationDocs, /approved-model-id-from-model-list/i);
+	assert.doesNotMatch(configurationDocs, /non-pro-model-id-from-model-list/i);
+	assert.match(setupSource, /feynman model set <provider\/model>/i);
+	assert.doesNotMatch(setupSource, /provider\/non-pro-model/i);
 });
 
 test("alphaXiv docs do not promise arbitrary PDF parsing", () => {

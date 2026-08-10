@@ -31,7 +31,7 @@ These are the primary commands you use during research runs. Workflow prompts ca
 | `/log` | Write a durable session log with completed work, findings, open questions, and next steps |
 | `/jobs` | Inspect visible research-run process/scheduler state and durable watch or experiment artifacts |
 | `/help` | Show grouped Feynman commands and prefill the editor with a selected command |
-| `/feynman-model` | Open the non-Pro model picker for the main default model and per-subagent overrides |
+| `/feynman-model` | Open the approved research model picker for the main default and per-subagent overrides |
 | `/init` | Bootstrap `AGENTS.md` and session-log folders for a new research project |
 | `/outputs` | Browse all research artifacts (papers, outputs, experiments, notes) |
 | `/btw <question>` | Ask a side question while the main research agent is busy and hand the result back when needed |
@@ -40,7 +40,7 @@ These are the primary commands you use during research runs. Workflow prompts ca
 
 Session management commands help you organize ongoing work. The `/log` command is particularly useful at the end of a research session to capture what was accomplished and what remains.
 
-The `/feynman-model` command opens an interactive picker that lets you either change the main non-Pro default model or assign a different non-Pro model to a bundled subagent like `researcher`, `reviewer`, `writer`, or `verifier`.
+The `/feynman-model` command opens an interactive picker that lets you either change the main approved research model or assign a different approved model to a bundled subagent like `researcher`, `reviewer`, `writer`, or `verifier`.
 
 ## Running workflows from the CLI
 

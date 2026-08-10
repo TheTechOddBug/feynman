@@ -108,6 +108,17 @@ test("resolveRankSynthesisModelSpec uses the recommended research model instead 
 	assert.equal(await resolveRankSynthesisModelSpec(authPath, explicitOpenAiSpec), explicitOpenAiSpec);
 });
 
+test("explicit model selection accepts DeepSeek V4 Pro but rejects premium Pro tiers", async () => {
+	const authPath = createAuthPath({});
+	const deepSeekSpec = "nebius/deepseek-ai/DeepSeek-V4-Pro";
+
+	assert.equal(await resolveRankSynthesisModelSpec(authPath, deepSeekSpec), deepSeekSpec);
+	await assert.rejects(
+		resolveRankSynthesisModelSpec(authPath, "google/gemini-3.1-pro"),
+		/Pro-class model disabled/,
+	);
+});
+
 test("model specs preserve colon-bearing custom model ids and canonicalize Pi launch syntax", async () => {
 	const authPath = createAuthPath({
 		ollama: { type: "api_key", key: "ollama" },
@@ -359,7 +370,7 @@ test("setDefaultModelSpec accepts a unique bare model id from authenticated mode
 	};
 	assert.equal(settings.defaultProvider, "openai");
 	assert.equal(settings.defaultModel, openAiModel.id);
-	assert.match(logs.join("\n"), /Non-Pro default model set to openai\//);
+	assert.match(logs.join("\n"), /Research default model set to openai\//);
 });
 
 test("setDefaultModelSpec accepts provider:model syntax for authenticated models", async () => {
@@ -378,6 +389,35 @@ test("setDefaultModelSpec accepts provider:model syntax for authenticated models
 	};
 	assert.equal(settings.defaultProvider, "openai");
 	assert.equal(settings.defaultModel, openAiModel.id);
+});
+
+test("setDefaultModelSpec accepts an authenticated DeepSeek V4 Pro model", async () => {
+	const authPath = createAuthPath({
+		nebius: { type: "api_key", key: "nebius-test-key" },
+	});
+	writeFileSync(
+		join(dirname(authPath), "models.json"),
+		JSON.stringify({
+			providers: {
+				nebius: {
+					baseUrl: "https://api.studio.nebius.ai/v1",
+					api: "openai-completions",
+					models: [{ id: "deepseek-ai/DeepSeek-V4-Pro" }],
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+	const settingsPath = join(mkdtempSync(join(tmpdir(), "feynman-settings-")), "settings.json");
+
+	await setDefaultModelSpec(settingsPath, authPath, "nebius/deepseek-ai/DeepSeek-V4-Pro");
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		defaultProvider?: string;
+		defaultModel?: string;
+	};
+	assert.equal(settings.defaultProvider, "nebius");
+	assert.equal(settings.defaultModel, "deepseek-ai/DeepSeek-V4-Pro");
 });
 
 test("resolveModelProviderForCommand falls back to API-key providers when OAuth is unavailable", async () => {

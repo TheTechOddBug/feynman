@@ -6,6 +6,18 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.15 - 2026-08-10
+
+### Model selection
+
+- Fixed the Pro-class cost guard so exact DeepSeek V4 Pro model IDs remain selectable across Pi providers. These open-weight models use ordinary provider pricing even though their product name contains `Pro`.
+- Kept premium service tiers such as Gemini Pro and `o1-pro` blocked. Feynman does not provide a broad environment-variable bypass for future Pro-class models.
+- Preserved an existing DeepSeek V4 Pro default during settings repair, included it in model lists and recommendations, and allowed explicit CLI and PaperRank synthesis selection.
+
+### Validation
+
+- Added regressions for Pi's direct, vendor-prefixed, and Fireworks DeepSeek V4 Pro IDs across catalog, recommendation, explicit-model, default-setting, and settings-normalization paths.
+
 ## v0.3.14 - 2026-08-10
 
 ### Web and document research

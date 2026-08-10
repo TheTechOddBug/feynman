@@ -12,6 +12,16 @@ type ModelRecord = {
 
 const PRO_CLASS_MODEL_PATTERN = /(?:^|[-_.:/])pro(?:$|[-_.:/])/i;
 
+// Pi catalogs these exact DeepSeek V4 Pro model IDs as ordinary open-weight
+// models, not premium service tiers. Keep this exception list exact: a broad
+// "Pro" bypass would also admit Gemini Pro, o1-pro, and future premium models.
+const NON_PREMIUM_PRO_MODEL_IDS = new Set([
+	"accounts/fireworks/models/deepseek-v4-pro",
+	"deepseek-ai/deepseek-v4-pro",
+	"deepseek/deepseek-v4-pro",
+	"deepseek-v4-pro",
+]);
+
 export type ProviderStatus = {
 	id: string;
 	label: string;
@@ -193,7 +203,13 @@ function researchPreferenceReason(model: ModelRecord): string | undefined {
 
 export function isProClassModelSpec(spec: string | undefined): boolean {
 	const normalized = spec?.trim().replace(/^([^/:]+):(.+)$/, "$1/$2");
-	return normalized ? PRO_CLASS_MODEL_PATTERN.test(normalized) : false;
+	if (!normalized) return false;
+	const separatorIndex = normalized.indexOf("/");
+	const modelId = (separatorIndex === -1 ? normalized : normalized.slice(separatorIndex + 1)).toLowerCase();
+	if (NON_PREMIUM_PRO_MODEL_IDS.has(modelId)) {
+		return false;
+	}
+	return PRO_CLASS_MODEL_PATTERN.test(normalized);
 }
 
 function isProClassModel(model: ModelRecord): boolean {
@@ -453,8 +469,8 @@ export function buildModelStatusSnapshotFromRecords(
 	const guidance: string[] = [];
 	if (nonProAvailable.length === 0) {
 		if (proClassAvailableCount > 0) {
-			guidance.push("No non-Pro authenticated Pi models are available. Pro-class models are disabled in Feynman.");
-			guidance.push("Configure a non-Pro research model, then rerun `feynman model list`.");
+			guidance.push("No approved authenticated Pi models are available. Premium Pro-class models are disabled in Feynman.");
+			guidance.push("Configure an approved research model, then rerun `feynman model list`.");
 		} else {
 			guidance.push("No authenticated Pi models are available yet.");
 			guidance.push(
@@ -466,15 +482,15 @@ export function buildModelStatusSnapshotFromRecords(
 		if (recommended) {
 			guidance.push(`No default research model is set. Recommended: ${recommended.spec}.`);
 		} else {
-			guidance.push("No default research model is set, and no non-Pro research model is available for automatic selection.");
+			guidance.push("No default research model is set, and no approved research model is available for automatic selection.");
 		}
-		guidance.push("Run `feynman model set <provider/non-pro-model>` after choosing from `feynman model list`.");
+		guidance.push("Run `feynman model set <provider/model>` after choosing from `feynman model list`.");
 	} else if (!currentValid) {
 		guidance.push(`Configured default model is unavailable: ${current}.`);
 		if (recommended) {
 			guidance.push(`Switch to the current research recommendation: ${recommended.spec}.`);
 		} else {
-			guidance.push("Configure a non-Pro research model before using automatic model selection.");
+			guidance.push("Configure an approved research model before using automatic model selection.");
 		}
 	}
 
