@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-10 13:12 EDT — intake-sweep-deepseek-v4-pro-0.3.15-release
+
+- Objective: Carry the exact DeepSeek V4 Pro research-model correction through clean-machine proof, merge, publication, delivery checks, and cleanup.
+- Persistence: PR `#221` exact head `9debe8def114a3443bb6e7624cb35ded5e6596bb` passed run `31395933747` and merged as `4fc5a6874d91d1841069d1a4625cac3cb7a9b169`. The port keeps Pi's exact DeepSeek IDs and rejects the source fork's broad Pro bypass, provider scripts, duplicate parallel-search bundle, and stale agent changes.
+- Clean-machine proof: Exact merge `4fc5a687` passed focused `105/105`, cumulative `755/755`, typecheck, build, architecture, website lint/typecheck/build, audits, pack, clean consumer, stale-Pi, RPC/TypeBox, and document gates in Daytona sandbox `4c3e449a-f0c1-48de-a59a-7bf2c0419f90` on Node `25.9.0`. Its `122,765,124`-byte package had SHA-256 `cabdcac428a7ba32e11978f084991d3606eb5b018b72ce4b4bf72b603c2fc769`; the sandbox was deleted and confirmed absent.
+- Delivery: Publish run `31401997236` passed and released npm/GitHub `0.3.15` from the merge commit. The `122,765,082`-byte registry tarball has SHA-256 `28a5a854f4fcb3c955573c5dc78333e8dc2de8aa91cba766ac082fdd00c715f2`, integrity `sha512-nIfGSLzFqjimz2WZeLs3y4H2zozxE5XRn81GJuDs4j9Y5P2vnbEvnlWly3s/YQwsiuF1rTfYa/4ls231mztYSQ==`, and verified provenance resolving to `4fc5a687`. GitHub `v0.3.15` targets the same commit; all five native asset digests match `SHA256SUMS`. Production release docs and both live installers match source.
+- Published proof: A fresh registry consumer passed zero-vulnerability package, embedded-runtime, and extracted-runtime audits; `96` signatures with `192` attestations; package/runtime/stale-Pi/RPC/TypeBox/document gates; and exact default persistence. Its model list showed `nebius/deepseek-ai/DeepSeek-V4-Pro` as current and recommended, the removed environment bypass still rejected Gemini Pro, and a streamed prompt reached `/v1/chat/completions` with the exact DeepSeek ID and returned `DEEPSEEK_V4_PRO_OK`.
+- Final state: Canonical post-release run `31409934882` passed all six Linux/macOS/Windows Node `22`/`24`/`25` consumers and all three live native installers. Issue and PR queues are empty, security advisory queues are empty, and the unrelated nested website repository remains preserved. State: `verified` and production-live. Next: start the next sweep from clean synchronized `main`.
+
 ### 2026-08-10 09:35 EDT — intake-sweep-deepseek-v4-pro-0.3.15
 
 - Objective: Port the valid research-model correction from `randomm/feynman` without importing its fork-only provider scripts, broad Pro bypass, or duplicate parallel-search surface.
