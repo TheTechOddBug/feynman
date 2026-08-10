@@ -89,6 +89,7 @@ const RUNTIME_PACKAGE_OVERRIDES = {
 	"@opentelemetry/sdk-trace-node": "2.10.0",
 	"@llamaindex/liteparse": "2.11.1",
 	"brace-expansion": "5.0.9",
+	"ip-address": "10.5.0",
 	undici: "8.10.0",
 };
 const PINNED_RUNTIME_PACKAGES = [

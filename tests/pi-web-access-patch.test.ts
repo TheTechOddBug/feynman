@@ -17,7 +17,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.19.0",
+	"pi-web-access-0.20.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
@@ -48,6 +48,10 @@ test("package artifact verification checks every pi-web-access patch target", ()
 		source,
 		/"const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);"/,
 	);
+	assert.match(source, /npm\/node_modules\/pi-web-access\/duckduckgo\.ts/);
+	assert.match(source, /npm\/node_modules\/pi-web-access\/datalab-pdf-extract\.ts/);
+	assert.match(source, /export async function searchWithDuckDuckGo/);
+	assert.match(source, /export async function extractPDFViaDatalab/);
 });
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
@@ -555,11 +559,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.19.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.19.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.20.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.20.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.20.0", "future"),
-		/expected 0\.19\.0, found 0\.20\.0/,
+		() => assertPiWebAccessVersion("0.21.0", "future"),
+		/expected 0\.20\.0, found 0\.21\.0/,
 	);
 
 	const futureSource = [
@@ -579,7 +583,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.19\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.20\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

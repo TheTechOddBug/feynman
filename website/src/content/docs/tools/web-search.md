@@ -14,7 +14,8 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 | Mode | Description |
 | --- | --- |
 | `auto` | Follow the available-provider fallback route |
-| `all` | Query every eligible provider except explicit-only AnySearch, xAI, Bright Data, and SerpBase; preserve partial successes and deduplicate sources |
+| `all` | Query every eligible provider except explicit-only DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase; preserve partial successes and deduplicate sources |
+| `duckduckgo` | Force keyless DuckDuckGo HTML search; also available inside an explicit fallback route |
 | `tinyfish` | Force TinyFish Search; also enables TinyFish Fetch as a hosted extraction fallback |
 | `kagi` | Force Kagi Search; also enables Kagi Extract as a hosted extraction fallback |
 | `ollama` | Force Ollama Cloud Web Search; also enables Ollama Web Fetch as an extraction fallback |
@@ -51,12 +52,22 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "tinyfishApiKey": "sk-tinyfish-...",
   "jinaApiKey": "jina_...",
   "geminiApiKey": "AIza...",
+  "datalabApiKey": "$DATALAB_API_KEY",
   "kagiApiKey": "kagi-...",
-  "ollamaApiKey": "ollama-..."
+  "ollamaApiKey": "ollama-...",
+  "pdf": {
+    "provider": "auto",
+    "datalabMode": "balanced",
+    "datalabTimeoutMs": 120000
+  }
 }
 ```
 
-Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
+Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
+
+DuckDuckGo is keyless but explicit-only. Select `"duckduckgo"` directly, or add it to `searchRouting.providers`. It does not run in `auto` or `all`.
+
+For PDF links, `pdf.provider: "auto"` tries Datalab when `DATALAB_API_KEY` or `datalabApiKey` is available, then Gemini, then local PDF.js extraction. Set `pdf.provider` to `"datalab"`, `"gemini"`, or `"unpdf"` to select one tier. Datalab is an optional hosted service; the no-key local path remains available.
 
 Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust authentication. Bright Data search requires `brightdataSerpZone`; its optional Web Unlocker extraction fallback uses a separate `brightdataUnlockerZone`.
 

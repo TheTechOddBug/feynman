@@ -27,6 +27,7 @@ import {
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
+const FEYNMAN_IP_ADDRESS_VERSION = "10.5.0";
 const FEYNMAN_LITEPARSE_VERSION = "2.11.1";
 const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-VxTSYDYYrweAQ03Eq3G34TKu7kgVBmstIgbjF2pFaeA+loMoYjEQKvw5l89a9smWfT/F0aZSSl0yRICiCzUxVw==";
 const FEYNMAN_LITEPARSE_NATIVE_PACKAGES = [
@@ -118,6 +119,15 @@ if (manifest.dependencies?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSI
 }
 if (manifest.overrides?.["brace-expansion"] !== FEYNMAN_BRACE_EXPANSION_VERSION) {
 	fail(`package.json does not override brace-expansion ${FEYNMAN_BRACE_EXPANSION_VERSION}`);
+}
+if (manifest.overrides?.["ip-address"] !== FEYNMAN_IP_ADDRESS_VERSION) {
+	fail(`package.json does not override ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
+}
+if (
+	readJson(packageRequire.resolve("ip-address/package.json"), "bundled ip-address manifest").version !==
+	FEYNMAN_IP_ADDRESS_VERSION
+) {
+	fail(`bundled package does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
 for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
 	if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
@@ -498,8 +508,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (typeof expectedPiWebAccessVersion !== "string") {
-	fail("committed runtime lock does not pin pi-web-access");
+if (expectedPiWebAccessVersion !== "0.20.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.20.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -509,6 +519,9 @@ if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
 ) {
 	fail("committed runtime lock does not pin @hono/node-server 2.0.12");
+}
+if (runtimeLock.packages?.["node_modules/ip-address"]?.version !== FEYNMAN_IP_ADDRESS_VERSION) {
+	fail(`committed runtime lock does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
 const liteparseLockEntry = runtimeLock.packages?.["node_modules/@llamaindex/liteparse"];
 if (
@@ -551,6 +564,12 @@ for (const [packagePath, entry] of Object.entries(runtimeLock.packages ?? {})) {
 }
 if (readArchivedText(archivePath, "npm/package-lock.json") !== runtimeLockSource) {
 	fail("runtime archive package lock differs from the committed runtime lock");
+}
+if (
+	readArchivedJson(archivePath, "npm/node_modules/ip-address/package.json").version !==
+	FEYNMAN_IP_ADDRESS_VERSION
+) {
+	fail(`runtime archive does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
 const runtimeManifest = readArchivedJson(archivePath, "npm/.runtime-manifest.json");
 if (!Array.isArray(runtimeManifest.packageSpecs)) {
@@ -958,8 +977,37 @@ requireMarkers(
 		archivePath,
 		"npm/node_modules/pi-web-access/pdf-extract.ts",
 	),
-	"runtime pi-web-access PDF scratch path",
-	["FEYNMAN_FETCH_CACHE_DIR", 'join(process.cwd(), ".feynman", "cache", "fetch-content")'],
+	"runtime pi-web-access PDF extraction",
+	[
+		"FEYNMAN_FETCH_CACHE_DIR",
+		'join(process.cwd(), ".feynman", "cache", "fetch-content")',
+		'import {',
+		'extractPDFViaDatalab',
+		'export type PDFProvider = "auto" | "gemini" | "datalab" | "unpdf";',
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/duckduckgo.ts",
+	),
+	"runtime pi-web-access DuckDuckGo provider",
+	[
+		'const SEARCH_URL = "https://html.duckduckgo.com/html/";',
+		"export function isDuckDuckGoAvailable",
+		"export async function searchWithDuckDuckGo",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/datalab-pdf-extract.ts",
+	),
+	"runtime pi-web-access Datalab extraction",
+	[
+		"export async function extractPDFViaDatalab",
+		"export function isDatalabApiAvailable",
+	],
 );
 if (
 	readArchivedJson(
@@ -1014,6 +1062,7 @@ console.log(JSON.stringify({
 	package: `${manifest.name}@${manifest.version}`,
 	piVersion: expectedPiVersion,
 	piDocparserVersion: expectedPiDocparserVersion,
+	ipAddressVersion: FEYNMAN_IP_ADDRESS_VERSION,
 	liteparseVersion: FEYNMAN_LITEPARSE_VERSION,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,
