@@ -979,7 +979,7 @@ export async function setDefaultModelSpec(settingsPath: string, authPath: string
 	settings.defaultProvider = provider;
 	settings.defaultModel = modelId;
 	writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
-	printSuccess(`Non-Pro default model set to ${resolvedSpec}`);
+	printSuccess(`Research default model set to ${resolvedSpec}`);
 }
 
 export async function runModelSetup(settingsPath: string, authPath: string): Promise<void> {

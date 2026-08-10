@@ -53,9 +53,9 @@ Paper access writes `<slug>-paper-access.md` and `<slug>-paper-access.json`. It 
 | `feynman rank "topic" --preference-file preferences.json` | Evaluate rank agreement against researcher read-order preferences |
 | `feynman rank "topic" --reproduction-notes reproduction-notes.json` | Record completed reproduction outcomes separately from planned replication checks |
 | `feynman rank "topic" --synthesis-top 7` | Choose how many ranked papers enter the bounded model-synthesis packet |
-| `feynman rank "topic" --synthesize` | Ask the recommended available non-Pro research model to write `<slug>-model-synthesis.md` and print the selected model |
-| `feynman rank "topic" --synthesize --model provider/model` | Run model synthesis with an explicit non-Pro model for this command |
-| `feynman rank "topic" --synthesize --synthesis-model provider/model` | Run model synthesis with an explicit non-Pro model without changing the chat model flag |
+| `feynman rank "topic" --synthesize` | Ask the recommended approved research model to write `<slug>-model-synthesis.md` and print the selected model |
+| `feynman rank "topic" --synthesize --model provider/model` | Run model synthesis with an explicit approved model for this command |
+| `feynman rank "topic" --synthesize --synthesis-model provider/model` | Run model synthesis with an explicit approved model without changing the chat model flag |
 | `feynman rank "topic" --output-dir outputs` | Choose where artifacts are written |
 | `feynman rank "topic" --json` | Print a compact JSON summary after writing artifacts |
 
@@ -68,9 +68,9 @@ PaperRank writes a ranked brief, normalized paper/score JSONL, a score audit, ci
 | `feynman model list` | List available models in Pi auth storage |
 | `feynman model login [id]` | Authenticate a model provider with OAuth or API-key setup |
 | `feynman model logout [id]` | Clear stored auth for a model provider |
-| `feynman model set <provider/model>` | Set the default non-Pro model for all sessions |
+| `feynman model set <provider/model>` | Set the default approved research model for all sessions |
 
-These commands manage your model provider configuration. The `model set` command updates `~/.feynman/agent/settings.json` with the new default. It accepts either `provider/model-name` or `provider:model-name`; run `feynman model list` first and choose a non-Pro model ID from that output. For `feynman model login openrouter` over SSH or another headless session, paste the browser's final redirect URL or authorization code into Feynman when the loopback callback is unavailable, or set `OPENROUTER_API_KEY` before launch to use API-key authentication without OAuth. Running `feynman model login google` or `feynman model login amazon-bedrock` routes directly into the relevant API-key setup flow instead of requiring the interactive picker.
+These commands manage your model provider configuration. The `model set` command updates `~/.feynman/agent/settings.json` with the new default. It accepts either `provider/model-name` or `provider:model-name`; run `feynman model list` first and choose an approved model ID from that output. For `feynman model login openrouter` over SSH or another headless session, paste the browser's final redirect URL or authorization code into Feynman when the loopback callback is unavailable, or set `OPENROUTER_API_KEY` before launch to use API-key authentication without OAuth. Running `feynman model login google` or `feynman model login amazon-bedrock` routes directly into the relevant API-key setup flow instead of requiring the interactive picker.
 
 ## AlphaXiv commands
 
@@ -134,7 +134,7 @@ These are equivalent to launching the REPL and typing the corresponding slash co
 | Flag | Description |
 | --- | --- |
 | `--prompt "<text>"` | Run one prompt and exit (one-shot mode) |
-| `--model <provider/model|provider:model>` | Force a specific non-Pro model for this session |
+| `--model <provider/model|provider:model>` | Force a specific approved research model for this session |
 | `--thinking <level>` | Set thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `--cwd <path>` | Set the working directory for all file operations |
 | `--session-dir <path>` | Set the session storage directory |

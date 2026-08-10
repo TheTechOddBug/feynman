@@ -38,7 +38,7 @@ The `agent/settings.json` file is the primary configuration file. It is created 
 ```json
 {
   "defaultProvider": "openai",
-  "defaultModel": "<non-pro-model-id-from-model-list>",
+  "defaultModel": "<approved-model-id-from-model-list>",
   "defaultThinkingLevel": "medium"
 }
 ```
@@ -49,7 +49,7 @@ The `defaultProvider` and `defaultModel` fields set which model is used when you
 
 ```bash
 feynman model list
-feynman model set <provider>/<non-pro-model-id>
+feynman model set <provider>/<model-id>
 ```
 
 To see all models you have configured:
@@ -73,10 +73,10 @@ Then switch the default model:
 
 ```bash
 feynman model list
-feynman model set <provider>/<non-pro-model-id>
+feynman model set <provider>/<model-id>
 ```
 
-The `model set` command accepts both `provider/model` and `provider:model` formats. Feynman rejects Pro-class model IDs here and in `--model`; choose a non-Pro model for defaults and per-session overrides. `feynman model login openrouter` opens the OAuth authorization page. If a remote or headless session cannot receive the loopback callback, copy the browser's final redirect URL or authorization code back into Feynman's prompt to finish sign-in. As an alternative, set `OPENROUTER_API_KEY` before launching Feynman to use API-key authentication without the OAuth flow. `feynman model login google` opens the API-key flow directly, while `feynman model login amazon-bedrock` verifies the AWS credential chain that Pi uses for Bedrock access.
+The `model set` command accepts both `provider/model` and `provider:model` formats. Feynman rejects premium Pro-class model IDs here and in `--model`. Exact DeepSeek V4 Pro IDs remain available because the model name does not identify a premium service tier. `feynman model login openrouter` opens the OAuth authorization page. If a remote or headless session cannot receive the loopback callback, copy the browser's final redirect URL or authorization code back into Feynman's prompt to finish sign-in. As an alternative, set `OPENROUTER_API_KEY` before launching Feynman to use API-key authentication without the OAuth flow. `feynman model login google` opens the API-key flow directly, while `feynman model login amazon-bedrock` verifies the AWS credential chain that Pi uses for Bedrock access.
 
 ## Web search configuration
 
@@ -107,7 +107,7 @@ PDF extraction uses Datalab when its key is present, then Gemini, then local PDF
 
 ## Subagent model overrides
 
-Feynman's bundled subagents inherit the main non-Pro default model unless you override them explicitly. Inside the REPL, run:
+Feynman's bundled subagents inherit the main approved research model unless you override them explicitly. Inside the REPL, run:
 
 ```bash
 /feynman-model
@@ -115,10 +115,10 @@ Feynman's bundled subagents inherit the main non-Pro default model unless you ov
 
 This opens an interactive picker where you can either:
 
-- change the main non-Pro default model for the session environment
-- assign a different non-Pro model to a specific bundled subagent such as `researcher`, `reviewer`, `writer`, or `verifier`
+- change the main approved research model for the session environment
+- assign a different approved model to a specific bundled subagent such as `researcher`, `reviewer`, `writer`, or `verifier`
 
-Per-subagent overrides are persisted in the synced agent files under `~/.feynman/agent/agents/` with a `model:` frontmatter field. Removing that field makes the subagent inherit the main non-Pro default model again.
+Per-subagent overrides are persisted in the synced agent files under `~/.feynman/agent/agents/` with a `model:` frontmatter field. Removing that field makes the subagent inherit the main approved research model again.
 
 ## Thinking levels
 
@@ -134,7 +134,7 @@ Feynman respects the following environment variables, which take precedence over
 
 | Variable | Description |
 | --- | --- |
-| `FEYNMAN_MODEL` | Override the default model with a non-Pro model |
+| `FEYNMAN_MODEL` | Override the default with an approved research model |
 | `FEYNMAN_HOME` | Override the parent directory used to create `.feynman` (default parent: `~`) |
 | `FEYNMAN_WORKBENCH_HOME` | Override the workbench app-data root; otherwise Feynman uses `~/.feynman/orgs/<org_uuid>/workbench` |
 | `FEYNMAN_FETCH_CACHE_DIR` | Override the project-local directory used for `fetch_content` PDF scratch Markdown |

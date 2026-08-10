@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-10 09:35 EDT — intake-sweep-deepseek-v4-pro-0.3.15
+
+- Objective: Port the valid research-model correction from `randomm/feynman` without importing its fork-only provider scripts, broad Pro bypass, or duplicate parallel-search surface.
+- Intake: Open issues and PRs are empty. All `1,017` forks were refreshed; only `nagyist/feynman` and `randomm/feynman` changed after the cutoff. `nagyist/main` has no commit ahead of upstream. `randomm/main` contributes the DeepSeek correction in `2fa0437`; its parallel-search and agent-discovery commits remain rejected because current `pi-web-access@0.20.0` already batches web queries, and removing bundled `pi-subagents@0.40.0` would remove Feynman's verified subagent runtime.
+- Changed: Exact DeepSeek V4 Pro IDs from Pi's direct, DeepSeek, Nebius, and Fireworks catalogs now pass the Pro-class cost guard. Premium service models such as Gemini Pro and `o1-pro` remain blocked. No `FEYNMAN_ALLOW_PRO_MODELS` or other broad bypass exists. Updated model listing, recommendation, explicit selection, default persistence and repair, CLI copy, command metadata, setup guidance, website documentation, release notes, and candidate version `0.3.15`.
+- Verified locally: Focused model and content coverage passed `105/105`; the cumulative suite passed `755/755`. Typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site/runtime/consumer/extracted-runtime production audits, package freshness review, and `git diff --check` passed. Only existing dependency build warnings and recorded architecture debt remain.
+- Package proof: The rebuilt candidate contains `40,223` files, is `121,026,469` bytes compressed and `342,291,561` bytes unpacked, and has SHA-256 `91f55cfd83deb14cc917bed444750cdb5ff439e375be06cb93a2195ab7c66811`. A clean installed consumer passed package, stale-Pi, `9` RPC command, `15` tool/TypeBox schema, document parse/search/screenshot, and all runtime audits.
+- User path: An installed-package model list exposed `nebius/deepseek-ai/DeepSeek-V4-Pro` as current and recommended, `model set` persisted it, `FEYNMAN_ALLOW_PRO_MODELS=1` did not expose a premium Gemini model, and a mocked OpenAI-compatible prompt reached `/v1/chat/completions` with the exact DeepSeek model ID and returned `DEEPSEEK_V4_PRO_OK`.
+- State: `verified` locally and `unverified` for the exact commit in Daytona, PR CI, merge, and npm/GitHub/native publication. Next: commit with contributor attribution, prove the exact pushed SHA in Daytona and CI, then merge and verify every `0.3.15` delivery surface.
+
 ### 2026-08-10 09:13 EDT — intake-sweep-pi-web-access-0.20.0-release
 
 - Objective: Carry the verified `pi-web-access@0.20.0` research-runtime candidate through merge, publication, independent delivery proof, and cleanup.

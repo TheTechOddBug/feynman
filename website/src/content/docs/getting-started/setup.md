@@ -17,15 +17,15 @@ The wizard walks you through three stages: model configuration, authentication, 
 
 ## Stage 1: Model selection
 
-Feynman supports multiple model providers. The setup wizard presents a list of available providers and models. Select your preferred non-Pro default model using the arrow keys:
+Feynman supports multiple model providers. The setup wizard presents a list of available providers and models. Select your preferred approved research model using the arrow keys:
 
 ```
 ? Select your default model:
-> provider:non-pro-model-from-your-list
-  provider:another-non-pro-model
+> provider:approved-model-from-your-list
+  provider:another-approved-model
 ```
 
-The non-Pro model you choose here becomes the default for all sessions. You can override it per-session with the `--model` flag or change it later via `feynman model set <provider/model>` or `feynman model set <provider:model>`. Feynman rejects Pro-class model IDs for default and explicit model selection; choose a non-Pro model.
+The non-premium model you choose here becomes the default for all sessions. You can override it per-session with the `--model` flag or change it later via `feynman model set <provider/model>` or `feynman model set <provider:model>`. Feynman rejects premium Pro-class model IDs for default and explicit model selection. Exact DeepSeek V4 Pro IDs remain available because the model name does not identify a premium service tier.
 
 ## Stage 2: Authentication
 

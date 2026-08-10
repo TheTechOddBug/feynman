@@ -550,7 +550,7 @@ export function buildLocalModelWorkflowNotice(modelSpec: string, workflowName: s
 	return [
 		`Warning: ${modelSpec} is a local provider.`,
 		`Small local models often ignore /${workflowName}'s multi-step workflow and return a chat-only reply with no files under outputs/.`,
-		"Use a stronger non-Pro model with `feynman model set <provider/model>` if this run produces no artifacts.",
+		"Use a stronger approved research model with `feynman model set <provider/model>` if this run produces no artifacts.",
 	].join(" ");
 }
 
@@ -619,7 +619,7 @@ export async function resolveRankSynthesisModelSpec(authPath: string, explicitMo
 	const trimmed = explicitModelSpec?.trim();
 	if (trimmed) {
 		if (isProClassModelSpec(trimmed)) {
-			throw new Error(`Pro-class model disabled: ${trimmed}. Choose a non-Pro model.`);
+			throw new Error(`Pro-class model disabled: ${trimmed}. Choose an approved research model.`);
 		}
 		return trimmed;
 	}
@@ -656,15 +656,15 @@ function createRankModelSynthesizer(options: {
 		const modelRuntime = await createModelRuntime(options.authPath);
 		const requestedModel = options.modelSpec?.trim();
 		if (requestedModel && isProClassModelSpec(requestedModel)) {
-			throw new Error(`Pro-class synthesis model disabled: ${requestedModel}. Choose a non-Pro model.`);
+			throw new Error(`Pro-class synthesis model disabled: ${requestedModel}. Choose an approved research model.`);
 		}
 		const recommendation = requestedModel ? undefined : await chooseRecommendedModel(options.authPath);
 		const resolvedModelSpec = requestedModel || recommendation?.spec;
 		if (!resolvedModelSpec) {
-			throw new Error("No non-Pro model is available for PaperRank synthesis. Run `feynman model login` for a non-Pro model or pass `--synthesis-model provider/model` with a non-Pro model.");
+			throw new Error("No approved research model is available for PaperRank synthesis. Run `feynman model login` or pass `--synthesis-model provider/model` with an approved model.");
 		}
 		if (isProClassModelSpec(resolvedModelSpec)) {
-			throw new Error(`Pro-class synthesis model disabled: ${resolvedModelSpec}. Choose a non-Pro model.`);
+			throw new Error(`Pro-class synthesis model disabled: ${resolvedModelSpec}. Choose an approved research model.`);
 		}
 		const model = parseModelSpec(resolvedModelSpec, modelRuntime);
 		if (!model) {
@@ -675,7 +675,7 @@ function createRankModelSynthesizer(options: {
 			source: requestedModel ? "explicit" : "recommended",
 			...(requestedModel ? { requestedModel } : {}),
 			resolvedModel,
-			reason: requestedModel ? "explicit non-Pro CLI override" : recommendation?.reason,
+			reason: requestedModel ? "explicit approved CLI override" : recommendation?.reason,
 		};
 		const synthesisStartedAt = Date.now();
 		const synthesisSpan = startTelemetrySpan("feynman.paperrank.model_synthesis", {
@@ -1117,7 +1117,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 		const synthesisModelSpec = values["synthesis-model"] ?? values.model;
 		for (const modelSpec of [values["synthesis-model"], values.model]) {
 			if (typeof modelSpec === "string" && isProClassModelSpec(modelSpec)) {
-				throw new Error(`Pro-class model disabled: ${modelSpec}. Choose a non-Pro model.`);
+				throw new Error(`Pro-class model disabled: ${modelSpec}. Choose an approved research model.`);
 			}
 		}
 		const rankLimit = parseRankLimit(values.limit);
@@ -1336,7 +1336,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	}
 	if (requestedExplicitModelSpec) {
 		if (isProClassModelSpec(requestedExplicitModelSpec)) {
-			throw new Error(`Pro-class model disabled: ${requestedExplicitModelSpec}. Choose a non-Pro model.`);
+			throw new Error(`Pro-class model disabled: ${requestedExplicitModelSpec}. Choose an approved research model.`);
 		}
 		const modelRuntime = await createModelRuntime(feynmanAuthPath);
 		const canonicalModelSpec = canonicalizeModelSpec(requestedExplicitModelSpec, modelRuntime);

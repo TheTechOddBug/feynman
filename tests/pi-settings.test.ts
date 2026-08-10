@@ -328,6 +328,46 @@ test("normalizeFeynmanSettings replaces an unavailable stale default with the cu
 	assert.equal(`${settings.defaultProvider}/${settings.defaultModel}`, recommendation?.spec);
 });
 
+test("normalizeFeynmanSettings preserves an available DeepSeek V4 Pro default", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+
+	writeFileSync(
+		settingsPath,
+		JSON.stringify({
+			defaultProvider: "nebius",
+			defaultModel: "deepseek-ai/DeepSeek-V4-Pro",
+		}) + "\n",
+		"utf8",
+	);
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, JSON.stringify({ nebius: { type: "api_key", key: "nebius-test-key" } }) + "\n", "utf8");
+	writeFileSync(
+		join(root, "models.json"),
+		JSON.stringify({
+			providers: {
+				nebius: {
+					baseUrl: "https://api.studio.nebius.ai/v1",
+					api: "openai-completions",
+					models: [{ id: "deepseek-ai/DeepSeek-V4-Pro" }],
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		defaultProvider?: string;
+		defaultModel?: string;
+	};
+	assert.equal(settings.defaultProvider, "nebius");
+	assert.equal(settings.defaultModel, "deepseek-ai/DeepSeek-V4-Pro");
+});
+
 test("normalizeFeynmanSettings seeds OpenCode Go Kimi as the preferred OpenCode Go default", async () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
 	const settingsPath = join(root, "settings.json");
