@@ -91,11 +91,19 @@ Example:
   "exaApiKey": "exa_...",
   "jinaApiKey": "jina_...",
   "perplexityApiKey": "pplx-...",
-  "geminiApiKey": "AIza..."
+  "geminiApiKey": "AIza...",
+  "datalabApiKey": "$DATALAB_API_KEY",
+  "pdf": {
+    "provider": "auto",
+    "datalabMode": "balanced",
+    "datalabTimeoutMs": 120000
+  }
 }
 ```
 
 Gemini Web browser-cookie access is disabled by default. To opt into it, set `"geminiBrowser": true` in `web-search.json`; API-backed search is recommended for `/deepresearch`.
+
+PDF extraction uses Datalab when its key is present, then Gemini, then local PDF.js. The local parser remains available without a key.
 
 ## Subagent model overrides
 
@@ -134,6 +142,7 @@ Feynman respects the following environment variables, which take precedence over
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
+| `DATALAB_API_KEY` | Optional Datalab key for layout-aware PDF-to-Markdown extraction |
 | `AWS_PROFILE` | Preferred AWS profile for Amazon Bedrock |
 | `TAVILY_API_KEY` | Tavily web search API key |
 | `SERPER_API_KEY` | Serper web search API key |

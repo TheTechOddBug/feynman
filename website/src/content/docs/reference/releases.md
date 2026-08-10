@@ -9,6 +9,24 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.14 - 2026-08-10
+
+### Web and document research
+
+- Updated `pi-web-access` to `0.20.0`. Researchers can use keyless DuckDuckGo HTML search as an explicit provider or fallback route.
+- Added optional Datalab PDF-to-Markdown extraction before Gemini and local PDF.js. Datalab retains tables, multi-column order, headings, links, and math, while the local parser remains the no-key fallback.
+- Fixed Gemini Web requests that failed when Google response headers exceeded the host agent's default HTTP/1.1 header limit.
+
+### Reliability
+
+- Preserved Feynman's project-local fetch cache, exact web configuration path, session model scope, browser-cookie opt-in, and bounded search deadline across the upstream upgrade.
+- Updated root and packaged runtime IP parsing to `10.5.0`, so IPv6 URL parsing fails gracefully for non-IPv6 hosts instead of throwing.
+- Restored automatic package reconciliation for workspaces that retained the `0.3.13` core package pins.
+
+### Validation
+
+- Verified the exact upstream `0.20.0` source through all `425` tests, typecheck, production audit, and package inspection. Added installed-runtime checks for DuckDuckGo and Datalab.
+
 ## v0.3.13 - 2026-08-09
 
 ### Reliability

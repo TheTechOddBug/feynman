@@ -221,7 +221,11 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 		const appManifest = JSON.parse(
 			readFileSync(resolve(appRoot, "package.json"), "utf8"),
 		) as { optionalDependencies?: Record<string, string> };
-		mkdirSync(resolve(packageRoot, "node_modules"), { recursive: true });
+		mkdirSync(resolve(packageRoot, "node_modules", "ip-address"), { recursive: true });
+		writeFileSync(
+			resolve(packageRoot, "node_modules", "ip-address", "package.json"),
+			JSON.stringify({ name: "ip-address", version: "10.5.0" }),
+		);
 		writeFileSync(
 			resolve(packageRoot, "package.json"),
 			JSON.stringify({
@@ -234,7 +238,10 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 					"brace-expansion": "5.0.9",
 				},
 				optionalDependencies: appManifest.optionalDependencies,
-				overrides: { "brace-expansion": "5.0.9" },
+				overrides: {
+					"brace-expansion": "5.0.9",
+					"ip-address": "10.5.0",
+				},
 			}),
 		);
 		const result = spawnSync(

@@ -1,6 +1,6 @@
 {
   "name": "@companion-ai/feynman",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Research-first CLI agent built on Pi and alphaXiv",
   "license": "MIT",
   "type": "module",
@@ -144,7 +144,7 @@
       "hono": "4.12.34"
     },
     "express-rate-limit": "8.6.1",
-    "ip-address": "10.4.0",
+    "ip-address": "10.5.0",
     "express": {
       "router": {
         "path-to-regexp": "8.4.2"

@@ -68,6 +68,7 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.11\.1"/);
+	assert.match(runtimeWorkspaceSource, /"ip-address": "10\.5\.0"/);
 	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
@@ -120,6 +121,8 @@ test("release manifests pin current document and website security repairs", () =
 	assert.equal(lock.packages?.["node_modules/pdfjs-dist"]?.version, "6.2.108");
 	assert.equal(manifest.overrides?.nanoid, "3.3.18");
 	assert.equal(lock.packages?.["node_modules/nanoid"]?.version, "3.3.18");
+	assert.equal(manifest.overrides?.["ip-address"], "10.5.0");
+	assert.equal(lock.packages?.["node_modules/ip-address"]?.version, "10.5.0");
 	for (const packageName of [
 		"@llamaindex/liteparse-darwin-arm64",
 		"@llamaindex/liteparse-darwin-x64",
