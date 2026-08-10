@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-10 09:13 EDT — intake-sweep-pi-web-access-0.20.0-release
+
+- Objective: Carry the verified `pi-web-access@0.20.0` research-runtime candidate through merge, publication, independent delivery proof, and cleanup.
+- Persistence: PR `#220` exact head `22fa33604307ec82dbd6ad41f563964c5ec1a4f0` passed run `31380143935`, including the release candidate, six Linux/macOS/Windows Node `22`/`24`/`25` consumers, and Windows PowerShell `5.1`/Core native installation. It merged as `3d59c3d7130d0e7ae87c09e61c3669977c8d1575`; origin now exposes only `main`.
+- Clean-machine proof: Exact head `22fa336` passed the complete source, website, package, runtime, document, model, DuckDuckGo, Datalab, and AlphaXiv ladder in Daytona sandbox `155e1fa0-5b19-4690-a7a0-81c101d8eedb`. The successful sandbox and low-memory diagnostic sandbox `f522149f-00dc-47d3-9765-e2b869c80b51` were deleted and confirmed absent.
+- Delivery: Main run `31383652197` passed source/package verification, all six package consumers, five native builds, npm publication, GitHub release creation, provenance, checksums, and published-state verification. npm `@companion-ai/feynman@0.3.14` is `latest`; its `122,764,823`-byte registry tarball is byte-identical to the CI artifact at SHA-256 `d3d7bee2579be5220f8ab0386710a033e2e1d608c61d05c575d4a97449bddc3c`, and its attestation resolves to the merge commit. GitHub `v0.3.14` targets the same commit with five nonempty native archives plus `SHA256SUMS`; every provider digest matches the manifest.
+- Published proof: A clean registry consumer passed zero-vulnerability audit, `96` package signatures with `192` attestations, package/runtime/RPC/TypeBox/document gates, two live domain-filtered arXiv results through DuckDuckGo, Datalab missing-key handling, `openai/gpt-5.5`, and the authenticated `36,090`-byte AlphaXiv paper question. Canonical post-release run `31390092634` passed all six published consumers and all three live native installers for exact version `0.3.14`.
+- Intake and preservation: The issue and PR queues are empty, all `1,017` forks added no port target, the release branch is deleted, and deployed release docs plus both live installers match source. Concurrent unrelated work on local branch `codex/non-premium-pro-models` remains untouched with its `12` dirty model/release paths. State: `verified` and production-live. Next: start the next sweep from synchronized `main` while preserving that separate work.
+
 ### 2026-08-10 05:21 EDT — intake-sweep-pi-web-access-0.20.0
 
 - Objective: Refresh the complete maintainer intake and adopt only current package changes that improve Feynman's research retrieval, document extraction, or runtime reliability.
