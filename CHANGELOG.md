@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-11 11:28 EDT — intake-sweep-windows-consumer-budget-0.3.18
+
+- Objective: Resume the `0.3.18` publication after main run `31499996075` exhausted its Windows Node `25` consumer job budget.
+- Evidence: The first clean tarball install passed after `33` minutes. The second clean global install was still running when GitHub cancelled the job at `60` minutes. The same matrix completed in prior runs when both installs finished sooner.
+- Changed: Raised the PR and publish package-consumer job budgets from `60` to `90` minutes. All local/global install, audit, package, runtime, RPC, TypeBox, and document gates remain unchanged.
+- State: `unverified` for the successor PR and publish run. Next: pass focused and cumulative checks, merge exact green CI, then finish npm/GitHub/native publication and post-release proof.
+
 ### 2026-08-11 01:35 EDT — intake-sweep-web-cache-hardening-0.3.17
 
 - Objective: Complete the post-`0.3.16` fetched-content reliability intake without broadening Feynman beyond the research loop.

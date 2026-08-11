@@ -353,7 +353,7 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: release-candidate-pr
     name: Candidate consumer (${{ matrix.os }}, Node ${{ matrix.node }})
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
