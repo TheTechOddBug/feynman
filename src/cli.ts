@@ -979,9 +979,12 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	const sessionDir = resolve(values["session-dir"] ?? getDefaultSessionDir(feynmanHome));
 	const feynmanSettingsPath = resolve(feynmanAgentDir, "settings.json");
 	const feynmanAuthPath = resolve(feynmanAgentDir, "auth.json");
+	const researchToolsExtensionPath = resolve(appRoot, "extensions", "research-tools.ts");
 	const { defaultThinkingLevel, launchThinkingLevel } = resolveThinkingConfig(values.thinking ?? process.env.FEYNMAN_THINKING);
 
-	await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+	await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath, {
+		researchToolsExtensionPath,
+	});
 
 	if (values.doctor) {
 		await runDoctor({
@@ -1038,6 +1041,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 			sessionDir,
 			appRoot,
 			defaultThinkingLevel,
+			researchToolsExtensionPath,
 		});
 		return;
 	}
@@ -1361,11 +1365,14 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 			sessionDir,
 			appRoot,
 			defaultThinkingLevel,
+			researchToolsExtensionPath,
 		});
 		if (!getCurrentModelSpec(feynmanSettingsPath)) {
 			return;
 		}
-		await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath);
+		await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath, {
+			researchToolsExtensionPath,
+		});
 	}
 
 	const workflowCommandNames = new Set(readPromptSpecs(appRoot).filter((s) => s.topLevelCli).map((s) => s.name));
