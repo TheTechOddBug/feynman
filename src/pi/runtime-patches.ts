@@ -29,6 +29,7 @@ import {
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	patchPiWebAccessSources,
 } from "../../scripts/lib/pi-web-access-patch.mjs";
+import { getFeynmanNpmGlobalNodeModulesPath } from "./runtime.js";
 
 function patchFileIfPresent(path: string, patchSource: (source: string) => string): boolean {
 	if (!existsSync(path)) {
@@ -189,7 +190,11 @@ function patchPiCodingAgentPackageJsonSource(source: string): string {
 	return JSON.stringify(pkg, null, 2) + "\n";
 }
 
-export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: string): boolean {
+export function patchPiRuntimeNodeModules(
+	appRoot: string,
+	feynmanAgentDir?: string,
+	platform = process.platform,
+): boolean {
 	const bundledPiVersion = resolveBundledPiVersion(appRoot);
 	if (bundledPiVersion) {
 		assertPiRuntimeCorrectnessVersion(bundledPiVersion, "bundled pi-coding-agent");
@@ -203,7 +208,7 @@ export function patchPiRuntimeNodeModules(appRoot: string, feynmanAgentDir?: str
 		// that copy is a real directory (junction-creation fallback or a
 		// `feynman update` reinstall) instead of a link into the bundled
 		// workspace, it must be patched too or unpatched sources execute.
-		nodeModuleRoots.push(resolve(dirname(feynmanAgentDir), "npm-global", "lib", "node_modules"));
+		nodeModuleRoots.push(getFeynmanNpmGlobalNodeModulesPath(feynmanAgentDir, platform));
 		// Pi's own package manager installs into <agentDir>/npm since Pi 0.75;
 		// a startup self-install lands fresh unpatched sources there.
 		nodeModuleRoots.push(resolve(feynmanAgentDir, "npm", "node_modules"));

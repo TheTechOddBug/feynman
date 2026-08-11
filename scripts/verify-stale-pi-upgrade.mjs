@@ -42,7 +42,9 @@ const root = mkdtempSync(resolve(tmpdir(), "feynman-stale-pi-upgrade-"));
 const feynmanHome = resolve(root, ".feynman");
 const agentDir = resolve(feynmanHome, "agent");
 const managedNodeModulesPath = resolve(agentDir, "npm", "node_modules");
-const persistentNodeModulesPath = resolve(feynmanHome, "npm-global", "lib", "node_modules");
+const persistentNodeModulesPath = process.platform === "win32"
+	? resolve(feynmanHome, "npm-global", "node_modules")
+	: resolve(feynmanHome, "npm-global", "lib", "node_modules");
 const otelConfigPath = resolve(persistentNodeModulesPath, "pi-otel", "dist", "config.js");
 
 const staleEditorSource = `\

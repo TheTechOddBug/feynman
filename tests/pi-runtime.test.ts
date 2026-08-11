@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -13,11 +13,28 @@ import {
 	ensureFeynmanCommandShim,
 	ensureFeynmanWorkspaceScaffold,
 	getFeynmanCommandShimDir,
+	getFeynmanNpmGlobalNodeModulesPath,
 	resolvePiPaths,
 	toNodeImportSpecifier,
 	validatePiInstallation,
 } from "../src/pi/runtime.js";
 import { resolveBundledAlphaCliPath } from "../src/cli.js";
+
+test("getFeynmanNpmGlobalNodeModulesPath follows npm prefix layout on each platform", () => {
+	const agentDir = join("home", ".feynman", "agent");
+	assert.equal(
+		getFeynmanNpmGlobalNodeModulesPath(agentDir, "linux"),
+		resolve("home", ".feynman", "npm-global", "lib", "node_modules"),
+	);
+	assert.equal(
+		getFeynmanNpmGlobalNodeModulesPath(agentDir, "darwin"),
+		resolve("home", ".feynman", "npm-global", "lib", "node_modules"),
+	);
+	assert.equal(
+		getFeynmanNpmGlobalNodeModulesPath(agentDir, "win32"),
+		resolve("home", ".feynman", "npm-global", "node_modules"),
+	);
+});
 
 test("buildPiArgs includes configured runtime paths and prompt", () => {
 	const args = buildPiArgs({

@@ -32,6 +32,16 @@ export function getFeynmanNpmPrefixPath(feynmanAgentDir: string): string {
 	return resolve(dirname(feynmanAgentDir), "npm-global");
 }
 
+export function getFeynmanNpmGlobalNodeModulesPath(
+	feynmanAgentDir: string,
+	platform = process.platform,
+): string {
+	const prefix = getFeynmanNpmPrefixPath(feynmanAgentDir);
+	return platform === "win32"
+		? resolve(prefix, "node_modules")
+		: resolve(prefix, "lib", "node_modules");
+}
+
 export function getFeynmanCommandShimDir(feynmanAgentDir: string): string {
 	return resolve(dirname(feynmanAgentDir), "bin");
 }

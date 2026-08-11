@@ -533,6 +533,49 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
 });
 
+test("patchPiRuntimeNodeModules patches the Windows npm prefix layout", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-windows-runtime-patches-"));
+	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-windows-runtime-home-"));
+	const agentDir = join(homeRoot, ".feynman", "agent");
+	const bundledPiManifestPath = join(
+		appRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"package.json",
+	);
+	const webRoot = join(
+		homeRoot,
+		".feynman",
+		"npm-global",
+		"node_modules",
+		"pi-web-access",
+	);
+	const webAccessPath = join(webRoot, "index.ts");
+	mkdirSync(dirname(bundledPiManifestPath), { recursive: true });
+	writeFileSync(
+		bundledPiManifestPath,
+		JSON.stringify({
+			name: "@earendil-works/pi-coding-agent",
+			version: "0.84.1",
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	writePiWebAccessFixture(webRoot, "0.21.0", true);
+	writeFileSync(
+		webAccessPath,
+		readFileSync(webAccessPath, "utf8").replace(
+			'pi.registerCommand("web-results",',
+			'pi.registerCommand("search",',
+		),
+		"utf8",
+	);
+
+	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir, "win32"), true);
+	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.doesNotMatch(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("search"/);
+});
+
 test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
