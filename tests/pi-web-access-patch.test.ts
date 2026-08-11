@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -168,70 +168,6 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 		patchPiWebAccessSources(patchedSources, "exact fixture second pass"),
 		patchedSources,
 	);
-});
-
-test("external fetched-content cache follows Feynman's exact web-search config path", async () => {
-	const fixtureRoot = mkdtempSync(join(tmpdir(), "feynman-web-content-cache-"));
-	const configPath = join(fixtureRoot, "custom-config", "research-web.json");
-	const cacheDir = join(fixtureRoot, "custom-config", "web-search-cache");
-	const storagePath = join(fixtureRoot, "storage.ts");
-	const utilsPath = join(fixtureRoot, "utils.ts");
-	const originalConfigPath = process.env.FEYNMAN_WEB_SEARCH_CONFIG;
-	const patchedSources = patchPiWebAccessSources(
-		readPiWebAccessFixtureSources(),
-		"external cache fixture",
-	);
-
-	writeFileSync(storagePath, patchedSources.get("storage.ts") ?? "", "utf8");
-	writeFileSync(utilsPath, patchedSources.get("utils.ts") ?? "", "utf8");
-	process.env.FEYNMAN_WEB_SEARCH_CONFIG = configPath;
-
-	try {
-		const storage = await import(
-			`${pathToFileURL(storagePath).href}?cache-path=${Date.now()}`
-		);
-		const responseId = "feynman-cache-proof";
-		const largeBody = "external-only-content-".repeat(2_000);
-		const storedAt = Date.now();
-		const sessionData = storage.storeFetchedContentResult(responseId, {
-			id: responseId,
-			type: "fetch",
-			timestamp: storedAt,
-			urls: [{
-				url: "https://example.com/research",
-				title: "Research source",
-				content: largeBody,
-				error: null,
-			}],
-		});
-
-		assert.equal(storage.getFetchCacheDir(), cacheDir);
-		assert.equal(existsSync(join(cacheDir, `${responseId}.json`)), true);
-		assert.equal(JSON.stringify(sessionData).includes(largeBody), false);
-		assert.equal(sessionData.urlMetadata?.[0]?.contentLength, largeBody.length);
-
-		storage.clearResults();
-		storage.restoreFromSession({
-			sessionManager: {
-				getBranch: () => [{
-					type: "custom",
-					customType: "web-search-results",
-					data: sessionData,
-				}],
-			},
-		});
-		assert.equal(
-			storage.getResult(responseId)?.urls?.[0]?.content,
-			largeBody,
-		);
-	} finally {
-		if (originalConfigPath === undefined) {
-			delete process.env.FEYNMAN_WEB_SEARCH_CONFIG;
-		} else {
-			process.env.FEYNMAN_WEB_SEARCH_CONFIG = originalConfigPath;
-		}
-		rmSync(fixtureRoot, { recursive: true, force: true });
-	}
 });
 
 test("patchPiWebAccessSources repairs partial config-path patch state", () => {

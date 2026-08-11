@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
 export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.21.0";
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
@@ -98,6 +101,7 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["export function getSummaryGenerationDeadlineMs(): number {", 1],
 		["storeFetchedContentResult(fetchId, data)", 2],
 		["storeFetchedContentResult(responseId, data)", 1],
+		['Stored content responseId: "${responseId}".', 2],
 		['if (sourceCheckEnabled) pi.registerTool({', 1],
 		['if (fetchContentEnabled) pi.registerTool({', 1],
 		['if (getSearchContentEnabled) pi.registerTool({', 1],
@@ -143,6 +147,12 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["function readCachedFetchData(", 1],
 		["export function pruneExpiredFetchCache(", 1],
 		["export function storeFetchedContentResult(", 1],
+		["const DEFAULT_CACHE_LIMITS = { maxEntries: 128, maxBytes: 128 * 1024 * 1024 };", 1],
+		['type CacheUnlinkResult = "removed" | "missing" | "changed" | "error";', 1],
+		['if (removed !== "removed" && removed !== "missing") return false;', 1],
+		['const tmpName = `${key}.${process.pid}.${Date.now()}.${randomBytes(16).toString("hex")}.tmp`;', 1],
+		["constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | O_NOFOLLOW", 1],
+		["Fetched content cache path is not a safe directory", 1],
 		["urlMetadata: metadataForUrls(data.urls)", 2],
 	], surface);
 	rejectMarkers(
@@ -339,6 +349,53 @@ const STORAGE_CACHE_PATH_ORIGINAL =
 	"return join(getWebSearchConfigDir(), FETCH_CACHE_DIR);";
 const STORAGE_CACHE_PATH_PATCHED =
 	"return join(dirname(getWebSearchConfigPath()), FETCH_CACHE_DIR);";
+const STORAGE_BASELINE_SHA256 = "2b68eb94480e5d4eaae45c83838e5a7c4669bcc57f15726facf71b73e5ccd728";
+const STORAGE_CONFIG_PATCHED_SHA256 = "8c6e8b4e998dcedb9715687b8844f5ffa56bb253e3e74cea99a30edeae308279";
+const STORAGE_HARDENED_SHA256 = "bb35632af112b7dcbaf6d998d0b54799f8c9a32cd9b8bfce28c3607ed2b8b90a";
+const STORAGE_HARDENED_SOURCE = readFileSync(
+	new URL("./pi-web-access-0.21.0-storage.patched.ts", import.meta.url),
+	"utf8",
+);
+const INDEX_SINGLE_FETCH_ERROR_ORIGINAL =
+	'content: [{ type: "text", text: `Error: ${result.error}` }],';
+const INDEX_SINGLE_FETCH_ERROR_PATCHED =
+	'content: [{ type: "text", text: `Error: ${result.error}\\nStored content responseId: "${responseId}".` }],';
+const INDEX_SINGLE_FETCH_CONTENT_ANCHOR =
+	"\t\t\t\tconst content: Array<TextContent | ImageContent> = [];";
+const INDEX_SINGLE_FETCH_CONTENT_ID_LINE =
+	'\t\t\t\toutput += `\\n\\n---\\nStored content responseId: "${responseId}".`;';
+const INDEX_SINGLE_FETCH_CONTENT_PATCHED = [
+	INDEX_SINGLE_FETCH_CONTENT_ID_LINE,
+	"",
+	INDEX_SINGLE_FETCH_CONTENT_ANCHOR,
+].join("\n");
+
+function sha256(source) {
+	return createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
+}
+
+function patchFetchCacheStorageSource(source) {
+	const templateDigest = sha256(STORAGE_HARDENED_SOURCE);
+	if (templateDigest !== STORAGE_HARDENED_SHA256) {
+		throw new Error(
+			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} cache hardening template: expected ${STORAGE_HARDENED_SHA256}, found ${templateDigest}`,
+		);
+	}
+
+	const sourceDigest = sha256(source);
+	if (sourceDigest === STORAGE_HARDENED_SHA256) {
+		return { source, changed: false };
+	}
+	if (
+		sourceDigest !== STORAGE_BASELINE_SHA256 &&
+		sourceDigest !== STORAGE_CONFIG_PATCHED_SHA256
+	) {
+		throw new Error(
+			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} storage layout: expected ${STORAGE_BASELINE_SHA256} or ${STORAGE_CONFIG_PATCHED_SHA256}, found ${sourceDigest}`,
+		);
+	}
+	return { source: STORAGE_HARDENED_SOURCE, changed: true };
+}
 
 function patchGeminiWebSource(source) {
 	let patched = source;
@@ -701,11 +758,22 @@ export function patchPiWebAccessSource(relativePath, source) {
 			[INDEX_COMMAND_CONFIG_ORIGINAL, INDEX_COMMAND_CONFIG_PATCHED],
 			[INDEX_COMMAND_GATE_TYPE_ORIGINAL, INDEX_COMMAND_GATE_TYPE_PATCHED],
 			[INDEX_SEARCH_COMMAND_ORIGINAL, INDEX_SEARCH_COMMAND_PATCHED],
+			[INDEX_SINGLE_FETCH_ERROR_ORIGINAL, INDEX_SINGLE_FETCH_ERROR_PATCHED],
 		]) {
 			if (patched.includes(original)) {
 				patched = patched.replace(original, replacement);
 				changed = true;
 			}
+		}
+		if (
+			!patched.includes(INDEX_SINGLE_FETCH_CONTENT_ID_LINE) &&
+			patched.includes(INDEX_SINGLE_FETCH_CONTENT_ANCHOR)
+		) {
+			patched = patched.replace(
+				INDEX_SINGLE_FETCH_CONTENT_ANCHOR,
+				INDEX_SINGLE_FETCH_CONTENT_PATCHED,
+			);
+			changed = true;
 		}
 
 		for (const staleBinding of [
@@ -842,6 +910,9 @@ export function patchPiWebAccessSource(relativePath, source) {
 	}
 
 	if (relativePath === "storage.ts") {
+		const cachePatch = patchFetchCacheStorageSource(patched);
+		patched = cachePatch.source;
+		changed = changed || cachePatch.changed;
 		for (const [original, replacement] of [
 			[STORAGE_CONFIG_IMPORT_ORIGINAL, STORAGE_CONFIG_IMPORT_PATCHED],
 			[STORAGE_PATH_IMPORT_ORIGINAL, STORAGE_PATH_IMPORT_PATCHED],

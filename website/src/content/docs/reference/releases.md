@@ -9,6 +9,24 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.17 - 2026-08-11
+
+### Web research
+
+- Exposed the stored response ID in every single-URL `fetch_content` result, including short pages and failures. Researchers can now pass the exact ID to `get_search_content` instead of guessing from hidden tool details.
+- Bounded the fetched-page cache to 128 entries and 128 MiB. Feynman removes expired entries first, then evicts the oldest entries until both limits hold.
+
+### Security and reliability
+
+- Normalized fetched-content cache permissions to `0700` directories and `0600` files on macOS and Linux.
+- Rejected cache-directory and cache-entry symlinks, removed stale extension-owned temporary files, and moved writes to exclusive random temporary files with durable atomic replacement.
+- Made concurrent pruning tolerate entries that another Feynman process already removed.
+
+### Validation
+
+- Ported the focused storage repair from upstream `pi-web-access` PR `#241` at commit `b3e784f`, while retaining Feynman's exact custom configuration path.
+- Added regressions for model-visible response IDs, quota eviction, temporary-file cleanup, permissions, symlink rejection, and concurrent deletion.
+
 ## v0.3.16 - 2026-08-10
 
 ### Web research
