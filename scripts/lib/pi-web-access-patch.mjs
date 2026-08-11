@@ -371,7 +371,7 @@ const INDEX_SINGLE_FETCH_CONTENT_PATCHED = [
 ].join("\n");
 
 function sha256(source) {
-	return createHash("sha256").update(source).digest("hex");
+	return createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
 }
 
 function patchFetchCacheStorageSource(source) {

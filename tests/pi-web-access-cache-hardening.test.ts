@@ -319,4 +319,12 @@ test("fetched-content cache hardening upgrades the prior config-path-only patch"
 	assert.match(hardened, /const DEFAULT_CACHE_LIMITS = \{ maxEntries: 128,/);
 	assert.match(hardened, /type CacheUnlinkResult = "removed" \| "missing"/);
 	assert.equal(patchPiWebAccessSource("storage.ts", hardened), hardened);
+
+	const windowsBaseline = baseline.replace(/\n/g, "\r\n");
+	const windowsHardened = patchPiWebAccessSource("storage.ts", windowsBaseline);
+	assert.match(windowsHardened, /const DEFAULT_CACHE_LIMITS = \{ maxEntries: 128,/);
+	assert.equal(
+		patchPiWebAccessSource("storage.ts", windowsHardened),
+		windowsHardened,
+	);
 });
