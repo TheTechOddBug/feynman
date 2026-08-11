@@ -9,6 +9,18 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.18 - 2026-08-11
+
+### Research agents
+
+- Loaded Feynman's research-tool extension explicitly in every bundled `researcher` child session.
+- Kept Hugging Face dataset and repository tools in the strict researcher allowlist without relying on ambient child discovery.
+
+### Reliability
+
+- Preserved custom researcher extension overrides while adding the bundled provider to default settings.
+- Made the published subagent smoke reject unavailable child-tool diagnostics even when the parent model repeats a child result.
+
 ## v0.3.17 - 2026-08-11
 
 ### Web research

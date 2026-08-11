@@ -172,7 +172,7 @@ jobs:
         if: env.FEYNMAN_HOME != ''
         run: |
           feynman --mode json --prompt 'Use the subagent tool to run the "researcher" agent with the task: Reply with the single word PONG and stop. After the subagent returns, reply with exactly RESULT=<the single word the subagent returned> and nothing else.' > subagent.log 2>&1 || { tail -80 subagent.log; exit 1; }
-          for marker in "Cannot find module" "is not defined"; do
+          for marker in "Cannot find module" "is not defined" "requested unavailable child tools"; do
             if grep -q "$marker" subagent.log; then
               echo "subagent regression detected (matched: $marker):" >&2
               grep -n "$marker" subagent.log | head -3 >&2

@@ -28,6 +28,7 @@ type SetupOptions = {
 	sessionDir: string;
 	appRoot: string;
 	defaultThinkingLevel?: ThinkingLevel;
+	researchToolsExtensionPath?: string;
 };
 
 function printNonInteractiveSetupGuidance(): void {
@@ -191,6 +192,7 @@ export async function runSetup(options: SetupOptions): Promise<void> {
 			options.bundledSettingsPath,
 			options.defaultThinkingLevel ?? "medium",
 			options.authPath,
+			{ researchToolsExtensionPath: options.researchToolsExtensionPath },
 		);
 
 		const modelStatus = buildModelStatusSnapshotFromRecords(

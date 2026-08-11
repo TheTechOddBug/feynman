@@ -91,6 +91,129 @@ test("normalizeFeynmanSettings seeds the fast core package set", async () => {
 	assert.deepEqual(settings.packages, [...CORE_PACKAGE_SOURCES]);
 });
 
+test("normalizeFeynmanSettings gives the researcher child its Hugging Face tool provider", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+	const researchToolsExtensionPath = join(root, "app", "extensions", "research-tools.ts");
+
+	writeFileSync(
+		settingsPath,
+		JSON.stringify({
+			subagents: {
+				defaultThinking: "high",
+				agentOverrides: {
+					reviewer: { thinking: "medium" },
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, "{}\n", "utf8");
+
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath, {
+		researchToolsExtensionPath,
+	});
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		subagents?: {
+			defaultThinking?: string;
+			agentOverrides?: Record<string, { thinking?: string; subagentOnlyExtensions?: string[] }>;
+		};
+	};
+	assert.equal(settings.subagents?.defaultThinking, "high");
+	assert.deepEqual(settings.subagents?.agentOverrides?.reviewer, { thinking: "medium" });
+	assert.deepEqual(
+		settings.subagents?.agentOverrides?.researcher?.subagentOnlyExtensions,
+		[researchToolsExtensionPath],
+	);
+});
+
+test("normalizeFeynmanSettings preserves custom researcher child extensions and adds the provider", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+	const customExtensionPath = join(root, "custom-research-tools.ts");
+	const researchToolsExtensionPath = join(root, "app", "extensions", "research-tools.ts");
+
+	writeFileSync(
+		settingsPath,
+		JSON.stringify({
+			subagents: {
+				agentOverrides: {
+					researcher: { subagentOnlyExtensions: [customExtensionPath] },
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, "{}\n", "utf8");
+
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath, {
+		researchToolsExtensionPath,
+	});
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		subagents?: { agentOverrides?: Record<string, { subagentOnlyExtensions?: string[] }> };
+	};
+	assert.deepEqual(
+		settings.subagents?.agentOverrides?.researcher?.subagentOnlyExtensions,
+		[customExtensionPath, researchToolsExtensionPath],
+	);
+});
+
+test("normalizeFeynmanSettings refreshes a relocated bundled researcher extension", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+	const customExtensionPath = join(root, "custom-research-tools.ts");
+	const oldResearchToolsExtensionPath = join(root, "old-app", "extensions", "research-tools.ts");
+	const currentResearchToolsExtensionPath = join(root, "current-app", "extensions", "research-tools.ts");
+
+	writeFileSync(
+		settingsPath,
+		JSON.stringify({
+			subagents: {
+				agentOverrides: {
+					researcher: { subagentOnlyExtensions: [customExtensionPath] },
+				},
+			},
+		}) + "\n",
+		"utf8",
+	);
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, "{}\n", "utf8");
+
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath, {
+		researchToolsExtensionPath: oldResearchToolsExtensionPath,
+	});
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath, {
+		researchToolsExtensionPath: currentResearchToolsExtensionPath,
+	});
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+		subagents?: {
+			agentOverrides?: Record<string, {
+				subagentOnlyExtensions?: string[];
+				_feynmanResearchToolsExtension?: string;
+			}>;
+		};
+	};
+	assert.deepEqual(
+		settings.subagents?.agentOverrides?.researcher?.subagentOnlyExtensions,
+		[customExtensionPath, currentResearchToolsExtensionPath],
+	);
+	assert.equal(
+		settings.subagents?.agentOverrides?.researcher?._feynmanResearchToolsExtension,
+		currentResearchToolsExtensionPath,
+	);
+});
+
 test("bundled settings and package-list defaults use the same current core package set", () => {
 	const bundledSettings = JSON.parse(
 		readFileSync(join(process.cwd(), ".feynman", "settings.json"), "utf8"),

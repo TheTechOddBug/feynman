@@ -10,6 +10,12 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 
 type ModelLookup = Pick<ModelRegistry, "find"> | Pick<ModelRuntime, "getModel">;
 
+export type FeynmanSettingsRuntime = {
+	researchToolsExtensionPath?: string;
+};
+
+const RESEARCHER_EXTENSION_MARKER = "_feynmanResearchToolsExtension";
+
 function findModel(modelLookup: ModelLookup, provider: string, id: string) {
 	return "find" in modelLookup
 		? modelLookup.find(provider, id)
@@ -95,11 +101,48 @@ export function readJson(path: string): Record<string, unknown> {
 	}
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function ensureResearcherExtension(
+	settings: Record<string, unknown>,
+	researchToolsExtensionPath: string | undefined,
+): void {
+	if (!researchToolsExtensionPath) return;
+
+	if (settings.subagents !== undefined && !isRecord(settings.subagents)) return;
+	const subagents = settings.subagents ?? {};
+	settings.subagents = subagents;
+
+	if (subagents.agentOverrides !== undefined && !isRecord(subagents.agentOverrides)) return;
+	const agentOverrides = subagents.agentOverrides ?? {};
+	subagents.agentOverrides = agentOverrides;
+
+	if (agentOverrides.researcher !== undefined && !isRecord(agentOverrides.researcher)) return;
+	const researcher = agentOverrides.researcher ?? {};
+	agentOverrides.researcher = researcher;
+
+	const configuredExtensions = researcher.subagentOnlyExtensions;
+	if (
+		configuredExtensions !== undefined
+		&& (!Array.isArray(configuredExtensions) || configuredExtensions.some((entry) => typeof entry !== "string"))
+	) return;
+
+	const previousManagedPath = researcher[RESEARCHER_EXTENSION_MARKER];
+	const preservedExtensions = (configuredExtensions ?? []).filter(
+		(entry) => entry !== previousManagedPath && entry !== researchToolsExtensionPath,
+	);
+	researcher.subagentOnlyExtensions = [...preservedExtensions, researchToolsExtensionPath];
+	researcher[RESEARCHER_EXTENSION_MARKER] = researchToolsExtensionPath;
+}
+
 export async function normalizeFeynmanSettings(
 	settingsPath: string,
 	bundledSettingsPath: string,
 	defaultThinkingLevel: ThinkingLevel,
 	authPath: string,
+	runtime: FeynmanSettingsRuntime = {},
 ): Promise<void> {
 	let settings: Record<string, unknown> = {};
 
@@ -134,6 +177,7 @@ export async function normalizeFeynmanSettings(
 	} else {
 		settings.packages = filterConfiguredPackagesForCurrentNode(settings.packages as PackageSource[]);
 	}
+	ensureResearcherExtension(settings, runtime.researchToolsExtensionPath);
 
 	const availableModels = (await getAvailableModelRecords(authPath)).map((model) => ({
 		provider: model.provider,
