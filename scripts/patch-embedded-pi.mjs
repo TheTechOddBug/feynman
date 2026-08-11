@@ -260,7 +260,9 @@ const workspaceArchivePath = resolve(appRoot, ".feynman", "runtime-workspace.tgz
 const workspaceArchiveDigestPath = resolve(appRoot, ".feynman", "runtime-workspace.sha256");
 const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceSetupLockDir = resolve(appRoot, ".feynman", ".workspace-setup.lock");
-const globalNodeModulesRoot = resolve(feynmanNpmPrefix, "lib", "node_modules");
+const globalNodeModulesRoot = process.platform === "win32"
+	? resolve(feynmanNpmPrefix, "node_modules")
+	: resolve(feynmanNpmPrefix, "lib", "node_modules");
 const PRUNE_VERSION = 8;
 const WORKSPACE_SETUP_LOCK_STALE_MS = 300000;
 const NATIVE_PACKAGE_SPECS = new Set([

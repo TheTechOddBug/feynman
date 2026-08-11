@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,7 +17,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.20.0",
+	"pi-web-access-0.21.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
@@ -52,6 +52,11 @@ test("package artifact verification checks every pi-web-access patch target", ()
 	assert.match(source, /npm\/node_modules\/pi-web-access\/datalab-pdf-extract\.ts/);
 	assert.match(source, /export async function searchWithDuckDuckGo/);
 	assert.match(source, /export async function extractPDFViaDatalab/);
+	assert.match(source, /storeFetchedContentResult/);
+	assert.match(source, /summaryGenerationDeadlineMs/);
+	assert.match(source, /web-search-cache/);
+	assert.match(source, /Image fetching is disabled by image\.enabled/);
+	assert.match(source, /const enabled = pdf\.enabled !== false/);
 });
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
@@ -144,6 +149,18 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 		indexSource,
 		/const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);\n\tif \(!existsSync\(dir\)\) mkdirSync\(dir, \{ recursive: true \}\);\n\twriteFileSync\(WEB_SEARCH_CONFIG_PATH,/,
 	);
+	assert.match(
+		indexSource,
+		/commands\?: Partial<Record<"websearch" \| "curator" \| "web-results" \| "google-account"/,
+	);
+	assert.match(
+		indexSource,
+		/if \(isCommandEnabled\(initConfig, "web-results"\)\) pi\.registerCommand\("web-results",/,
+	);
+	assert.doesNotMatch(
+		indexSource,
+		/isCommandEnabled\(initConfig, "search"\).*registerCommand\("web-results"/,
+	);
 	assert.doesNotThrow(() =>
 		assertPiWebAccessPatchedSources(patchedSources, "exact fixture"),
 	);
@@ -151,6 +168,70 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 		patchPiWebAccessSources(patchedSources, "exact fixture second pass"),
 		patchedSources,
 	);
+});
+
+test("external fetched-content cache follows Feynman's exact web-search config path", async () => {
+	const fixtureRoot = mkdtempSync(join(tmpdir(), "feynman-web-content-cache-"));
+	const configPath = join(fixtureRoot, "custom-config", "research-web.json");
+	const cacheDir = join(fixtureRoot, "custom-config", "web-search-cache");
+	const storagePath = join(fixtureRoot, "storage.ts");
+	const utilsPath = join(fixtureRoot, "utils.ts");
+	const originalConfigPath = process.env.FEYNMAN_WEB_SEARCH_CONFIG;
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"external cache fixture",
+	);
+
+	writeFileSync(storagePath, patchedSources.get("storage.ts") ?? "", "utf8");
+	writeFileSync(utilsPath, patchedSources.get("utils.ts") ?? "", "utf8");
+	process.env.FEYNMAN_WEB_SEARCH_CONFIG = configPath;
+
+	try {
+		const storage = await import(
+			`${pathToFileURL(storagePath).href}?cache-path=${Date.now()}`
+		);
+		const responseId = "feynman-cache-proof";
+		const largeBody = "external-only-content-".repeat(2_000);
+		const storedAt = Date.now();
+		const sessionData = storage.storeFetchedContentResult(responseId, {
+			id: responseId,
+			type: "fetch",
+			timestamp: storedAt,
+			urls: [{
+				url: "https://example.com/research",
+				title: "Research source",
+				content: largeBody,
+				error: null,
+			}],
+		});
+
+		assert.equal(storage.getFetchCacheDir(), cacheDir);
+		assert.equal(existsSync(join(cacheDir, `${responseId}.json`)), true);
+		assert.equal(JSON.stringify(sessionData).includes(largeBody), false);
+		assert.equal(sessionData.urlMetadata?.[0]?.contentLength, largeBody.length);
+
+		storage.clearResults();
+		storage.restoreFromSession({
+			sessionManager: {
+				getBranch: () => [{
+					type: "custom",
+					customType: "web-search-results",
+					data: sessionData,
+				}],
+			},
+		});
+		assert.equal(
+			storage.getResult(responseId)?.urls?.[0]?.content,
+			largeBody,
+		);
+	} finally {
+		if (originalConfigPath === undefined) {
+			delete process.env.FEYNMAN_WEB_SEARCH_CONFIG;
+		} else {
+			process.env.FEYNMAN_WEB_SEARCH_CONFIG = originalConfigPath;
+		}
+		rmSync(fixtureRoot, { recursive: true, force: true });
+	}
 });
 
 test("patchPiWebAccessSources repairs partial config-path patch state", () => {
@@ -559,11 +640,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.20.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.20.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.21.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.21.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.21.0", "future"),
-		/expected 0\.20\.0, found 0\.21\.0/,
+		() => assertPiWebAccessVersion("0.22.0", "future"),
+		/expected 0\.21\.0, found 0\.22\.0/,
 	);
 
 	const futureSource = [
@@ -583,7 +664,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.20\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.21\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

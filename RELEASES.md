@@ -6,6 +6,25 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.16 - 2026-08-10
+
+### Web research
+
+- Updated `pi-web-access` to `0.21.0`. Full fetched pages now live in a private external cache instead of session JSONL, so search-heavy sessions stay bounded and restore without loading page bodies into the transcript.
+- Added per-tool and per-command registration gates, direct-image and PDF extraction gates, and a configurable summary-generation deadline.
+- Documented the exact `get_search_content` argument constraints and added `/web-results` for browsing stored web results without conflicting with session search.
+
+### Reliability
+
+- Kept the fetched-content cache beside Feynman's exact web-search configuration, including custom `FEYNMAN_WEB_SEARCH_CONFIG` paths.
+- Preserved Feynman's project-local PDF scratch files, session model scope, browser-cookie opt-in, raw-result default, and bounded primary search deadline.
+- Restored automatic package reconciliation for workspaces that retained the `0.3.15` core package pins.
+
+### Validation
+
+- Verified the exact upstream `0.21.0` source through all `437` tests, typecheck, production audit, and package inspection.
+- Added regressions for external cache persistence, bounded session metadata, the `/web-results` gate translation, current feature markers, and installed tool and command registration gates.
+
 ## v0.3.15 - 2026-08-10
 
 ### Model selection

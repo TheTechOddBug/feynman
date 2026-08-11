@@ -10,7 +10,11 @@ import { resolveAdjacentNpmCommand } from "../../scripts/lib/npm-command.mjs";
 import { NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
 
 export { resolveAdjacentNpmCommand };
-import { applyFeynmanPackageManagerEnv, getFeynmanNpmPrefixPath } from "./runtime.js";
+import {
+	applyFeynmanPackageManagerEnv,
+	getFeynmanNpmGlobalNodeModulesPath,
+	getFeynmanNpmPrefixPath,
+} from "./runtime.js";
 import { patchPiRuntimeNodeModules } from "./runtime-patches.js";
 import { getPathWithCurrentNode, resolveExecutable } from "../system/executables.js";
 
@@ -846,13 +850,14 @@ export function seedBundledWorkspacePackages(
 	agentDir: string,
 	appRoot: string,
 	sources: string[],
+	platform = process.platform,
 ): string[] {
 	const bundledNodeModulesRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
 	if (!existsSync(bundledNodeModulesRoot)) {
 		return [];
 	}
 
-	const globalNodeModulesRoot = resolve(getFeynmanNpmPrefixPath(agentDir), "lib", "node_modules");
+	const globalNodeModulesRoot = getFeynmanNpmGlobalNodeModulesPath(agentDir, platform);
 	const seeded: string[] = [];
 	const bundledPackageNames = listBundledWorkspacePackageNames(bundledNodeModulesRoot);
 	const newlySeededPackageNames = new Set<string>();

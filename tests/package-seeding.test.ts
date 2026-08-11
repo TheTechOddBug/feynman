@@ -74,6 +74,18 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
 });
 
+test("installed runtime scripts follow npm's platform-specific global prefix layout", () => {
+	for (const relativePath of [
+		"scripts/patch-embedded-pi.mjs",
+		"scripts/verify-stale-pi-upgrade.mjs",
+	]) {
+		const source = readFileSync(resolve(process.cwd(), relativePath), "utf8");
+		assert.match(source, /process\.platform === "win32"/, relativePath);
+		assert.match(source, /"npm-global", "node_modules"|"node_modules"/, relativePath);
+		assert.match(source, /"lib", "node_modules"/, relativePath);
+	}
+});
+
 test("0.3.12 release notes name the exact LiteParse runtime override", () => {
 	for (const path of [
 		resolve(process.cwd(), "RELEASES.md"),
@@ -197,6 +209,31 @@ test("seedBundledWorkspacePackages links bundled packages into the Feynman npm p
 	const globalRoot = resolve(homeRoot, "npm-global", "lib", "node_modules");
 	assert.equal(existsSync(resolve(globalRoot, "pi-subagents", "package.json")), true);
 	assert.equal(existsSync(resolve(globalRoot, "@samfp", "pi-memory", "package.json")), true);
+});
+
+test("seedBundledWorkspacePackages uses the Windows npm prefix layout", async () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-bundle-"));
+	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-home-"));
+	const agentDir = resolve(homeRoot, "agent");
+	mkdirSync(agentDir, { recursive: true });
+	createBundledWorkspace(appRoot, ["pi-subagents"]);
+
+	const seeded = seedBundledWorkspacePackages(
+		agentDir,
+		appRoot,
+		["npm:pi-subagents"],
+		"win32",
+	);
+
+	assert.deepEqual(seeded, ["npm:pi-subagents"]);
+	assert.equal(
+		existsSync(resolve(homeRoot, "npm-global", "node_modules", "pi-subagents", "package.json")),
+		true,
+	);
+	assert.equal(
+		existsSync(resolve(homeRoot, "npm-global", "lib", "node_modules", "pi-subagents")),
+		false,
+	);
 });
 
 test("seedBundledWorkspacePackages preserves existing installed packages", async () => {

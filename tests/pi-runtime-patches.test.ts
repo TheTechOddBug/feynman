@@ -175,8 +175,8 @@ export async function answerPdfQuery(url, query) {
 }
 `;
 
-const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.20.0");
-function writePiWebAccessFixture(webRoot: string, version = "0.20.0", patched = false): void {
+const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.21.0");
+function writePiWebAccessFixture(webRoot: string, version = "0.21.0", patched = false): void {
 	mkdirSync(webRoot, { recursive: true });
 	const sources = new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
@@ -523,20 +523,63 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const webAccessPath = join(webRoot, "index.ts");
-	writePiWebAccessFixture(webRoot, "0.21.0");
+	writePiWebAccessFixture(webRoot, "0.22.0");
 	const originalSource = readFileSync(webAccessPath, "utf8");
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/expected 0\.20\.0, found 0\.21\.0/,
+		/expected 0\.21\.0, found 0\.22\.0/,
 	);
 	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
+});
+
+test("patchPiRuntimeNodeModules patches the Windows npm prefix layout", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-windows-runtime-patches-"));
+	const homeRoot = mkdtempSync(join(tmpdir(), "feynman-windows-runtime-home-"));
+	const agentDir = join(homeRoot, ".feynman", "agent");
+	const bundledPiManifestPath = join(
+		appRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"package.json",
+	);
+	const webRoot = join(
+		homeRoot,
+		".feynman",
+		"npm-global",
+		"node_modules",
+		"pi-web-access",
+	);
+	const webAccessPath = join(webRoot, "index.ts");
+	mkdirSync(dirname(bundledPiManifestPath), { recursive: true });
+	writeFileSync(
+		bundledPiManifestPath,
+		JSON.stringify({
+			name: "@earendil-works/pi-coding-agent",
+			version: "0.84.1",
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	writePiWebAccessFixture(webRoot, "0.21.0", true);
+	writeFileSync(
+		webAccessPath,
+		readFileSync(webAccessPath, "utf8").replace(
+			'pi.registerCommand("web-results",',
+			'pi.registerCommand("search",',
+		),
+		"utf8",
+	);
+
+	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir, "win32"), true);
+	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
+	assert.doesNotMatch(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("search"/);
 });
 
 test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.20.0", true);
+	writePiWebAccessFixture(webRoot, "0.21.0", true);
 	const indexPath = join(webRoot, "index.ts");
 	const pageQueryPath = join(webRoot, "page-query.ts");
 	writeFileSync(
@@ -568,7 +611,7 @@ test("patchPiRuntimeNodeModules validates the complete web patch before writing 
 test("patchPiRuntimeNodeModules validates non-model web invariants before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-non-model-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.20.0", true);
+	writePiWebAccessFixture(webRoot, "0.21.0", true);
 	const indexPath = join(webRoot, "index.ts");
 	writeFileSync(
 		indexPath,
