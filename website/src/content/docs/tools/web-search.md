@@ -56,10 +56,25 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "kagiApiKey": "kagi-...",
   "ollamaApiKey": "ollama-...",
   "pdf": {
+    "enabled": true,
     "provider": "auto",
     "datalabMode": "balanced",
     "datalabTimeoutMs": 120000
-  }
+  },
+  "summaryGenerationDeadlineMs": 30000,
+  "tools": {
+    "webSearch": { "enabled": true },
+    "sourceCheck": { "enabled": true },
+    "fetchContent": { "enabled": true },
+    "getSearchContent": { "enabled": true }
+  },
+  "commands": {
+    "websearch": { "enabled": true },
+    "curator": { "enabled": true },
+    "web-results": { "enabled": true },
+    "google-account": { "enabled": true }
+  },
+  "image": { "enabled": true }
 }
 ```
 
@@ -75,6 +90,10 @@ To route OpenAI `web_search` and `source_check` calls through a third-party gate
 
 Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store, so API keys are the recommended route.
 
+Set `enabled` to `false` for one `tools` or `commands` entry to skip that registration after restart. `webSearch.enabled: false` remains a legacy shorthand for disabling `web_search` and `source_check` when no tool-specific override exists. Feynman uses the `web-results` command key because `/search` belongs to research-session search. Set `image.enabled: false` to block direct images, video frames, and thumbnails. Set `pdf.enabled: false` to block PDF extraction.
+
+`summaryGenerationDeadlineMs` limits one curator or auto-summary model attempt. It defaults to 30,000 ms, accepts positive integers, and caps values at 600,000 ms.
+
 ## Search features
 
 The web search tool supports several capabilities that the researcher agent leverages automatically:
@@ -88,6 +107,10 @@ The web search tool supports several capabilities that the researcher agent leve
 - **Direct images** -- Retrieve PNG, JPEG, WebP, and GIF links as safely bounded inline images
 - **Passage lookup** -- Use `get_search_content` with `findText` and exact, case-insensitive, or fuzzy `findMode` matching to locate a passage in stored content without paging through the entire page
 - **Clean continuation** -- Long fetched pages report character, byte, and line totals and the exact offset for the next slice
+
+Fetched page bodies live for one hour in `~/.feynman/web-search-cache/`, beside `web-search.json`. Session JSONL stores only bounded URL metadata and a private cache reference. Custom `FEYNMAN_WEB_SEARCH_CONFIG` paths move the cache beside that exact file.
+
+For `get_search_content`, `findText` cannot be combined with `offset` or `limit`. `findMode` requires `findText`. Use one of `url`, `urlIndex`, `query`, or `queryIndex` to select stored content when the response contains multiple items.
 
 ## When it runs
 

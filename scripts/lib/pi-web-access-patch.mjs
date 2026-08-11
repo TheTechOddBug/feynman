@@ -1,8 +1,10 @@
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.20.0";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.21.0";
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
+	"feature-config.ts",
 	"page-query.ts",
+	"storage.ts",
 	"summary-model-scope.ts",
 	"summary-review.ts",
 	"exa.ts",
@@ -56,7 +58,14 @@ function rejectMarkers(source, relativePath, markers, surface) {
 }
 
 export function assertPiWebAccessPatchedSources(sources, surface = "patched source tree") {
-	for (const relativePath of ["index.ts", "page-query.ts", "summary-model-scope.ts", "summary-review.ts"]) {
+	for (const relativePath of [
+		"index.ts",
+		"feature-config.ts",
+		"page-query.ts",
+		"storage.ts",
+		"summary-model-scope.ts",
+		"summary-review.ts",
+	]) {
 		if (!sources.has(relativePath)) {
 			throw new Error(
 				`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface}: missing ${relativePath}`,
@@ -82,6 +91,16 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		['params.workflow ?? configWorkflow ?? "none"', 1],
 		["summary-review = open curator with auto summary draft (opt-in)", 1],
 		["Searches return directly by default;", 1],
+		[INDEX_COMMAND_CONFIG_PATCHED, 1],
+		[INDEX_COMMAND_GATE_TYPE_PATCHED, 1],
+		[INDEX_SEARCH_COMMAND_PATCHED, 1],
+		["summaryGenerationDeadlineMs?: unknown;", 1],
+		["export function getSummaryGenerationDeadlineMs(): number {", 1],
+		["storeFetchedContentResult(fetchId, data)", 2],
+		["storeFetchedContentResult(responseId, data)", 1],
+		['if (sourceCheckEnabled) pi.registerTool({', 1],
+		['if (fetchContentEnabled) pi.registerTool({', 1],
+		['if (getSearchContentEnabled) pi.registerTool({', 1],
 	], surface);
 	rejectMarkers(
 		indexSource,
@@ -98,6 +117,41 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 			'pi.registerCommand("search",',
 			"const response = await search(queryList[qi], {",
 			"const { answer, results, inlineContent, provider } = await search(query, {",
+			INDEX_COMMAND_CONFIG_ORIGINAL,
+			INDEX_COMMAND_GATE_TYPE_ORIGINAL,
+			INDEX_SEARCH_COMMAND_ORIGINAL,
+			'if (isCommandEnabled(initConfig, "search")) pi.registerCommand("web-results",',
+		],
+		surface,
+	);
+
+	const featureConfigSource = sources.get("feature-config.ts");
+	requireMarkerCounts(featureConfigSource, "feature-config.ts", [
+		['import { getWebSearchConfigPath } from "./utils.ts";', 1],
+		["export function isImageEnabled(): boolean {", 1],
+		["return loadFeatureConfig().image?.enabled !== false;", 1],
+		["export function canAttachImages(): boolean {", 1],
+	], surface);
+
+	const storageSource = sources.get("storage.ts");
+	requireMarkerCounts(storageSource, "storage.ts", [
+		[STORAGE_CONFIG_IMPORT_PATCHED, 1],
+		[STORAGE_PATH_IMPORT_PATCHED, 1],
+		[STORAGE_CACHE_PATH_PATCHED, 1],
+		['const FETCH_CACHE_DIR = "web-search-cache";', 1],
+		["function writeFetchCache(", 1],
+		["function readCachedFetchData(", 1],
+		["export function pruneExpiredFetchCache(", 1],
+		["export function storeFetchedContentResult(", 1],
+		["urlMetadata: metadataForUrls(data.urls)", 2],
+	], surface);
+	rejectMarkers(
+		storageSource,
+		"storage.ts",
+		[
+			STORAGE_CONFIG_IMPORT_ORIGINAL,
+			STORAGE_PATH_IMPORT_ORIGINAL,
+			STORAGE_CACHE_PATH_ORIGINAL,
 		],
 		surface,
 	);
@@ -261,6 +315,30 @@ const INDEX_CONFIG_WRITE_BLOCK_PATCHED = [
 	"\tif (!existsSync(dir)) mkdirSync(dir, { recursive: true });",
 	'\twriteFileSync(WEB_SEARCH_CONFIG_PATH, JSON.stringify(config, null, 2) + "\\n");',
 ].join("\n");
+const INDEX_COMMAND_CONFIG_ORIGINAL =
+	'commands?: Partial<Record<"websearch" | "curator" | "search" | "google-account", { enabled?: boolean }>>;';
+const INDEX_COMMAND_CONFIG_PATCHED =
+	'commands?: Partial<Record<"websearch" | "curator" | "web-results" | "google-account", { enabled?: boolean }>>;';
+const INDEX_COMMAND_GATE_TYPE_ORIGINAL =
+	'function isCommandEnabled(config: WebSearchConfig, name: "websearch" | "curator" | "search" | "google-account"): boolean {';
+const INDEX_COMMAND_GATE_TYPE_PATCHED =
+	'function isCommandEnabled(config: WebSearchConfig, name: "websearch" | "curator" | "web-results" | "google-account"): boolean {';
+const INDEX_SEARCH_COMMAND_ORIGINAL =
+	'if (isCommandEnabled(initConfig, "search")) pi.registerCommand("search",';
+const INDEX_SEARCH_COMMAND_PATCHED =
+	'if (isCommandEnabled(initConfig, "web-results")) pi.registerCommand("web-results",';
+const STORAGE_CONFIG_IMPORT_ORIGINAL =
+	'import { getWebSearchConfigDir } from "./utils.ts";';
+const STORAGE_CONFIG_IMPORT_PATCHED =
+	'import { getWebSearchConfigPath } from "./utils.ts";';
+const STORAGE_PATH_IMPORT_ORIGINAL =
+	'import { join } from "node:path";';
+const STORAGE_PATH_IMPORT_PATCHED =
+	'import { dirname, join } from "node:path";';
+const STORAGE_CACHE_PATH_ORIGINAL =
+	"return join(getWebSearchConfigDir(), FETCH_CACHE_DIR);";
+const STORAGE_CACHE_PATH_PATCHED =
+	"return join(dirname(getWebSearchConfigPath()), FETCH_CACHE_DIR);";
 
 function patchGeminiWebSource(source) {
 	let patched = source;
@@ -619,6 +697,17 @@ export function patchPiWebAccessSource(relativePath, source) {
 	}
 
 	if (relativePath === "index.ts") {
+		for (const [original, replacement] of [
+			[INDEX_COMMAND_CONFIG_ORIGINAL, INDEX_COMMAND_CONFIG_PATCHED],
+			[INDEX_COMMAND_GATE_TYPE_ORIGINAL, INDEX_COMMAND_GATE_TYPE_PATCHED],
+			[INDEX_SEARCH_COMMAND_ORIGINAL, INDEX_SEARCH_COMMAND_PATCHED],
+		]) {
+			if (patched.includes(original)) {
+				patched = patched.replace(original, replacement);
+				changed = true;
+			}
+		}
+
 		for (const staleBinding of [
 			INDEX_CONFIG_PATH_BINDING_LEGACY,
 			INDEX_CONFIG_PATH_BINDING_PARTIAL,
@@ -750,6 +839,19 @@ export function patchPiWebAccessSource(relativePath, source) {
 	if (relativePath === "index.ts" && patched.includes('pi.registerCommand("search",')) {
 		patched = patched.replace('pi.registerCommand("search",', 'pi.registerCommand("web-results",');
 		changed = true;
+	}
+
+	if (relativePath === "storage.ts") {
+		for (const [original, replacement] of [
+			[STORAGE_CONFIG_IMPORT_ORIGINAL, STORAGE_CONFIG_IMPORT_PATCHED],
+			[STORAGE_PATH_IMPORT_ORIGINAL, STORAGE_PATH_IMPORT_PATCHED],
+			[STORAGE_CACHE_PATH_ORIGINAL, STORAGE_CACHE_PATH_PATCHED],
+		]) {
+			if (patched.includes(original)) {
+				patched = patched.replace(original, replacement);
+				changed = true;
+			}
+		}
 	}
 
 	if (relativePath === "index.ts") {

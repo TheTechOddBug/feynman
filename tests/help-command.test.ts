@@ -14,6 +14,7 @@ test("Feynman help omits generic scheduler and process package commands", async 
 		"ps",
 		"schedule-prompt",
 		"search",
+		"web-results",
 		"preview",
 		"hotkeys",
 		"new",
@@ -46,6 +47,7 @@ test("Feynman help omits generic scheduler and process package commands", async 
 
 	const helpItems = selectedItems[0] ?? [];
 	assert.ok(helpItems.some((item) => item.startsWith("/search ")));
+	assert.ok(helpItems.some((item) => item.startsWith("/web-results ")));
 	assert.ok(helpItems.some((item) => item.startsWith("/preview ")));
 	assert.ok(helpItems.some((item) => item.startsWith("/hotkeys ")));
 	assert.equal(helpItems.some((item) => item.startsWith("/ps ")), false);
@@ -87,6 +89,12 @@ test("Feynman command browser omits generic scheduler and process package comman
 		{
 			name: "search",
 			description: "search command",
+			source: "extension",
+			sourceInfo: packageSourceInfo("npm:pi-session-search"),
+		},
+		{
+			name: "web-results",
+			description: "browse stored web results",
 			source: "extension",
 			sourceInfo: packageSourceInfo("npm:pi-web-access"),
 		},
@@ -149,6 +157,7 @@ test("Feynman command browser omits generic scheduler and process package comman
 	assert.ok(commandItems.some((item) => item.startsWith("/deepresearch ")));
 	assert.ok(commandItems.some((item) => item.startsWith("/tools ")));
 	assert.ok(commandItems.some((item) => item.startsWith("/search ")));
+	assert.ok(commandItems.some((item) => item.startsWith("/web-results ")));
 	assert.ok(commandItems.some((item) => item.startsWith("/preview ")));
 	assert.ok(commandItems.some((item) => item.startsWith("/hotkeys ")));
 	assert.equal(commandItems.some((item) => item.startsWith("/ps ")), false);

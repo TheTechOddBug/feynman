@@ -10,6 +10,7 @@ import {
 	type ResolvedExecutables,
 } from "../system/executables.js";
 import { getPostHogOtelEnv } from "../telemetry/posthog.js";
+import { getPiWebSearchConfigPath } from "./web-access.js";
 
 export type PiRuntimeOptions = {
 	appRoot: string;
@@ -204,7 +205,7 @@ export function buildPiEnv(
 	const feynmanNpmPrefixPath = getFeynmanNpmPrefixPath(options.feynmanAgentDir);
 	const feynmanNpmBinPath = resolve(feynmanNpmPrefixPath, "bin");
 	const feynmanCommandShimDir = getFeynmanCommandShimDir(options.feynmanAgentDir);
-	const feynmanWebSearchConfigPath = resolve(dirname(options.feynmanAgentDir), "web-search.json");
+	const feynmanWebSearchConfigPath = getPiWebSearchConfigPath();
 	const feynmanBinPath = getFeynmanCliBinPath(options.appRoot);
 
 	const currentPath = process.env.PATH ?? "";

@@ -508,8 +508,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.20.0") {
-	fail("committed runtime lock does not pin pi-web-access 0.20.0");
+if (expectedPiWebAccessVersion !== "0.21.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.21.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -865,7 +865,7 @@ requireMarkers(
 		'StringEnum(["readable", "raw", "answer"]',
 		"findText:",
 		'StringEnum(["exact", "case-insensitive", "fuzzy"]',
-		'pi.registerCommand("web-results"',
+		'if (isCommandEnabled(initConfig, "web-results")) pi.registerCommand("web-results"',
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
 		"Searches return directly by default",
@@ -874,6 +874,15 @@ requireMarkers(
 		"get scopedModels() { return ctx.scopedModels; }",
 		"modelMatchesScopedModels(model, ctx.scopedModels)",
 		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
+		"summaryGenerationDeadlineMs?: unknown;",
+		"export function getSummaryGenerationDeadlineMs(): number {",
+		"storeFetchedContentResult(fetchId, data)",
+		"storeFetchedContentResult(responseId, data)",
+		"if (sourceCheckEnabled) pi.registerTool({",
+		"if (fetchContentEnabled) pi.registerTool({",
+		"if (getSearchContentEnabled) pi.registerTool({",
+		"Cannot be combined with findText.",
+		"Requires findText.",
 	],
 );
 requireMarkerCount(
@@ -932,6 +941,37 @@ for (const staleMarker of ["loadEnabledModelPatterns", "modelMatchesEnabledPatte
 		fail(`runtime pi-web-access summary review still contains stale marker: ${staleMarker}`);
 	}
 }
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/feature-config.ts",
+	),
+	"runtime pi-web-access image gates",
+	[
+		'import { getWebSearchConfigPath } from "./utils.ts";',
+		"export function isImageEnabled(): boolean {",
+		"return loadFeatureConfig().image?.enabled !== false;",
+		"export function canAttachImages(): boolean {",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/storage.ts",
+	),
+	"runtime pi-web-access external fetched-content cache",
+	[
+		'import { getWebSearchConfigPath } from "./utils.ts";',
+		'import { dirname, join } from "node:path";',
+		'const FETCH_CACHE_DIR = "web-search-cache";',
+		"return join(dirname(getWebSearchConfigPath()), FETCH_CACHE_DIR);",
+		"function writeFetchCache(",
+		"function readCachedFetchData(",
+		"export function pruneExpiredFetchCache(",
+		"export function storeFetchedContentResult(",
+		"urlMetadata: metadataForUrls(data.urls)",
+	],
+);
 try {
 	assertPiWebAccessPatchedSources(
 		new Map(
@@ -981,9 +1021,32 @@ requireMarkers(
 	[
 		"FEYNMAN_FETCH_CACHE_DIR",
 		'join(process.cwd(), ".feynman", "cache", "fetch-content")',
+		"const enabled = pdf.enabled !== false;",
 		'import {',
 		'extractPDFViaDatalab',
 		'export type PDFProvider = "auto" | "gemini" | "datalab" | "unpdf";',
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/extract.ts",
+	),
+	"runtime pi-web-access direct image gate",
+	[
+		'import { isImageEnabled } from "./feature-config.ts";',
+		"Image fetching is disabled by image.enabled",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/video-extract.ts",
+	),
+	"runtime pi-web-access video image gate",
+	[
+		'import { canAttachImages } from "./feature-config.ts";',
+		"if (canAttachImages()) {",
 	],
 );
 requireMarkers(

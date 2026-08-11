@@ -28,6 +28,7 @@ Feynman stores user-level configuration and state under `~/.feynman/`. This dire
 ├── workbench/           # Legacy pre-org workbench location, copied forward on first access
 ├── memory/             # Feynman memory storage
 ├── web-search.json     # Web-search routing config
+├── web-search-cache/   # Private one-hour fetched-page cache
 ├── npm-global/         # User-scope optional Pi packages
 ├── bin/                # Feynman command shim used by child agents
 └── .state/             # Bootstrap and telemetry state
@@ -94,16 +95,23 @@ Example:
   "geminiApiKey": "AIza...",
   "datalabApiKey": "$DATALAB_API_KEY",
   "pdf": {
+    "enabled": true,
     "provider": "auto",
     "datalabMode": "balanced",
     "datalabTimeoutMs": 120000
-  }
+  },
+  "summaryGenerationDeadlineMs": 30000,
+  "image": { "enabled": true }
 }
 ```
 
 Gemini Web browser-cookie access is disabled by default. To opt into it, set `"geminiBrowser": true` in `web-search.json`; API-backed search is recommended for `/deepresearch`.
 
 PDF extraction uses Datalab when its key is present, then Gemini, then local PDF.js. The local parser remains available without a key.
+
+Full fetched pages live in `~/.feynman/web-search-cache/` for one hour. Session files store bounded metadata and a cache reference, not page bodies. If `FEYNMAN_WEB_SEARCH_CONFIG` names another config file, Feynman places `web-search-cache/` beside that file.
+
+`tools`, `commands`, `image`, and `pdf` entries can disable individual web features. Feynman's stored-results command key is `web-results`, while `/search` remains research-session search. `summaryGenerationDeadlineMs` defaults to 30 seconds and caps one summary attempt at 10 minutes.
 
 ## Subagent model overrides
 

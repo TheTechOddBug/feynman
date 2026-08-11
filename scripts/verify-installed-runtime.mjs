@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,7 +78,9 @@ export async function verifyRpcSurface(options = {}) {
 	let stderr = "";
 	let stdoutBuffer = "";
 	let commandsVerified = false;
+	let webCommandVerified = false;
 	let toolsVerified = false;
+	let webToolsVerified = false;
 	let schemaSummaryVerified = false;
 	let promptAccepted = false;
 	let stdinEnded = false;
@@ -123,7 +125,7 @@ export async function verifyRpcSurface(options = {}) {
 			timeout = setTimeout(() => {
 				void fail(
 					new Error(
-						`Installed RPC verification timed out. commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified}\n${stderr}`,
+						`Installed RPC verification timed out. commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified}\n${stderr}`,
 					),
 				);
 			}, verificationTimeoutMs);
@@ -141,7 +143,9 @@ export async function verifyRpcSurface(options = {}) {
 				if (
 					!stdinEnded &&
 					commandsVerified &&
+					webCommandVerified &&
 					toolsVerified &&
+					webToolsVerified &&
 					schemaSummaryVerified &&
 					promptAccepted
 				) {
@@ -170,7 +174,23 @@ export async function verifyRpcSurface(options = {}) {
 						.map((command) => command.name)
 						.sort();
 					assert.deepEqual(feynmanCommands, [...EXPECTED_FEYNMAN_COMMANDS]);
+					const webAccessCommands = commands
+						.filter((command) =>
+							normalizedPath(command.sourceInfo?.path).includes("/pi-web-access/"),
+						)
+						.map((command) => command.name)
+						.sort();
+					assert.ok(
+						webAccessCommands.includes("web-results"),
+						"Installed pi-web-access omitted /web-results",
+					);
+					assert.equal(
+						webAccessCommands.includes("search"),
+						false,
+						"Installed pi-web-access still owns the conflicting /search command",
+					);
 					commandsVerified = true;
+					webCommandVerified = true;
 					finishInput();
 					return;
 				}
@@ -181,11 +201,21 @@ export async function verifyRpcSurface(options = {}) {
 				) {
 					const options = Array.isArray(record.options) ? record.options : [];
 					assert.deepEqual(namesFromToolOptions(options), [...EXPECTED_FEYNMAN_TOOLS]);
+					const publicToolNames = new Set(
+						options.map((option) => option.split(" — ")[0]),
+					);
+					for (const name of ["web_search", "fetch_content", "get_search_content"]) {
+						assert.ok(
+							publicToolNames.has(name),
+							`Installed pi-web-access omitted ${name}`,
+						);
+					}
 					const alphaGetPaper = options.find((option) =>
 						option.startsWith("alpha_get_paper — "),
 						);
 						assert.ok(alphaGetPaper, "RPC /tools omitted alpha_get_paper");
 						toolsVerified = true;
+						webToolsVerified = true;
 						writeRecord({
 							type: "extension_ui_response",
 							id: record.id,
@@ -251,13 +281,15 @@ export async function verifyRpcSurface(options = {}) {
 					code !== 0 ||
 					signal ||
 					!commandsVerified ||
+					!webCommandVerified ||
 					!toolsVerified ||
+					!webToolsVerified ||
 					!schemaSummaryVerified ||
 					!promptAccepted
 				) {
 					void fail(
 						new Error(
-							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
+							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
 						),
 					);
 				}
@@ -269,13 +301,15 @@ export async function verifyRpcSurface(options = {}) {
 					code !== 0 ||
 					signal ||
 					!commandsVerified ||
+					!webCommandVerified ||
 					!toolsVerified ||
+					!webToolsVerified ||
 					!schemaSummaryVerified ||
 					!promptAccepted
 				) {
 					void fail(
 						new Error(
-							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} tools=${toolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
+							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
 						),
 					);
 					return;
@@ -296,6 +330,101 @@ export async function verifyRpcSurface(options = {}) {
 		});
 	} finally {
 		rmSync(home, { recursive: true, force: true });
+	}
+}
+
+export async function verifyWebAccessRegistrationGates() {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-web-gates-"));
+	const configPath = resolve(root, "custom-config", "research-web.json");
+	const extensionPath = resolve(
+		packageRoot,
+		".feynman",
+		"npm",
+		"node_modules",
+		"pi-web-access",
+		"index.ts",
+	);
+	const previousConfigPath = process.env.FEYNMAN_WEB_SEARCH_CONFIG;
+	let session;
+
+	assert.ok(existsSync(extensionPath), "Installed pi-web-access extension is missing");
+	mkdirSync(resolve(root, "custom-config"), { recursive: true });
+	writeFileSync(
+		configPath,
+		JSON.stringify({
+			tools: {
+				webSearch: { enabled: false },
+				sourceCheck: { enabled: false },
+				fetchContent: { enabled: false },
+				getSearchContent: { enabled: false },
+			},
+			commands: {
+				websearch: { enabled: false },
+				curator: { enabled: false },
+				"web-results": { enabled: false },
+				"google-account": { enabled: false },
+			},
+			image: { enabled: false },
+			pdf: { enabled: false },
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	process.env.FEYNMAN_WEB_SEARCH_CONFIG = configPath;
+
+	try {
+		const settingsManager = SettingsManager.inMemory({
+			compaction: { enabled: false },
+			retry: { enabled: false },
+			packages: [],
+		});
+		const loader = new DefaultResourceLoader({
+			cwd: root,
+			agentDir: root,
+			settingsManager,
+			additionalExtensionPaths: [extensionPath],
+			noSkills: true,
+			noPromptTemplates: true,
+			noThemes: true,
+			noContextFiles: true,
+		});
+		await loader.reload();
+		assert.deepEqual(
+			loader.getExtensions().errors,
+			[],
+			"Installed pi-web-access gate config failed to load",
+		);
+		const created = await createAgentSession({
+			cwd: root,
+			agentDir: root,
+			resourceLoader: loader,
+			sessionManager: SessionManager.inMemory(root),
+			settingsManager,
+			noTools: "builtin",
+		});
+		session = created.session;
+		const toolNames = new Set(session.getAllTools().map((tool) => tool.name));
+		for (const name of [
+			"web_search",
+			"source_check",
+			"fetch_content",
+			"get_search_content",
+		]) {
+			assert.equal(toolNames.has(name), false, `${name} ignored its registration gate`);
+		}
+		const commandNames = created.extensionsResult.extensions.flatMap((extension) => [
+			...extension.commands.keys(),
+		]);
+		for (const name of ["websearch", "curator", "web-results", "google-account"]) {
+			assert.equal(commandNames.includes(name), false, `/${name} ignored its registration gate`);
+		}
+	} finally {
+		session?.dispose();
+		if (previousConfigPath === undefined) {
+			delete process.env.FEYNMAN_WEB_SEARCH_CONFIG;
+		} else {
+			process.env.FEYNMAN_WEB_SEARCH_CONFIG = previousConfigPath;
+		}
+		rmSync(root, { recursive: true, force: true });
 	}
 }
 
@@ -461,6 +590,7 @@ export async function verifyInstalledSchemas() {
 
 async function main() {
 	await verifyRpcSurface();
+	await verifyWebAccessRegistrationGates();
 	await verifyInstalledSchemas();
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
@@ -469,6 +599,7 @@ async function main() {
 		typeboxSchemas: EXPECTED_FEYNMAN_TOOLS.length,
 		typeboxOptionalArray: "passed",
 		typeboxMalformedArguments: "rejected",
+		webAccessRegistrationGates: "passed",
 	}));
 }
 

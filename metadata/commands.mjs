@@ -60,6 +60,7 @@ export const livePackageCommandGroups = [
 		title: "Live Package Commands",
 		commands: [
 			{ name: "search", usage: "/search" },
+			{ name: "web-results", usage: "/web-results" },
 			{ name: "preview", usage: "/preview" },
 			{ name: "hotkeys", usage: "/hotkeys" },
 			{ name: "new", usage: "/new" },

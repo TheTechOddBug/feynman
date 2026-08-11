@@ -108,6 +108,7 @@ test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 	const previousPostHogHost = process.env.FEYNMAN_POSTHOG_HOST;
 	const previousPostHogProjectId = process.env.FEYNMAN_POSTHOG_PROJECT_ID;
 	const previousDoNotTrack = process.env.DO_NOT_TRACK;
+	const previousWebSearchConfig = process.env.FEYNMAN_WEB_SEARCH_CONFIG;
 	process.env.NPM_CONFIG_PREFIX = "/tmp/global-prefix";
 	process.env.npm_config_prefix = "/tmp/global-prefix-lower";
 	delete process.env.OTEL_SERVICE_NAME;
@@ -123,6 +124,7 @@ test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 	delete process.env.FEYNMAN_POSTHOG_HOST;
 	delete process.env.FEYNMAN_POSTHOG_PROJECT_ID;
 	delete process.env.DO_NOT_TRACK;
+	process.env.FEYNMAN_WEB_SEARCH_CONFIG = "/tmp/custom-web/research-web.json";
 
 	const env = buildPiEnv({
 		appRoot: "/repo/feynman",
@@ -142,6 +144,7 @@ test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 		assert.equal(env.npm_config_prefix, "/home/.feynman/npm-global");
 		assert.equal(env.FEYNMAN_CODING_AGENT_DIR, "/home/.feynman/agent");
 		assert.equal(env.PI_CODING_AGENT_DIR, "/home/.feynman/agent");
+		assert.equal(env.FEYNMAN_WEB_SEARCH_CONFIG, "/tmp/custom-web/research-web.json");
 		assert.equal(env.FEYNMAN_POSTHOG_HOST, "https://us.i.posthog.com");
 		assert.match(env.FEYNMAN_POSTHOG_KEY ?? "", /^phc_/);
 		assert.equal(env.FEYNMAN_POSTHOG_PROJECT_ID, "479027");
@@ -238,6 +241,11 @@ test("buildPiEnv wires Feynman paths into the Pi environment", () => {
 			delete process.env.DO_NOT_TRACK;
 		} else {
 			process.env.DO_NOT_TRACK = previousDoNotTrack;
+		}
+		if (previousWebSearchConfig === undefined) {
+			delete process.env.FEYNMAN_WEB_SEARCH_CONFIG;
+		} else {
+			process.env.FEYNMAN_WEB_SEARCH_CONFIG = previousWebSearchConfig;
 		}
 	}
 });
