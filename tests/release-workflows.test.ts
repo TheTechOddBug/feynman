@@ -156,18 +156,18 @@ test("package gates exercise the global npm install path", () => {
 	assert.match(publishWorkflow, /"@companion-ai\/feynman@\$VERSION"/);
 });
 
-test("package consumer matrices allow bounded Windows global-install time", () => {
+test("package consumer matrices allow two slow Windows package installs", () => {
 	const candidateConsumerJob = e2eWorkflow.match(
 		/\n  supported-node-consumers-pr:[\s\S]*?(?=\n  windows-native-installer-pr:)/,
 	);
 	assert.ok(candidateConsumerJob, "PR workflow must define the candidate consumer job");
-	assert.match(candidateConsumerJob[0], /\n    timeout-minutes: 60\n/);
+	assert.match(candidateConsumerJob[0], /\n    timeout-minutes: 90\n/);
 
 	const releaseConsumerJob = publishWorkflow.match(
 		/\n  verify-package-consumers:[\s\S]*?(?=\n  publish-npm:)/,
 	);
 	assert.ok(releaseConsumerJob, "publish workflow must define the package consumer job");
-	assert.match(releaseConsumerJob[0], /\n    timeout-minutes: 60\n/);
+	assert.match(releaseConsumerJob[0], /\n    timeout-minutes: 90\n/);
 });
 
 test("publish uses the exact verified tarball after native bundles pass", () => {
