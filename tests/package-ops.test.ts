@@ -436,7 +436,7 @@ test("reconcileManagedCorePackageInstalls leaves stale state intact when the bun
 	assert.equal(readInstalledPackageVersion(managedPackagePath), "0.21.0");
 });
 
-test("reconcileManagedCorePackageInstalls preserves a usable custom prefix copy", () => {
+test("reconcileManagedCorePackageInstalls replaces a stale usable prefix copy", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const agentDir = resolve(root, "agent");
 	const appRoot = resolve(root, "app");
@@ -450,9 +450,30 @@ test("reconcileManagedCorePackageInstalls preserves a usable custom prefix copy"
 	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.22.0");
 	createInstalledPackage(globalPackagePath, "pi-web-access", "0.21.0");
 
-	assert.deepEqual(reconcileManagedCorePackageInstalls(agentDir, appRoot), []);
-	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.21.0");
-	assert.equal(readInstalledPackageVersion(managedPackagePath), "0.21.0");
+	assert.deepEqual(reconcileManagedCorePackageInstalls(agentDir, appRoot), [packageSource]);
+	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.22.0");
+	assert.equal(existsSync(managedPackagePath), false);
+});
+
+test("reconcileManagedCorePackageInstalls preserves a usable current prefix copy", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
+	const agentDir = resolve(root, "agent");
+	const appRoot = resolve(root, "app");
+	const packageSource = "npm:pi-web-access@0.22.0";
+	const bundledPackagePath = resolve(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
+	const globalPackagePath = resolve(root, "npm-global", "lib", "node_modules", "pi-web-access");
+	const managedPackagePath = resolve(agentDir, "npm", "node_modules", "pi-web-access");
+
+	writeSettings(agentDir, { packages: [packageSource] });
+	createInstalledManagedPackage(agentDir, "pi-web-access", "0.21.0");
+	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.22.0");
+	createInstalledPackage(globalPackagePath, "pi-web-access", "0.22.0");
+	writeFileSync(resolve(globalPackagePath, "custom-marker"), "preserve\n", "utf8");
+
+	assert.deepEqual(reconcileManagedCorePackageInstalls(agentDir, appRoot), [packageSource]);
+	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.22.0");
+	assert.equal(readFileSync(resolve(globalPackagePath, "custom-marker"), "utf8"), "preserve\n");
+	assert.equal(existsSync(managedPackagePath), false);
 });
 
 test("updateConfiguredPackages updates the managed package root Pi actually resolves", async () => {

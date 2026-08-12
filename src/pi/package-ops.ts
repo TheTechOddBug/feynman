@@ -244,10 +244,11 @@ export function reconcileManagedCorePackageInstalls(
 	let manifestChanged = false;
 	let lockChanged = false;
 
-	const bundledSources = new Set(seedBundledWorkspacePackages(agentDir, appRoot, managedSources));
-	for (const source of managedSources) {
+	const managedPackages = managedSources.map((source) => {
 		const parsed = parseNpmSource(source);
-		if (!parsed?.exactVersion) continue;
+		if (!parsed?.exactVersion) {
+			throw new Error(`Managed package source must use an exact version: ${source}`);
+		}
 		const bundledPackagePath = resolve(bundledNodeModulesRoot, parsed.name);
 		const bundledVersion = readInstalledNpmVersion(bundledPackagePath);
 		if (bundledVersion !== parsed.exactVersion) {
@@ -255,9 +256,33 @@ export function reconcileManagedCorePackageInstalls(
 				`Bundled package ${parsed.name} must match ${source}; found ${bundledVersion ?? "missing"}`,
 			);
 		}
+		return { source, parsed, bundledPackagePath };
+	});
 
-		if (!bundledSources.has(source)) continue;
+	const globalNodeModulesRoot = getFeynmanNpmGlobalNodeModulesPath(agentDir);
+	for (const { parsed } of managedPackages) {
+		const globalPackagePath = resolve(globalNodeModulesRoot, parsed.name);
+		if (readInstalledNpmVersion(globalPackagePath) === parsed.exactVersion) continue;
+		try {
+			lstatSync(globalPackagePath);
+			rmSync(globalPackagePath, { recursive: true, force: true });
+			removeEmptyScopeDirectory(globalPackagePath, parsed.name, globalNodeModulesRoot);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw error;
+			}
+		}
+	}
+	seedBundledWorkspacePackages(agentDir, appRoot, managedSources);
 
+	for (const { source, parsed } of managedPackages) {
+		const globalPackagePath = resolve(globalNodeModulesRoot, parsed.name);
+		if (
+			readInstalledNpmVersion(globalPackagePath) !== parsed.exactVersion
+			|| !installedPackageLooksUsable(globalPackagePath, globalNodeModulesRoot)
+		) {
+			throw new Error(`Failed to reconcile managed package ${source} from the bundled runtime`);
+		}
 		const shadowingPackagePath = resolve(managedNodeModulesRoot, parsed.name);
 		try {
 			lstatSync(shadowingPackagePath);
