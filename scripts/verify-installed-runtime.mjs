@@ -439,6 +439,13 @@ export async function verifyInstalledSchemas() {
 	let inventorySession;
 	let probeSession;
 	const faux = registerFauxProvider();
+	const modelRuntime = {
+		hasConfiguredAuth: () => true,
+		checkAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+		getAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+		isUsingOAuth: () => false,
+		streamSimple,
+	};
 
 	try {
 		const inventoryLoader = new DefaultResourceLoader({
@@ -460,6 +467,8 @@ export async function verifyInstalledSchemas() {
 		const inventory = await createAgentSession({
 			cwd: root,
 			agentDir: root,
+			modelRuntime,
+			model: faux.getModel(),
 			resourceLoader: inventoryLoader,
 			sessionManager: SessionManager.inMemory(root),
 			settingsManager,
@@ -492,6 +501,27 @@ export async function verifyInstalledSchemas() {
 				.sort(),
 			[...EXPECTED_FEYNMAN_COMMANDS],
 		);
+		faux.setResponses([
+			(context) => {
+				const localDate = new Date();
+				const expectedDate = [
+					localDate.getFullYear(),
+					String(localDate.getMonth() + 1).padStart(2, "0"),
+					String(localDate.getDate()).padStart(2, "0"),
+				].join("-");
+				assert.match(
+					context.systemPrompt,
+					new RegExp(`The current date is ${expectedDate.replaceAll("-", "\\-")}\\.`),
+					"Installed extension omitted the current local date from the model-visible system prompt",
+				);
+				assert.match(context.systemPrompt, /verify against current sources/i);
+				assert.match(context.systemPrompt, /Do not reject evidence only because its date is later than your training data/i);
+				return fauxAssistantMessage("date context verified");
+			},
+		]);
+		await inventorySession.prompt("verify installed date context", {
+			expandPromptTemplates: false,
+		});
 		const alphaGetPaper = installedTools.find((tool) => tool.name === "alpha_get_paper");
 		assert.ok(alphaGetPaper, "Installed extension omitted alpha_get_paper");
 		let observedArguments;
@@ -526,13 +556,6 @@ export async function verifyInstalledSchemas() {
 			),
 			fauxAssistantMessage("done"),
 		]);
-		const modelRuntime = {
-			hasConfiguredAuth: () => true,
-			checkAuth: async () => ({ auth: { apiKey: "faux-key" } }),
-			getAuth: async () => ({ auth: { apiKey: "faux-key" } }),
-			isUsingOAuth: () => false,
-			streamSimple,
-		};
 		const probe = await createAgentSession({
 			cwd: root,
 			agentDir: root,

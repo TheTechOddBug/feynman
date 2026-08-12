@@ -7,7 +7,7 @@ import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-codin
 import { valid as validSemver } from "semver";
 
 import { resolveAdjacentNpmCommand } from "../../scripts/lib/npm-command.mjs";
-import { NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
+import { CORE_PACKAGE_SOURCES, NATIVE_PACKAGE_SOURCES, supportsNativePackageSources } from "./package-presets.js";
 
 export { resolveAdjacentNpmCommand };
 import {
@@ -178,6 +178,123 @@ function dedupeNpmSources(sources: string[], updateToLatest: boolean): string[] 
 function parseNpmSpecName(spec: string): string {
 	const match = spec.match(/^(@?[^@]+(?:\/[^@]+)?)(?:@.+)?$/);
 	return match?.[1] ?? spec;
+}
+
+function readJsonRecord(path: string): Record<string, unknown> | undefined {
+	try {
+		const parsed = JSON.parse(readFileSync(path, "utf8"));
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+			? parsed as Record<string, unknown>
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function readDependencyRecord(record: Record<string, unknown> | undefined): Record<string, string> {
+	const dependencies = record?.dependencies;
+	if (!dependencies || typeof dependencies !== "object" || Array.isArray(dependencies)) {
+		return {};
+	}
+	return Object.fromEntries(
+		Object.entries(dependencies).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+	);
+}
+
+function configuredPackageSource(entry: unknown): string | undefined {
+	if (typeof entry === "string") return entry;
+	if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+	const source = (entry as { source?: unknown }).source;
+	return typeof source === "string" ? source : undefined;
+}
+
+export function reconcileManagedCorePackageInstalls(
+	agentDir: string,
+	appRoot: string = APP_ROOT,
+): string[] {
+	const settings = readJsonRecord(resolve(agentDir, "settings.json"));
+	const configuredSources = Array.isArray(settings?.packages)
+		? settings.packages.map(configuredPackageSource).filter((source): source is string => Boolean(source))
+		: [];
+	const currentSources = new Set<string>(CORE_PACKAGE_SOURCES);
+	const managedSources = [...new Set(configuredSources.filter((source) => currentSources.has(source)))];
+	if (managedSources.length === 0) {
+		return [];
+	}
+
+	const managedInstallRoot = resolve(agentDir, "npm");
+	const managedNodeModulesRoot = resolve(managedInstallRoot, "node_modules");
+	const bundledNodeModulesRoot = resolve(appRoot, ".feynman", "npm", "node_modules");
+	if (!existsSync(bundledNodeModulesRoot)) {
+		return [];
+	}
+	const managedManifestPath = resolve(managedInstallRoot, "package.json");
+	const managedLockPath = resolve(managedInstallRoot, "package-lock.json");
+	const managedManifest = readJsonRecord(managedManifestPath);
+	const managedLock = readJsonRecord(managedLockPath);
+	const manifestDependencies = readDependencyRecord(managedManifest);
+	const managedLockPackages = managedLock?.packages && typeof managedLock.packages === "object"
+		? managedLock.packages as Record<string, unknown>
+		: undefined;
+	const managedLockRoot = managedLockPackages?.[""] && typeof managedLockPackages[""] === "object"
+		? managedLockPackages[""] as Record<string, unknown>
+		: undefined;
+	const managedLockRootDependencies = readDependencyRecord(managedLockRoot);
+	const reconciled: string[] = [];
+	let manifestChanged = false;
+	let lockChanged = false;
+
+	const bundledSources = new Set(seedBundledWorkspacePackages(agentDir, appRoot, managedSources));
+	for (const source of managedSources) {
+		const parsed = parseNpmSource(source);
+		if (!parsed?.exactVersion) continue;
+		const bundledPackagePath = resolve(bundledNodeModulesRoot, parsed.name);
+		const bundledVersion = readInstalledNpmVersion(bundledPackagePath);
+		if (bundledVersion !== parsed.exactVersion) {
+			throw new Error(
+				`Bundled package ${parsed.name} must match ${source}; found ${bundledVersion ?? "missing"}`,
+			);
+		}
+
+		if (!bundledSources.has(source)) continue;
+
+		const shadowingPackagePath = resolve(managedNodeModulesRoot, parsed.name);
+		try {
+			lstatSync(shadowingPackagePath);
+			rmSync(shadowingPackagePath, { recursive: true, force: true });
+			removeEmptyScopeDirectory(shadowingPackagePath, parsed.name, managedNodeModulesRoot);
+			reconciled.push(source);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw error;
+			}
+		}
+
+		if (managedManifest && parsed.name in manifestDependencies) {
+			delete manifestDependencies[parsed.name];
+			managedManifest.dependencies = manifestDependencies;
+			manifestChanged = true;
+		}
+
+		if (managedLockRoot && parsed.name in managedLockRootDependencies) {
+			delete managedLockRootDependencies[parsed.name];
+			managedLockRoot.dependencies = managedLockRootDependencies;
+			lockChanged = true;
+		}
+		const packageLockKey = `node_modules/${parsed.name}`;
+		if (managedLockPackages && packageLockKey in managedLockPackages) {
+			delete managedLockPackages[packageLockKey];
+			lockChanged = true;
+		}
+	}
+
+	if (manifestChanged && managedManifest) {
+		writeFileSync(managedManifestPath, JSON.stringify(managedManifest, null, 2) + "\n", "utf8");
+	}
+	if (lockChanged && managedLock) {
+		writeFileSync(managedLockPath, JSON.stringify(managedLock, null, 2) + "\n", "utf8");
+	}
+	return reconciled;
 }
 
 function isPiRuntimePackageName(packageName: string): boolean {

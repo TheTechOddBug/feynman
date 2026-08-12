@@ -15,6 +15,7 @@ import {
 	listOptionalPackagePresets,
 	NATIVE_PACKAGE_SOURCES,
 	normalizeOptionalPackagePresetName,
+	reconcileManagedCorePackageSources,
 	resolvePackageUpdateSources,
 	shouldPruneLegacyDefaultPackages,
 	supportsNativePackageSources,
@@ -227,6 +228,130 @@ test("bundled settings and package-list defaults use the same current core packa
 		"npm:pi-web-access@0.22.0",
 		"npm:pi-otel@0.1.0",
 	]);
+});
+
+test("normalizeFeynmanSettings pins managed package names and preserves custom packages", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-settings-"));
+	const settingsPath = join(root, "settings.json");
+	const bundledSettingsPath = join(root, "bundled-settings.json");
+	const authPath = join(root, "auth.json");
+	const customPackage = {
+		source: "npm:@samfp/pi-memory@1.2.3",
+		autoload: false,
+		skills: ["skills/memory/SKILL.md"],
+	};
+
+	writeFileSync(
+		settingsPath,
+		JSON.stringify({
+			packages: [
+				"npm:@companion-ai/alpha-hub",
+				"npm:pi-subagents",
+				"npm:pi-docparser",
+				"npm:pi-web-access",
+				customPackage,
+			],
+		}, null, 2) + "\n",
+		"utf8",
+	);
+	writeFileSync(bundledSettingsPath, "{}\n", "utf8");
+	writeFileSync(authPath, "{}\n", "utf8");
+
+	await normalizeFeynmanSettings(settingsPath, bundledSettingsPath, "medium", authPath);
+
+	const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as { packages?: unknown[] };
+	assert.deepEqual(settings.packages, [
+		CORE_PACKAGE_SOURCES[0],
+		CORE_PACKAGE_SOURCES[1],
+		CORE_PACKAGE_SOURCES[3],
+		CORE_PACKAGE_SOURCES[4],
+		customPackage,
+		CORE_PACKAGE_SOURCES[2],
+		CORE_PACKAGE_SOURCES[5],
+	]);
+});
+
+test("managed package reconciliation updates stale sources without changing custom selectors", () => {
+	const custom = { source: "npm:@samfp/pi-memory@next", autoload: false };
+	assert.deepEqual(
+		reconcileManagedCorePackageSources([
+			"npm:pi-web-access@0.21.0",
+			"npm:pi-subagents",
+			custom,
+		]),
+		[
+			"npm:pi-web-access@0.22.0",
+			"npm:pi-subagents@0.40.0",
+			custom,
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
+});
+
+test("managed package reconciliation updates every previously shipped package pin", () => {
+	assert.deepEqual(
+		reconcileManagedCorePackageSources([
+			"npm:pi-subagents@0.37.0",
+			"npm:pi-web-access@0.14.0",
+		]),
+		[
+			"npm:pi-subagents@0.40.0",
+			"npm:pi-web-access@0.22.0",
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
+	assert.deepEqual(
+		reconcileManagedCorePackageSources(["npm:pi-web-access@0.18.0"]),
+		[
+			"npm:pi-web-access@0.22.0",
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-subagents@0.40.0",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
+});
+
+test("managed package reconciliation preserves an explicit custom core selector without adding a duplicate", () => {
+	const custom = { source: "npm:pi-web-access@next", autoload: false };
+	assert.deepEqual(
+		reconcileManagedCorePackageSources([
+			"npm:pi-subagents",
+			custom,
+		]),
+		[
+			"npm:pi-subagents@0.40.0",
+			custom,
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
+});
+
+test("managed package reconciliation preserves a custom core string selector", () => {
+	assert.deepEqual(
+		reconcileManagedCorePackageSources([
+			"npm:pi-subagents",
+			"npm:pi-web-access@next",
+		]),
+		[
+			"npm:pi-subagents@0.40.0",
+			"npm:pi-web-access@next",
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
 });
 
 test("normalizeFeynmanSettings upgrades the 0.3.6 pinned core package set", async () => {
