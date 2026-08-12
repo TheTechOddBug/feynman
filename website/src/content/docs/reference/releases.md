@@ -9,6 +9,22 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.20 - 2026-08-12
+
+### Current research
+
+- Added the local current date to parent research turns and `researcher` child sessions.
+- Required current-source checks for recent claims and stopped models from rejecting valid post-training data by date alone.
+
+### Package reliability
+
+- Reconciled Feynman-managed package sources to the exact bundled versions before launch.
+- Removed stale managed shadow installs while preserving custom package selectors, package filters, and optional packages.
+
+### Validation
+
+- Added clean stale-settings, stale-install, broken-symlink, custom-package, and installed model-context regressions.
+
 ## v0.3.19 - 2026-08-11
 
 ### Web research

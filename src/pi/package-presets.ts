@@ -176,6 +176,24 @@ function buildCorePackageUpdateAliases(): Record<string, string> {
 }
 
 const CORE_PACKAGE_UPDATE_ALIASES = buildCorePackageUpdateAliases();
+const MANAGED_CORE_PACKAGE_SOURCES = new Set<string>([
+	...UNPINNED_CORE_PACKAGE_SOURCES,
+	...LEGACY_PREVIOUS_CORE_PACKAGE_SOURCES,
+	...PREVIOUS_CORE_PACKAGE_SOURCES,
+	...RECENT_CORE_PACKAGE_SOURCES,
+	...PREVIOUS_RELEASE_CORE_PACKAGE_SOURCES,
+	...CURRENT_RELEASE_CORE_PACKAGE_SOURCES,
+	"npm:pi-subagents@0.37.0",
+	"npm:pi-web-access@0.14.0",
+	"npm:pi-web-access@0.18.0",
+	"npm:pi-web-access@0.21.0",
+	...CORE_PACKAGE_SOURCES,
+]);
+const MANAGED_CORE_PACKAGE_NAMES = new Set(
+	[...MANAGED_CORE_PACKAGE_SOURCES]
+		.map(parseNpmPackageName)
+		.filter((name): name is string => Boolean(name)),
+);
 
 const REMOVED_OPTIONAL_PACKAGE_TARGETS = new Set([
 	"all-extras",
@@ -394,6 +412,61 @@ export function shouldPruneLegacyDefaultPackages(packages: PackageSource[] | und
 	return LEGACY_DEFAULT_PACKAGE_SETS.some((legacySources) =>
 		arraysMatchAsSets(packages as string[], legacySources),
 	) || arraysMatchAsSets(packages as string[], LEGACY_DEFAULT_PACKAGE_SOURCES);
+}
+
+export function reconcileManagedCorePackageSources(packages: PackageSource[]): PackageSource[] {
+	const reconciled: PackageSource[] = [];
+	const managedNames = new Set<string>();
+	const configuredNames = new Set(
+		packages
+			.map((entry) => parseNpmPackageName(typeof entry === "string" ? entry : entry.source))
+			.filter((name): name is string => Boolean(name)),
+	);
+	const customCoreNames = new Set(
+		packages
+			.map((entry) => typeof entry === "string" ? entry : entry.source)
+			.filter((source) => !MANAGED_CORE_PACKAGE_SOURCES.has(source))
+			.map(parseNpmPackageName)
+			.filter((name): name is string => {
+				if (!name) return false;
+				return MANAGED_CORE_PACKAGE_NAMES.has(name);
+			}),
+	);
+	let foundManagedSource = false;
+	for (const entry of packages) {
+		const source = typeof entry === "string" ? entry : entry.source;
+		const packageName = parseNpmPackageName(source);
+		const currentSource = packageName
+			? CORE_PACKAGE_UPDATE_ALIASES[packageName.toLowerCase()]
+			: undefined;
+		if (
+			!currentSource
+			|| !packageName
+			|| !MANAGED_CORE_PACKAGE_NAMES.has(packageName)
+			|| !MANAGED_CORE_PACKAGE_SOURCES.has(source)
+		) {
+			reconciled.push(entry);
+			continue;
+		}
+		if (customCoreNames.has(packageName)) continue;
+		foundManagedSource = true;
+		if (managedNames.has(packageName!)) continue;
+		managedNames.add(packageName!);
+		if (typeof entry === "string") {
+			reconciled.push(currentSource);
+			continue;
+		}
+		reconciled.push(source === currentSource ? entry : { ...entry, source: currentSource });
+	}
+
+	if (foundManagedSource) {
+		for (const source of CORE_PACKAGE_SOURCES) {
+			const packageName = parseNpmPackageName(source)!;
+			if (managedNames.has(packageName) || configuredNames.has(packageName)) continue;
+			reconciled.push(source);
+		}
+	}
+	return reconciled;
 }
 
 function parseNodeMajor(version: string): number {

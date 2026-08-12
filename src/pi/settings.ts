@@ -3,7 +3,12 @@ import { dirname } from "node:path";
 
 import type { ModelRegistry, ModelRuntime, PackageSource } from "@earendil-works/pi-coding-agent";
 
-import { CORE_PACKAGE_SOURCES, filterPackageSourcesForCurrentNode, shouldPruneLegacyDefaultPackages } from "./package-presets.js";
+import {
+	CORE_PACKAGE_SOURCES,
+	filterPackageSourcesForCurrentNode,
+	reconcileManagedCorePackageSources,
+	shouldPruneLegacyDefaultPackages,
+} from "./package-presets.js";
 import { choosePreferredModelRecord, getAvailableModelRecords, isProClassModelSpec } from "../model/catalog.js";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -175,7 +180,9 @@ export async function normalizeFeynmanSettings(
 	} else if (shouldPruneLegacyDefaultPackages(settings.packages as PackageSource[])) {
 		settings.packages = supportedCorePackages;
 	} else {
-		settings.packages = filterConfiguredPackagesForCurrentNode(settings.packages as PackageSource[]);
+		settings.packages = filterConfiguredPackagesForCurrentNode(
+			reconcileManagedCorePackageSources(settings.packages as PackageSource[]),
+		);
 	}
 	ensureResearcherExtension(settings, runtime.researchToolsExtensionPath);
 

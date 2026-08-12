@@ -27,7 +27,11 @@ import { verifyAlphaAuthStatus } from "./alpha-auth-status.js";
 import { syncBundledAssets } from "./bootstrap/sync.js";
 import { ensureFeynmanHome, getDefaultSessionDir, getFeynmanAgentDir, getFeynmanHome } from "./config/paths.js";
 import { launchPiChat } from "./pi/launch.js";
-import { installPackageSources, updateConfiguredPackages } from "./pi/package-ops.js";
+import {
+	installPackageSources,
+	reconcileManagedCorePackageInstalls,
+	updateConfiguredPackages,
+} from "./pi/package-ops.js";
 import { MAX_NATIVE_PACKAGE_NODE_MAJOR } from "./pi/package-presets.js";
 import {
 	CORE_PACKAGE_SOURCES,
@@ -985,6 +989,7 @@ async function runMain(input: { here: string; appRoot: string; feynmanVersion: s
 	await normalizeFeynmanSettings(feynmanSettingsPath, bundledSettingsPath, defaultThinkingLevel, feynmanAuthPath, {
 		researchToolsExtensionPath,
 	});
+	reconcileManagedCorePackageInstalls(feynmanAgentDir, appRoot);
 
 	if (values.doctor) {
 		await runDoctor({
