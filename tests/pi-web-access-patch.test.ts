@@ -17,7 +17,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.21.0",
+	"pi-web-access-0.22.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
@@ -49,8 +49,10 @@ test("package artifact verification checks every pi-web-access patch target", ()
 		/"const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);"/,
 	);
 	assert.match(source, /npm\/node_modules\/pi-web-access\/duckduckgo\.ts/);
+	assert.match(source, /npm\/node_modules\/pi-web-access\/bocha\.ts/);
 	assert.match(source, /npm\/node_modules\/pi-web-access\/datalab-pdf-extract\.ts/);
 	assert.match(source, /export async function searchWithDuckDuckGo/);
+	assert.match(source, /export async function searchWithBocha/);
 	assert.match(source, /export async function extractPDFViaDatalab/);
 	assert.match(source, /storeFetchedContentResult/);
 	assert.match(source, /summaryGenerationDeadlineMs/);
@@ -168,6 +170,11 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 		patchPiWebAccessSources(patchedSources, "exact fixture second pass"),
 		patchedSources,
 	);
+	const geminiSearchSource = patchedSources.get("gemini-search.ts") ?? "";
+	assert.match(indexSource, /maxInlineContentChars\?: unknown;/);
+	assert.match(indexSource, /const MAX_INLINE_CONTENT_CHARS = 200_000;/);
+	assert.match(indexSource, /bocha: isBochaAvailable\(\),/);
+	assert.match(geminiSearchSource, /searchWithBocha\(query, options\)/);
 });
 
 test("patchPiWebAccessSources repairs partial config-path patch state", () => {
@@ -576,11 +583,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.21.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.21.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.22.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.22.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.22.0", "future"),
-		/expected 0\.21\.0, found 0\.22\.0/,
+		() => assertPiWebAccessVersion("0.23.0", "future"),
+		/expected 0\.22\.0, found 0\.23\.0/,
 	);
 
 	const futureSource = [
@@ -600,14 +607,14 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.21\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.22\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });
 
 test("patchPiWebAccessSource bounds web_search query calls with a deadline in index.ts", () => {
 	const input = [
-		"const MAX_INLINE_CONTENT = 30000; // Content returned directly to agent",
+		"const DEFAULT_MAX_INLINE_CONTENT_CHARS = 30_000;",
 		"",
 		"async function run() {",
 		"\t\t\t\t\tconst response = await search(queryList[qi], {",

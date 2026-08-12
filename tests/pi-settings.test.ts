@@ -224,7 +224,7 @@ test("bundled settings and package-list defaults use the same current core packa
 		"npm:pi-subagents@0.40.0",
 		"npm:pi-btw@0.4.1",
 		"npm:pi-docparser@4.0.0",
-		"npm:pi-web-access@0.21.0",
+		"npm:pi-web-access@0.22.0",
 		"npm:pi-otel@0.1.0",
 	]);
 });
@@ -560,7 +560,7 @@ test("package update sources map core and optional aliases", () => {
 	assert.deepEqual(resolvePackageUpdateSources("pi-subagents"), ["npm:pi-subagents@0.40.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("subagents"), ["npm:pi-subagents@0.40.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("npm:pi-subagents"), ["npm:pi-subagents@0.40.0"]);
-	assert.deepEqual(resolvePackageUpdateSources("pi-web-access"), ["npm:pi-web-access@0.21.0"]);
+	assert.deepEqual(resolvePackageUpdateSources("pi-web-access"), ["npm:pi-web-access@0.22.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("alpha-hub"), ["npm:@companion-ai/alpha-hub@0.1.3"]);
 	assert.deepEqual(resolvePackageUpdateSources("npm:pi-subagents@0.37.2"), ["npm:pi-subagents@0.37.2"]);
 	assert.deepEqual(resolvePackageUpdateSources("hindsight"), ["npm:@luxusai/pi-hindsight"]);

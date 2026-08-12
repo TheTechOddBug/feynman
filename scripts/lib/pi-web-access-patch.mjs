@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.21.0";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.22.0";
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
@@ -234,6 +233,20 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		],
 		surface,
 	);
+	requireMarkerCounts(geminiSearchSource, "gemini-search.ts", [
+		['import { isBochaAvailable, searchWithBocha } from "./bocha.ts";', 1],
+		['if (provider === "bocha") return { ...(await searchWithBocha(query, options)), provider };', 1],
+		['if (isBochaAvailable()) {', 1],
+	], surface);
+
+	requireMarkerCounts(indexSource, "index.ts", [
+		["maxInlineContentChars?: unknown;", 1],
+		["const DEFAULT_MAX_INLINE_CONTENT_CHARS = 30_000;", 1],
+		["const MAX_INLINE_CONTENT_CHARS = 200_000;", 1],
+		["function getMaxInlineContentChars(): number {", 1],
+		["const maxInlineContentChars = getMaxInlineContentChars();", 2],
+		["bocha: isBochaAvailable(),", 1],
+	], surface);
 
 	const geminiConfigSource = sources.get("gemini-web-config.ts");
 	requireMarkerCounts(geminiConfigSource, "gemini-web-config.ts", [
@@ -349,13 +362,8 @@ const STORAGE_CACHE_PATH_ORIGINAL =
 	"return join(getWebSearchConfigDir(), FETCH_CACHE_DIR);";
 const STORAGE_CACHE_PATH_PATCHED =
 	"return join(dirname(getWebSearchConfigPath()), FETCH_CACHE_DIR);";
-const STORAGE_BASELINE_SHA256 = "2b68eb94480e5d4eaae45c83838e5a7c4669bcc57f15726facf71b73e5ccd728";
-const STORAGE_CONFIG_PATCHED_SHA256 = "8c6e8b4e998dcedb9715687b8844f5ffa56bb253e3e74cea99a30edeae308279";
-const STORAGE_HARDENED_SHA256 = "bb35632af112b7dcbaf6d998d0b54799f8c9a32cd9b8bfce28c3607ed2b8b90a";
-const STORAGE_HARDENED_SOURCE = readFileSync(
-	new URL("./pi-web-access-0.21.0-storage.patched.ts", import.meta.url),
-	"utf8",
-);
+const STORAGE_BASELINE_SHA256 = "89ee6ff204ceb108a7d619f4a207819f774bd829a7f80d6ccd1a780009ea012f";
+const STORAGE_CONFIG_PATCHED_SHA256 = "471c9bf444b48775e9571c53f447e222f1b19b0185efdacab6058d6be7e77a2b";
 const INDEX_SINGLE_FETCH_ERROR_ORIGINAL =
 	'content: [{ type: "text", text: `Error: ${result.error}` }],';
 const INDEX_SINGLE_FETCH_ERROR_PATCHED =
@@ -370,22 +378,10 @@ const INDEX_SINGLE_FETCH_CONTENT_PATCHED = [
 	INDEX_SINGLE_FETCH_CONTENT_ANCHOR,
 ].join("\n");
 
-function sha256(source) {
-	return createHash("sha256").update(source.replace(/\r\n/g, "\n")).digest("hex");
-}
-
 function patchFetchCacheStorageSource(source) {
-	const templateDigest = sha256(STORAGE_HARDENED_SOURCE);
-	if (templateDigest !== STORAGE_HARDENED_SHA256) {
-		throw new Error(
-			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} cache hardening template: expected ${STORAGE_HARDENED_SHA256}, found ${templateDigest}`,
-		);
-	}
-
-	const sourceDigest = sha256(source);
-	if (sourceDigest === STORAGE_HARDENED_SHA256) {
-		return { source, changed: false };
-	}
+	const sourceDigest = createHash("sha256")
+		.update(source.replace(/\r\n/g, "\n"))
+		.digest("hex");
 	if (
 		sourceDigest !== STORAGE_BASELINE_SHA256 &&
 		sourceDigest !== STORAGE_CONFIG_PATCHED_SHA256
@@ -394,7 +390,7 @@ function patchFetchCacheStorageSource(source) {
 			`Unsupported pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} storage layout: expected ${STORAGE_BASELINE_SHA256} or ${STORAGE_CONFIG_PATCHED_SHA256}, found ${sourceDigest}`,
 		);
 	}
-	return { source: STORAGE_HARDENED_SOURCE, changed: true };
+	return { source, changed: false };
 }
 
 function patchGeminiWebSource(source) {
@@ -589,7 +585,7 @@ function patchWebSearchHangSource(source) {
 	let patched = source;
 	let changed = false;
 
-	const helperAnchor = "const MAX_INLINE_CONTENT = 30000; // Content returned directly to agent";
+	const helperAnchor = "const DEFAULT_MAX_INLINE_CONTENT_CHARS = 30_000;";
 	if (!patched.includes("function searchWithDeadline(") && patched.includes(helperAnchor)) {
 		patched = patched.replace(helperAnchor, `${SEARCH_DEADLINE_HELPER}\n\n${helperAnchor}`);
 		changed = true;

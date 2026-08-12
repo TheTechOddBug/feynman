@@ -6,6 +6,22 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.19 - 2026-08-11
+
+### Web research
+
+- Updated `pi-web-access` to `0.22.0`. Researchers can use Bocha as a configured search route.
+- Added `maxInlineContentChars` for larger fetched-page and stored-content slices. The default remains 30,000 characters, with a 200,000-character cap.
+
+### Reliability
+
+- Adopted upstream fetched-content cache hardening and removed Feynman's temporary storage replacement.
+- Preserved Feynman's exact config path, private cache location, model scope, browser-cookie opt-in, raw-result default, and 90-second primary-search deadline.
+
+### Validation
+
+- Added exact-source gates for Bocha routing, configurable content limits, cache hardening, and the full Feynman patch set.
+
 ## v0.3.18 - 2026-08-11
 
 ### Research agents
