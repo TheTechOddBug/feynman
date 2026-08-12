@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-12 08:55 CDT — managed-packages-current-date-0.3.20-release
+
+- Objective: Complete the managed-package reconciliation and current-date context intake through merge, publication, delivery proof, and cleanup.
+- Persistence: PR `#227` exact head `ba87fd7dca38717af0260280aa707be08a4c08b6` passed the release candidate, six Linux/macOS/Windows consumers, and Windows native installer checks, then merged as `33685eeea271a28b68f746f7687a31bbe9eb7293`.
+- Clean-machine proof: Exact head `ba87fd7` passed `783/783` tests, typecheck, build, architecture, website, audit, package, runtime, document, model, and researcher-child gates in Daytona. The sandbox was deleted and confirmed absent.
+- Delivery: Publish run `31597429220` passed source and package verification, six consumers, five native bundles, npm publication, GitHub release creation, provenance, checksums, and published-state verification. npm `@companion-ai/feynman@0.3.20` is latest with integrity `sha512-9atWIA/Jj1K5BRavBTu31mkXIEizU/6SgpWFzfZGXOOHwsQW/HT26GkQ0FTuP+B0wOhyDznNPDSXw/udV+RFfQ==`; the `122,787,315`-byte registry tarball has SHA-256 `6ff5e7ddd673b67a0771162ee5abe536ee27ecc14f34ead6f6952fd1d8fac7ca` and provenance resolving to the merge commit.
+- Published proof: GitHub `v0.3.20` targets `33685ee`; all five native asset digests match `SHA256SUMS`. Post-release run `31603093191` passed all six published package installs, all three live native installers, model smokes, and researcher-child smokes on Linux, macOS, and Windows. A fresh registry consumer passed audit, package, RPC, TypeBox, and document parse/search/screenshot checks.
+- Intake and final state: Open issue and PR queues are empty. All `1,019` forks added no current port target. `pi-subagents@0.47.1` remains rejected because its broad workflow, mission, scheduling, worktree, and administration scope replaces Feynman's focused task and chain surface without fixing a current research defect. State: `verified` and production-live. Next: start the next sweep from clean synchronized `main`.
+
 ### 2026-08-12 05:18 CDT — intake-sweep-managed-packages-current-date-0.3.20
 
 - Objective: Repair stale Feynman-managed package trees and give current research turns an explicit local date.
