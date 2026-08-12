@@ -11,7 +11,8 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Clean-machine proof: The exact merged SHA passed the full validation ladder in the larger Daytona sandbox after the initial resource-pressure failure in the smaller sandbox.
 - Delivery: Publish run `31559441208` passed source verification, six package consumers, five native bundles, npm publication, GitHub release creation, provenance, checksums, and published-state verification. npm `@companion-ai/feynman@0.3.19` is latest with integrity `sha512-rQZgsi4kFewieuBgulJyJI7ECPbPaxBhjmJDjlSkf+aBGFEYkas4SAqWytIkPIfgU5fwwgcJMPpox3IW9BD/wg==`. GitHub `v0.3.19` targets `fecb7fa` and contains five native archives plus `SHA256SUMS`.
 - Published proof: Post-release run `31562633273` passed all six published global installs, all three native installers, and the model and researcher-child smokes, including `RESULT=PONG`. Open issue and PR queues remain empty; Dependabot alerts remain empty.
-- State: `verified` and production-live. Next: confirm successor release identity, remove the two owned Daytona sandboxes and release temporaries, then recheck synchronized `main`.
+- Cleanup: Deleted owned Daytona sandboxes `06f1ad9a-388e-4249-92d5-89266cd8a4ef` and `b18763b2-f19c-4155-b7d5-ca5ec4414dc0`, removed the generated runtime archive and `436` owned temporary directories, and confirmed no owned process remains.
+- State: `verified` and production-live. Successor release identity is verified on the completion commit; no fixable residual work remains.
 
 ### 2026-08-11 17:05 CDT — intake-sweep-pi-web-access-0.22.0
 
