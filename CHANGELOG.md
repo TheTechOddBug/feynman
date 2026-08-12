@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-11 17:05 CDT — intake-sweep-pi-web-access-0.22.0
+
+- Objective: Adopt the current web-research runtime without reopening adjacent package or control-plane scope.
+- Intake: Open issues and pull requests are empty. `dubbypanda/feynman` is the only fork changed since the prior sweep and matches main. Root and website production audits are clean. `pi-subagents@0.47.0` remains rejected because it replaces Feynman's task and chain contract with broader async workflow and mission surfaces without fixing a current defect.
+- Changed: Updated `pi-web-access` to `0.22.0`, adopted upstream fetched-content cache hardening, added Bocha search and configurable 30,000–200,000-character content slices, and preserved Feynman's exact config path, private cache, model scope, browser-cookie opt-in, raw-result default, and 90-second primary-search deadline.
+- State: `unverified` for cumulative tests, clean package consumers, Daytona, CI, merge, and release. Next: pass every source, website, package, runtime, clean-machine, CI, and publication gate for exact `0.3.19`.
+
 ### 2026-08-11 11:28 EDT — intake-sweep-windows-consumer-budget-0.3.18
 
 - Objective: Resume the `0.3.18` publication after main run `31499996075` exhausted its Windows Node `25` consumer job budget.

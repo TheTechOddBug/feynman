@@ -18,6 +18,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 | `duckduckgo` | Force keyless DuckDuckGo HTML search; also available inside an explicit fallback route |
 | `tinyfish` | Force TinyFish Search; also enables TinyFish Fetch as a hosted extraction fallback |
 | `kagi` | Force Kagi Search; also enables Kagi Extract as a hosted extraction fallback |
+| `bocha` | Force Bocha Search; accepts `bochaApiKey` or `BOCHA_API_KEY` |
 | `ollama` | Force Ollama Cloud Web Search; also enables Ollama Web Fetch as an extraction fallback |
 | `perplexity` | Force Perplexity Sonar for all web searches |
 | `exa` | Force Exa for all web searches |
@@ -29,7 +30,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 
 ## Default behavior
 
-The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Jina, SERPdive, Kagi, Ollama, Perplexity, and Gemini routes in order.
+The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, and Gemini routes in order.
 
 Configure an explicit API key for Exa, Perplexity, TinyFish, Jina, or Gemini in `~/.feynman/web-search.json` before running source-heavy workflows like `/deepresearch`. Exa's zero-config MCP fallback remains available without a key.
 
@@ -54,7 +55,9 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "geminiApiKey": "AIza...",
   "datalabApiKey": "$DATALAB_API_KEY",
   "kagiApiKey": "kagi-...",
+  "bochaApiKey": "sk-bocha-...",
   "ollamaApiKey": "ollama-...",
+  "maxInlineContentChars": 30000,
   "pdf": {
     "enabled": true,
     "provider": "auto",
@@ -78,7 +81,7 @@ Edit `~/.feynman/web-search.json` to configure the backend:
 }
 ```
 
-Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
+Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `bocha`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
 
 DuckDuckGo is keyless but explicit-only. Select `"duckduckgo"` directly, or add it to `searchRouting.providers`. It does not run in `auto` or `all`.
 
@@ -93,6 +96,8 @@ Gemini Web browser-cookie access is disabled by default. To opt into that legacy
 Set `enabled` to `false` for one `tools` or `commands` entry to skip that registration after restart. `webSearch.enabled: false` remains a legacy shorthand for disabling `web_search` and `source_check` when no tool-specific override exists. Feynman uses the `web-results` command key because `/search` belongs to research-session search. Set `image.enabled: false` to block direct images, video frames, and thumbnails. Set `pdf.enabled: false` to block PDF extraction.
 
 `summaryGenerationDeadlineMs` limits one curator or auto-summary model attempt. It defaults to 30,000 ms, accepts positive integers, and caps values at 600,000 ms.
+
+`maxInlineContentChars` sets the default and maximum text slice returned by `fetch_content` and `get_search_content`. It defaults to 30,000 characters and caps values at 200,000.
 
 ## Search features
 

@@ -1,13 +1,10 @@
-// Feynman-maintained exact-version patch for pi-web-access 0.21.0.
-// Based on upstream PR #241 at b3e784f632b5a7fafa80e6797f0469133b7eb3f8.
-// Remove this file after a bundled pi-web-access release includes that fix.
 import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, type Stats, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ExtractedContent } from "./extract.ts";
 import type { SearchResult } from "./perplexity.ts";
-import { getWebSearchConfigPath } from "./utils.ts";
+import { getWebSearchConfigDir } from "./utils.ts";
 
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const FETCH_CACHE_DIR = "web-search-cache";
@@ -76,7 +73,7 @@ export function generateId(): string {
 }
 
 export function getFetchCacheDir(): string {
-	return join(dirname(getWebSearchConfigPath()), FETCH_CACHE_DIR);
+	return join(getWebSearchConfigDir(), FETCH_CACHE_DIR);
 }
 
 function fetchCachePath(key: string): string | null {

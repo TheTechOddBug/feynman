@@ -25,7 +25,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.21.0",
+	"pi-web-access-0.22.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {

@@ -508,8 +508,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.21.0") {
-	fail("committed runtime lock does not pin pi-web-access 0.21.0");
+if (expectedPiWebAccessVersion !== "0.22.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.22.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -868,6 +868,10 @@ requireMarkers(
 		'if (isCommandEnabled(initConfig, "web-results")) pi.registerCommand("web-results"',
 		"const pendingCurates = new Map<string, PendingCurate>();",
 		"function searchWithDeadline(",
+		"maxInlineContentChars?: unknown;",
+		"const DEFAULT_MAX_INLINE_CONTENT_CHARS = 30_000;",
+		"const MAX_INLINE_CONTENT_CHARS = 200_000;",
+		"bocha: isBochaAvailable(),",
 		"Searches return directly by default",
 		"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
 		"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
@@ -1059,6 +1063,18 @@ requireMarkers(
 		'const SEARCH_URL = "https://html.duckduckgo.com/html/";',
 		"export function isDuckDuckGoAvailable",
 		"export async function searchWithDuckDuckGo",
+	],
+);
+requireMarkers(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/pi-web-access/bocha.ts",
+	),
+	"runtime pi-web-access Bocha provider",
+	[
+		"export function isBochaAvailable(): boolean",
+		"export async function searchWithBocha(",
+		"BOCHA_API_KEY",
 	],
 );
 requireMarkers(
