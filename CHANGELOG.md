@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-11 23:28 CDT — pi-web-access-0.22.0-and-feynman-0.3.19-release
+
+- Objective: Complete the `pi-web-access@0.22.0` research-runtime intake through merge, publication, delivery proof, and cleanup.
+- Persistence: PR `#226` candidate `be39b4859ffa57337c71733435bb607f5344ebbc` passed its source, package, six-consumer, and native checks, then merged as `fecb7faee6ebebafc71ee2f414573eae3c24a79e`. The release branch was removed from origin.
+- Clean-machine proof: The exact merged SHA passed the full validation ladder in the larger Daytona sandbox after the initial resource-pressure failure in the smaller sandbox.
+- Delivery: Publish run `31559441208` passed source verification, six package consumers, five native bundles, npm publication, GitHub release creation, provenance, checksums, and published-state verification. npm `@companion-ai/feynman@0.3.19` is latest with integrity `sha512-rQZgsi4kFewieuBgulJyJI7ECPbPaxBhjmJDjlSkf+aBGFEYkas4SAqWytIkPIfgU5fwwgcJMPpox3IW9BD/wg==`. GitHub `v0.3.19` targets `fecb7fa` and contains five native archives plus `SHA256SUMS`.
+- Published proof: Post-release run `31562633273` passed all six published global installs, all three native installers, and the model and researcher-child smokes, including `RESULT=PONG`. Open issue and PR queues remain empty; Dependabot alerts remain empty.
+- State: `verified` and production-live. Next: confirm successor release identity, remove the two owned Daytona sandboxes and release temporaries, then recheck synchronized `main`.
+
 ### 2026-08-11 17:05 CDT — intake-sweep-pi-web-access-0.22.0
 
 - Objective: Adopt the current web-research runtime without reopening adjacent package or control-plane scope.
