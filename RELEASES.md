@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.21 - 2026-08-13
+
+### Document research
+
+- Updated the bundled LiteParse runtime to `2.12.0`. Document parsing now handles large documents more reliably and fixes rotated-page edge clipping and Markdown inline-code escaping. The existing parse, search, and screenshot tools keep their current interface.
+
+### Validation
+
+- Re-ran the installed document parse, search, and screenshot flow against the bundled runtime.
+
 ## v0.3.20 - 2026-08-12
 
 ### Current research
