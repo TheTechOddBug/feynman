@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-13 07:21 CDT — liteparse-2.12.0-0.3.21-release
+
+- Objective: Complete the LiteParse `2.12.0` research-runtime intake through publication, delivery proof, and cleanup.
+- Persistence: PR `#228` exact head `c0b388c4eee1de9d6fcb84c55d4cabdcb8daaa24` passed run `31690228104` and merged as `186c226ecb4168c7fb5fb4026f99649be1920441`.
+- Clean-machine proof: Exact head passed the Daytona package, runtime, document, consumer, and release ladder in sandbox `73c70fbf-bc65-4f81-b0eb-7ccb80df5f70`; the sandbox was deleted and confirmed absent.
+- Delivery: Publish run `31693465638` passed source and package verification, six consumers, five native bundles, npm publication, GitHub release creation, provenance, checksums, and published-state verification. npm `@companion-ai/feynman@0.3.21` is latest with integrity `sha512-naoZamvsJRxzcjD0iaUyv3WykWmlSN0lMn7xSUkTJwRkUFad+t5JibP7qbmrOj8hZojI7Kw+FR8eWfilLX4yaQ==`, SHA-256 `3026f1111823a1406fccf432825758f738382d3c0b27776c004abbf63cbf3e60`, and provenance resolving to `186c226`.
+- Published proof: GitHub `v0.3.21` targets `186c226` and contains five native assets plus `SHA256SUMS`; all asset digests match the manifest. Post-release run `31698860122` passed all six published package installs, all three live native installers, model smokes, and researcher-child smokes on Linux, macOS, and Windows.
+- Intake and final state: Open issue and PR queues are empty. Dependabot and repository advisory queues are empty. Main is clean and synchronized. State: `verified` and production-live. Next: start the next sweep from clean synchronized `main`.
+
 ### 2026-08-12 08:55 CDT — managed-packages-current-date-0.3.20-release
 
 - Objective: Complete the managed-package reconciliation and current-date context intake through merge, publication, delivery proof, and cleanup.
