@@ -4384,3 +4384,13 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Intake: Open issues, open PRs, active workflows, security advisories, and contributor port targets are empty. LiteParse `node-v2.12.0` resolves to upstream `2fd644a`; npm integrity and direct parse, page-count, screenshot, and batch probes passed.
 - Candidate: Updated the seven platform packages, runtime override and lock, artifact verifier, release notes, website release page, and focused tests. The candidate remains uncommitted and unpushed.
 - State: `unverified` for cumulative package checks, clean-machine proof, CI, merge, publication, and release identity. Next: run the full validation ladder, then persist the exact tested candidate.
+
+
+### 2026-08-13 08:45 CDT — intake-sweep-0.3.21-final
+
+- Objective: Reconcile the post-release Feynman AI-researcher intake after LiteParse `2.12.0` publication.
+- Queue: Open issues, open PRs, active workflows, contributor branches, Dependabot alerts, repository advisories, and code-scanning alerts are empty. TheTechOddBug/feynman is one commit behind and zero ahead of `main`; no port target exists.
+- Release: PR `#228` merged as `186c226`; publish run `31693465638`, post-release run `31698860122`, and successor identity run `31699981995` passed. npm and GitHub release `0.3.21` agree; tag `v0.3.21` targets `186c226`, native asset digests match `SHA256SUMS`, and Vercel is green on `db02b11`.
+- Repaired: The local generated root and vendored runtime trees were stale at LiteParse `2.11.1` after release. Rebuilt only owned generated state; both trees now resolve `2.12.0`. The first rebuild and pack attempts hit host `ENOSPC`, not a product defect. Removed owned generated trees and test temporaries after each failed attempt.
+- Verified: Focused and full tests passed (`783/783`); root typecheck, build, architecture check, root/website/runtime audits, website lint/typecheck/build (`34` pages), diff checks, and installed docparser parse/search/screenshot passed. Clean Daytona attempts were made for exact-head proof; one failed because the sandbox command used an unwritable path, and the second timed out at 300 seconds during the cumulative ladder. Both sandboxes were deleted. The local runtime archive rebuilt successfully with LiteParse `2.12.0` and passed tar listing.
+- State: `verified` for published release identity and local validation; exact clean-machine cumulative proof for this no-code revalidation is not newly complete because the available Daytona execution timed out. Main is clean and synchronized at `db02b11`; the unrelated nested website repository remains preserved. Next: rerun only the clean-machine ladder when disk and Daytona execution capacity allow.
