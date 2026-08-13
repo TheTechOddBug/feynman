@@ -28,8 +28,8 @@ const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
 const FEYNMAN_IP_ADDRESS_VERSION = "10.5.0";
-const FEYNMAN_LITEPARSE_VERSION = "2.11.1";
-const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-VxTSYDYYrweAQ03Eq3G34TKu7kgVBmstIgbjF2pFaeA+loMoYjEQKvw5l89a9smWfT/F0aZSSl0yRICiCzUxVw==";
+const FEYNMAN_LITEPARSE_VERSION = "2.12.0";
+const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-Tgay0LlZIAAuJVWYd7vIpaE46zJG4riYSB2v06eDZalF8bu1PJBHh4XtOYkod954TeuJA7ilJ/I/akkcWt4+mg==";
 const FEYNMAN_LITEPARSE_NATIVE_PACKAGES = [
 	"@llamaindex/liteparse-darwin-arm64",
 	"@llamaindex/liteparse-darwin-x64",

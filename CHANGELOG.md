@@ -4368,3 +4368,10 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Package proof: Dry and real packs matched at `121,036,187` bytes and `40,224` files. The real tarball SHA-256 is `a9eb0dea17141d1763bddd562ec69486751bd07738d625760772655bd85d13fd`; source/runtime/consumer audits and package, RPC, TypeBox, and document-parser verifiers passed.
 - Live proof: Local source and clean installed-tarball macOS runs returned `RESULT=PONG`; both configured an existing absolute researcher extension path and emitted no unavailable-child-tool diagnostic.
 - State: `unverified` for exact-head Daytona, pull-request CI, merge, and publication. Next: complete those gates and publish `0.3.18`.
+
+### 2026-08-13 05:55 CDT — liteparse-2.12.0-0.3.21
+
+- Objective: Adopt LiteParse `2.12.0` for the bundled document research runtime and qualify Feynman `0.3.21`.
+- Intake: Open issues, open PRs, active workflows, security advisories, and contributor port targets are empty. LiteParse `node-v2.12.0` resolves to upstream `2fd644a`; npm integrity and direct parse, page-count, screenshot, and batch probes passed.
+- Candidate: Updated the seven platform packages, runtime override and lock, artifact verifier, release notes, website release page, and focused tests. The candidate remains uncommitted and unpushed.
+- State: `unverified` for cumulative package checks, clean-machine proof, CI, merge, publication, and release identity. Next: run the full validation ladder, then persist the exact tested candidate.
