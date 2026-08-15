@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 06:32 EDT — intake-sweep-v0-3-22-daytona-proof
+
+- Objective: Complete clean-machine proof for the published Feynman `0.3.22` release and close the intake sweep.
+- Clean machine: The first 1 GB Daytona sandbox hit host exit `137` during package build. It was deleted. A replacement 4 GB sandbox checked out exact commit `586b7419d88e0cc95475eccff92e95b6b14f6ed2`, passed `783/783` tests, typecheck, build, architecture check, website lint/typecheck/build, root and website production audits, outdated review, and diff check, then remained clean.
+- Package proof: Dry and real `npm pack` passed with `29,134` files and `116,449,033` bytes. The real tarball SHA-256 is `f9d65a0b2d202bf6f65a75c1af33eaf06621d3695a7ccda0012086ff821824e7`. A clean consumer install passed audit, CLI version/help, package/search status, package-artifact verification, installed 15-tool/9-command RPC and TypeBox checks, and document parse/search/screenshot.
+- Intake and delivery: Live GitHub queues remain empty. `main` is clean and synchronized at `2655b339cf49cd446e6d877bf5950c10b4871711`; GitHub `v0.3.22`, npm `0.3.22`, publish runs `31860841967`, `31877648696`, and `31878044250` remain successful. The replacement sandbox and prior failed sandbox were deleted; the two older user-owned sandboxes remain untouched.
+- State: `verified` and production-live. No code or dependency changes were made in this run. Next: start the next sweep from synchronized `main`.
+
 ### 2026-08-15 05:41 EDT — intake-sweep-v0-3-22-completion
 
 - Objective: Finish the `0.3.22` release receipts and refresh the full Feynman intake queue.
