@@ -9,6 +9,16 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.24 - 2026-08-15
+
+### Document research
+
+- Updated the bundled LiteParse runtime to `2.13.0`. Document parsing now improves garbled-text detection for mixed-font papers and uses layout-aware block classification for richer structured extraction. The existing parse, search, and screenshot tools keep their current interface.
+
+### Validation
+
+- Re-ran the installed document parse, search, and screenshot flow against the bundled runtime.
+
 ## v0.3.23 - 2026-08-15
 
 ### Provider login reliability
