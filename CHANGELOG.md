@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 12:30 EDT — pi-copilot-rate-limit-0.3.23-final
+
+- Objective: Complete merge, publication, release identity, published-install, intake, and cleanup gates for Feynman `0.3.23`.
+- Delivery: PR `#230` passed run `31889957676` and merged as `413f37e17b3ceeb5037f029f34e86a1ce75741bd`. Publish run `31892303159` passed every package, consumer, native, npm, GitHub release, and published-state job.
+- Published proof: npm `0.3.23` is latest with integrity `sha512-3pk6i0K/c5aPxuRBDwthh+Vg6QQKi2HMVSjgNJB0QojPFyUuK6qcqF+dXxj2JxxemLW03LN8uJ+H/LZp0vFY8Q==`. Its verified SLSA provenance resolves to `413f37e`; a clean registry install passed audit, package verification, CLI smoke, Pi RPC, TypeBox, Copilot, and document parse/search/screenshot checks.
+- Release proof: GitHub `v0.3.23` and its tag target `413f37e`. All five native assets are valid archives, their downloaded SHA-256 values match `SHA256SUMS`, and all six downloaded files match GitHub's provider digests.
+- Live proof: Post-release run `31895320515` passed published npm installs on Linux, macOS, and Windows across Node `22`, `24`, and `25`; live model and researcher-child runs passed. The live native installers passed on Linux, macOS, and Windows.
+- Intake: Open issues and PRs are empty. All 30 recent forks were compared; only `NioZow/feynman` is ahead, by one old generic Nix packaging commit that remains rejected. Dependabot alerts and repository advisories are empty; code scanning has no analysis. Pi `0.84.2`, `pi-web-access@0.23.0`, and `pi-docparser@4.0.0` remain current; `pi-subagents@0.50.0` remains rejected for adjacent workflow scope.
+- Cleanup: Deleted the release branch, exact owned package, consumer, audit, home, upstream, release-download, and intake temporary paths. Daytona sandbox `0f5c5798-798a-4b71-aea4-b506b10cea9b` was deleted and now returns Not Found. Older user-owned sandboxes and the unrelated dirty nested website repository remain untouched.
+- State: `verified` and production-live. Next: start the next intake sweep from synchronized `main`.
+
 ### 2026-08-15 09:38 EDT — pi-copilot-rate-limit-0.3.23
 
 - Objective: Port Pi's merged GitHub Copilot login fixes into the current `0.84.2` runtime and qualify Feynman `0.3.23`.
