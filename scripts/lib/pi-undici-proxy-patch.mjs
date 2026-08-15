@@ -132,7 +132,7 @@ export function patchPiUndiciPackageLockSource(source, requiredPiVersion) {
 }
 
 /**
- * Pi 0.84.1 shrinkwraps Undici 8.9.0. Replace that nested tree with 8.10.0 so
+ * Pi 0.84.2 shrinkwraps Undici 8.9.0. Replace that nested tree with 8.10.0 so
  * Feynman and Pi inherit the current proxy and retrieval reliability fixes.
  * Remove this patch after a supported Pi release depends on Undici >=8.10.0.
  */

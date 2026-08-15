@@ -86,15 +86,15 @@ test("installed runtime scripts follow npm's platform-specific global prefix lay
 	}
 });
 
-test("0.3.21 release notes name the LiteParse runtime update", () => {
+test("0.3.22 release notes name the current research runtime updates", () => {
 	for (const path of [
 		resolve(process.cwd(), "RELEASES.md"),
 		resolve(process.cwd(), "website", "src", "content", "docs", "reference", "releases.md"),
 	]) {
 		const releases = readFileSync(path, "utf8");
-		const currentRelease = releases.match(/## v0\.3\.21[\s\S]*?(?=\n## v0\.3\.20)/)?.[0] ?? "";
-		assert.match(currentRelease, /bundled LiteParse runtime to `2\.12\.0`/);
-		assert.doesNotMatch(currentRelease, /LiteParse to `2\.11\.1`/);
+		const currentRelease = releases.match(/## v0\.3\.22[\s\S]*?(?=\n## v0\.3\.21)/)?.[0] ?? "";
+		assert.match(currentRelease, /bundled Pi runtime to `0\.84\.2`/);
+		assert.match(currentRelease, /`pi-web-access` to `0\.23\.0`/);
 	}
 });
 

@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-14 22:25 EDT — intake-sweep-pi-0.84.2-web-0.23.0
+
+- Objective: Adopt the current Pi and web research runtimes, reconcile the empty intake queues, and qualify Feynman `0.3.22`.
+- Intake: Open issues and PRs are empty. The 30 newest forks are behind `main`; `NioZow/feynman` is 1 commit ahead but 100 behind with only stale Nix packaging work, so it is rejected. Dependabot and published advisory counts are zero. Main workflow runs through `31706066442` are successful. npm and GitHub latest remain `0.3.21`.
+- Changed: Updated the coordinated Pi package train to `0.84.2`, `pi-web-access` to `0.23.0`, exact source fixtures and patch gates, runtime locks and archive, and `0.3.22` release docs. Updated installed TypeBox checks to match Pi `0.84.2`: optional non-nullable `null` values are omitted and malformed non-null values remain rejected. Repaired a stale packaged web verifier marker for the `0.23.0` registration layout.
+- Verified locally: Focused checks, full `npm test` (`783/783`), typecheck, build, architecture check, website lint/typecheck/build, root/site production audits, outdated review, diff check, package budget, package-artifact verification, clean installed tarball audit, installed 15-tool/9-command RPC and TypeBox checks, installed document parse/search/screenshot, and a live installed `openai/gpt-5.5` smoke returning `PONG` passed. Final pack is `114,751,448` bytes, `29,134` files; runtime SHA-256 is `e22e5661f4a8d4a65cb403bbbca20e2d03dbeb2843341232e42249e74944e306`.
+- State: `unverified` for the exact commit in Daytona, remote CI, merge, npm/GitHub/native publication, and post-release delivery proof. No GitHub or npm writes occurred. Existing nested dirty `website` work remains preserved. Next: commit the candidate, run and delete Daytona, then push the exact tested SHA and complete CI and release verification.
+
 ### 2026-08-13 07:21 CDT — liteparse-2.12.0-0.3.21-release
 
 - Objective: Complete the LiteParse `2.12.0` research-runtime intake through publication, delivery proof, and cleanup.

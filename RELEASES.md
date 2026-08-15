@@ -6,6 +6,23 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.22 - 2026-08-14
+
+### Web research
+
+- Updated `pi-web-access` to `0.23.0`. Researchers can use Firecrawl search and opt-in authenticated browser fetch profiles.
+- Preserved Feynman's exact web-search config path, private fetched-content cache, resolved Pi model scope, browser-cookie opt-in, raw-result default, and bounded primary-search deadline.
+
+### Research runtime
+
+- Updated the bundled Pi runtime to `0.84.2`. Fullscreen transcript search now supports match navigation and configurable match colors.
+- Managed tool downloads now report progress after the TUI mounts, and model catalog refreshes no longer restart when a selector opens during startup.
+- Optional non-nullable tool arguments that arrive as `null` are now omitted before execution, while other malformed arguments remain rejected.
+
+### Validation
+
+- Added exact-source gates for the `pi-web-access@0.23.0` contract and refreshed the packaged runtime lock and archive.
+
 ## v0.3.21 - 2026-08-13
 
 ### Document research

@@ -54,7 +54,7 @@ test("research extension source and direct locks use Pi's coordinated TypeBox pa
 	assert.equal(runtimeLock.packages["node_modules/typebox"].version, coordinatedTypeboxVersion);
 });
 
-test("Pi runtime validation rejects null alpha_get_paper sections without losing optional arrays", () => {
+test("Pi runtime validation omits null alpha_get_paper sections without losing optional arrays", () => {
 	const tools = new Map<string, Tool>();
 	registerAlphaTools({
 		registerTool(tool) {
@@ -85,13 +85,16 @@ test("Pi runtime validation rejects null alpha_get_paper sections without losing
 		paper: "2401.00001",
 		sections: ["methodology", "results"],
 	});
+	assert.deepEqual(validate({ paper: "2401.00001", sections: null }), {
+		paper: "2401.00001",
+	});
 	assert.throws(
-		() => validate({ paper: "2401.00001", sections: null }),
+		() => validate({ paper: "2401.00001", sections: "methodology" }),
 		/Validation failed for tool "alpha_get_paper":[\s\S]*sections: must be array/,
 	);
 });
 
-test("Pi runtime validation rejects null AlphaFold2 databases without losing optional arrays", () => {
+test("Pi runtime validation omits null AlphaFold2 databases without losing optional arrays", () => {
 	const tools = new Map<string, Tool>();
 	registerModelEndpointTools({
 		registerTool(tool) {
@@ -119,8 +122,9 @@ test("Pi runtime validation rejects null AlphaFold2 databases without losing opt
 		...required,
 		databases: ["uniref90", "mgnify"],
 	});
+	assert.deepEqual(validate({ ...required, databases: null }), required);
 	assert.throws(
-		() => validate({ ...required, databases: null }),
+		() => validate({ ...required, databases: "uniref90" }),
 		/Validation failed for tool "feynman_model_endpoint_call":[\s\S]*databases: must be array/,
 	);
 });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.22.0";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.23.0";
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
@@ -103,7 +103,7 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		['Stored content responseId: "${responseId}".', 2],
 		['if (sourceCheckEnabled) pi.registerTool({', 1],
 		['if (fetchContentEnabled) pi.registerTool({', 1],
-		['if (getSearchContentEnabled) pi.registerTool({', 1],
+		['if (getSearchContentEnabled) {', 1],
 	], surface);
 	rejectMarkers(
 		indexSource,
@@ -243,8 +243,8 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["maxInlineContentChars?: unknown;", 1],
 		["const DEFAULT_MAX_INLINE_CONTENT_CHARS = 30_000;", 1],
 		["const MAX_INLINE_CONTENT_CHARS = 200_000;", 1],
-		["function getMaxInlineContentChars(): number {", 1],
-		["const maxInlineContentChars = getMaxInlineContentChars();", 2],
+		["function getMaxInlineContentChars(config = loadConfig()): number {", 1],
+		["const maxInlineContentChars = getMaxInlineContentChars(initConfig);", 1],
 		["bocha: isBochaAvailable(),", 1],
 	], surface);
 
