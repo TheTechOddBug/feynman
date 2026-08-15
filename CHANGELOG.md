@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 17:56 EDT — liteparse-2.13.0-0.3.24
+
+- Objective: Qualify the new LiteParse `2.13.0` document research runtime and carry the update toward release.
+- Intake: GitHub issues, pull requests, active workflows, Dependabot alerts, repository advisories, and code-scanning analyses are empty. The 30 newest forks are behind `main` except `NioZow/feynman`, which has one old generic Nix packaging commit and remains rejected.
+- Upstream: LiteParse `node-v2.13.0` (`36e7431`) adds mixed-font garbled-text detection and layout-block output. The change improves paper reading and extraction, so it fits Feynman's research-runtime scope.
+- Candidate: Bumped Feynman to `0.3.24`, updated all seven native LiteParse packages, the runtime override and lock, artifact gates, release notes, and website release notes. The runtime archive resolves LiteParse `2.13.0`; the generated lock also refreshed current AWS Smithy and Jose patch versions.
+- Verified: `784/784` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root and website production audits, diff check, package verifier, dry/real packs, clean consumer audits, installed runtime and document verifiers, CLI smoke, and a direct `extractBlocks` probe passed. The pack is `114,842,276` bytes, `29,140` files, SHA-256 `1523c00e0b446942303499e0aab366b1c7dd33ef6b12fa0a9e9957e3cbf62545`.
+- State: `unverified` for the exact committed SHA, Daytona proof, pull-request CI, merge, publication, and post-release identity. The nested dirty `website` checkout and existing ignored research artifacts remain preserved.
+- Next: Commit the candidate, run exact-head Daytona and GitHub gates, then merge and publish `0.3.24` if all release checks remain green.
+
 ### 2026-08-15 13:36 EDT — intake-sweep-0.3.23-post-release
 
 - Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.23` release and persist the verified state.

@@ -67,7 +67,7 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
-	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.12\.0"/);
+	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.13\.0"/);
 	assert.match(runtimeWorkspaceSource, /"ip-address": "10\.5\.0"/);
 	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
@@ -86,15 +86,15 @@ test("installed runtime scripts follow npm's platform-specific global prefix lay
 	}
 });
 
-test("0.3.22 release notes name the current research runtime updates", () => {
+test("0.3.24 release notes name the current document research runtime update", () => {
 	for (const path of [
 		resolve(process.cwd(), "RELEASES.md"),
 		resolve(process.cwd(), "website", "src", "content", "docs", "reference", "releases.md"),
 	]) {
 		const releases = readFileSync(path, "utf8");
-		const currentRelease = releases.match(/## v0\.3\.22[\s\S]*?(?=\n## v0\.3\.21)/)?.[0] ?? "";
-		assert.match(currentRelease, /bundled Pi runtime to `0\.84\.2`/);
-		assert.match(currentRelease, /`pi-web-access` to `0\.23\.0`/);
+		const currentRelease = releases.match(/## v0\.3\.24[\s\S]*?(?=\n## v0\.3\.23)/)?.[0] ?? "";
+		assert.match(currentRelease, /bundled LiteParse runtime to `2\.13\.0`/);
+		assert.match(currentRelease, /garbled-text detection/i);
 	}
 });
 
@@ -144,9 +144,9 @@ test("release manifests pin current document and website security repairs", () =
 		"@llamaindex/liteparse-win32-arm64-msvc",
 		"@llamaindex/liteparse-win32-x64-msvc",
 	]) {
-		assert.equal(manifest.optionalDependencies?.[packageName], "2.12.0");
-		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.12.0");
-		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.12.0");
+		assert.equal(manifest.optionalDependencies?.[packageName], "2.13.0");
+		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.13.0");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.13.0");
 		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.optional, true);
 	}
 	assert.equal(websiteManifest.overrides?.["js-yaml"], "4.3.1");
