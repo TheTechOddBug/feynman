@@ -109,14 +109,14 @@ test("runtime manifest verification checks bundled packages beyond configured ex
 
 	const manifestSpecs = [
 		"pi-subagents@0.37.2",
-		"@earendil-works/pi-coding-agent@0.84.1",
+		"@earendil-works/pi-coding-agent@0.84.2",
 	];
 	assert.equal(
 		runtimeManifestPackagesMatch(root, manifestSpecs, ["pi-subagents@0.37.2"]),
 		false,
 	);
 
-	writePackage("@earendil-works/pi-coding-agent", "0.84.1");
+	writePackage("@earendil-works/pi-coding-agent", "0.84.2");
 	assert.equal(
 		runtimeManifestPackagesMatch(root, manifestSpecs, ["pi-subagents@0.37.2"]),
 		true,

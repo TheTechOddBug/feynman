@@ -1,6 +1,6 @@
-export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.84.1";
+export const PI_LLAMA_USAGE_REQUIRED_VERSION = "0.84.2";
 export const PI_LLAMA_USAGE_PATCH_MARKER =
-	"Feynman Pi 0.84.1 llama.cpp cached usage migration";
+	"Feynman Pi 0.84.2 llama.cpp cached usage migration";
 
 const STATIC_USAGE_REQUIRED = "            supportsUsageInStreaming: true,";
 const MODEL_FACTORY_ANCHOR = "function toPiModel(model, serverUrl) {";
@@ -95,7 +95,7 @@ export function assertPiLlamaUsagePatchSource(source, surface = "llama.cpp provi
 }
 
 /**
- * Pi 0.84.1 includes PR #7258 for newly discovered llama.cpp models, but
+ * Pi 0.84.2 includes PR #7258 for newly discovered llama.cpp models, but
  * existing models-store.json entries preserve the old false capability.
  * Remove this patch after a supported Pi release repairs or invalidates stale
  * llama.cpp model metadata.

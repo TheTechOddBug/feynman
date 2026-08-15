@@ -80,7 +80,7 @@ function createResourceLoader(runtime: unknown) {
 	};
 }
 
-test("Pi 0.84.1 correctness patch is applied, idempotent, and documents its removal condition", () => {
+test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its removal condition", () => {
 	const agentSessionSource = readFileSync(agentSessionPath, "utf8");
 	const sessionManagerSource = readFileSync(sessionManagerPath, "utf8");
 	const transformMessagesSource = readFileSync(transformMessagesPath, "utf8");
@@ -133,22 +133,22 @@ test("Pi 0.84.1 correctness patch is applied, idempotent, and documents its remo
 	);
 	assert.throws(
 		() => patchPiAgentSessionSource("export class AgentSession {}\n"),
-		/Unsupported Pi 0\.84\.1 agent-session import layout/,
+		/Unsupported Pi 0\.84\.2 agent-session import layout/,
 	);
 	assert.doesNotThrow(() =>
 		assertPiRuntimeCorrectnessVersion(PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION, "test"),
 	);
 	assert.throws(
 		() => assertPiRuntimeCorrectnessVersion("0.82.1", "test"),
-		/expected 0\.84\.1, found 0\.82\.1/,
+		/expected 0\.84\.2, found 0\.82\.1/,
 	);
 	assert.throws(
 		() => assertPiRuntimeCorrectnessVersion("0.84.0", "test"),
-		/expected 0\.84\.1, found 0\.84\.0/,
+		/expected 0\.84\.2, found 0\.84\.0/,
 	);
 });
 
-test("Pi 0.84.1 correctness patch migrates the pre-review eager persistence layout", () => {
+test("Pi 0.84.2 correctness patch migrates the pre-review eager persistence layout", () => {
 	patchPiRuntimeNodeModules(appRoot);
 	const current = readFileSync(agentSessionPath, "utf8");
 	const currentBoundary = `        const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"
@@ -232,9 +232,9 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 				name: "mixed-pi-artifact",
 				dependencies: {
 					"@earendil-works/pi-agent-core": "0.82.1",
-					"@earendil-works/pi-ai": "0.84.1",
-					"@earendil-works/pi-coding-agent": "0.84.1",
-					"@earendil-works/pi-tui": "0.84.1",
+					"@earendil-works/pi-ai": "0.84.2",
+					"@earendil-works/pi-coding-agent": "0.84.2",
+					"@earendil-works/pi-tui": "0.84.2",
 					"brace-expansion": "5.0.9",
 				},
 				optionalDependencies: appManifest.optionalDependencies,
@@ -252,7 +252,7 @@ test("package artifact verification rejects a mixed Pi runtime train", () => {
 		assert.notEqual(result.status, 0);
 		assert.match(
 			result.stderr,
-			/@earendil-works\/pi-agent-core must be pinned to Pi 0\.84\.1, found 0\.82\.1/,
+			/@earendil-works\/pi-agent-core must be pinned to Pi 0\.84\.2, found 0\.82\.1/,
 		);
 	} finally {
 		rmSync(packageRoot, { recursive: true, force: true });

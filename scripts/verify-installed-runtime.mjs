@@ -524,7 +524,7 @@ export async function verifyInstalledSchemas() {
 		});
 		const alphaGetPaper = installedTools.find((tool) => tool.name === "alpha_get_paper");
 		assert.ok(alphaGetPaper, "Installed extension omitted alpha_get_paper");
-		let observedArguments;
+		const observedArguments = [];
 		let executeCalls = 0;
 		const probeLoader = new DefaultResourceLoader({
 			cwd: root,
@@ -550,7 +550,15 @@ export async function verifyInstalledSchemas() {
 				fauxToolCall(
 					"feynman_typebox_probe",
 					{ paper: "2401.00001", sections: null },
-					{ id: "malformed-typebox-probe" },
+					{ id: "null-typebox-probe" },
+				),
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage(
+				fauxToolCall(
+					"feynman_typebox_probe",
+					{ paper: "2401.00001", sections: "methodology" },
+					{ id: "invalid-typebox-probe" },
 				),
 				{ stopReason: "toolUse" },
 			),
@@ -572,7 +580,7 @@ export async function verifyInstalledSchemas() {
 				parameters: alphaGetPaper.parameters,
 				execute: async (_toolCallId, parameters) => {
 					executeCalls += 1;
-					observedArguments = parameters;
+					observedArguments.push(parameters);
 					return {
 						content: [{ type: "text", text: "validated" }],
 						details: {},
@@ -591,18 +599,26 @@ export async function verifyInstalledSchemas() {
 		);
 		assert.ok(toolResult, "Pi did not emit the installed schema probe result");
 		assert.equal(toolResult.isError, false);
-		assert.deepEqual(observedArguments, {
+		assert.deepEqual(observedArguments[0], {
 			paper: "2401.00001",
 			sections: ["methodology", "results"],
 		});
-		const malformedResult = probeSession.messages.find(
+		const nullResult = probeSession.messages.find(
 			(message) =>
 				message.role === "toolResult" &&
-				message.toolCallId === "malformed-typebox-probe",
+				message.toolCallId === "null-typebox-probe",
 		);
-		assert.ok(malformedResult, "Pi did not emit the malformed-argument schema probe result");
-		assert.equal(malformedResult.isError, true);
-		assert.equal(executeCalls, 1, "Malformed arguments reached the custom tool execute function");
+		assert.ok(nullResult, "Pi did not emit the optional-null schema probe result");
+		assert.equal(nullResult.isError, false);
+		assert.deepEqual(observedArguments[1], { paper: "2401.00001" });
+		const invalidResult = probeSession.messages.find(
+			(message) =>
+				message.role === "toolResult" &&
+				message.toolCallId === "invalid-typebox-probe",
+		);
+		assert.ok(invalidResult, "Pi did not emit the malformed-argument schema probe result");
+		assert.equal(invalidResult.isError, true);
+		assert.equal(executeCalls, 2, "Malformed arguments reached the custom tool execute function");
 	} finally {
 		probeSession?.dispose();
 		inventorySession?.dispose();
@@ -621,6 +637,7 @@ async function main() {
 		tools: EXPECTED_FEYNMAN_TOOLS.length,
 		typeboxSchemas: EXPECTED_FEYNMAN_TOOLS.length,
 		typeboxOptionalArray: "passed",
+		typeboxOptionalNull: "omitted",
 		typeboxMalformedArguments: "rejected",
 		webAccessRegistrationGates: "passed",
 	}));

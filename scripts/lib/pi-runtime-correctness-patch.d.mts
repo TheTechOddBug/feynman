@@ -2,7 +2,7 @@ export declare const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS: Readonly<{
 	codingAgent: readonly string[];
 	piAi: readonly string[];
 }>;
-export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION: "0.84.1";
+export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION: "0.84.2";
 export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	agentSession: string;
 	sessionManager: string;

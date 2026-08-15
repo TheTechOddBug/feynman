@@ -187,7 +187,8 @@ requireMarkers(
 		"EXPECTED_FEYNMAN_TOOLS",
 		'message: "/tools"',
 		"valid-typebox-probe",
-		"malformed-typebox-probe",
+		"null-typebox-probe",
+		"invalid-typebox-probe",
 		"terminateChildProcessTree",
 	],
 );
@@ -508,8 +509,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.22.0") {
-	fail("committed runtime lock does not pin pi-web-access 0.22.0");
+if (expectedPiWebAccessVersion !== "0.23.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.23.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -884,7 +885,7 @@ requireMarkers(
 		"storeFetchedContentResult(responseId, data)",
 		"if (sourceCheckEnabled) pi.registerTool({",
 		"if (fetchContentEnabled) pi.registerTool({",
-		"if (getSearchContentEnabled) pi.registerTool({",
+		"if (getSearchContentEnabled) {",
 		"Cannot be combined with findText.",
 		"Requires findText.",
 	],

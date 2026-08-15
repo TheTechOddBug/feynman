@@ -17,7 +17,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.22.0",
+	"pi-web-access-0.23.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
@@ -583,11 +583,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.22.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.22.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.23.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.23.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.23.0", "future"),
-		/expected 0\.22\.0, found 0\.23\.0/,
+		() => assertPiWebAccessVersion("0.24.0", "future"),
+		/expected 0\.23\.0, found 0\.24\.0/,
 	);
 
 	const futureSource = [
@@ -607,7 +607,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.22\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.23\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

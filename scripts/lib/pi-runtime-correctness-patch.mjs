@@ -1,5 +1,5 @@
 /**
- * Temporary Pi 0.84.1 correctness patches for:
+ * Temporary Pi 0.84.2 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7053
  *
  * Removal condition: delete this patch once a supported released Pi version
@@ -13,11 +13,11 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	]),
 	piAi: Object.freeze(["dist/api/transform-messages.js"]),
 });
-export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.1";
+export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.2";
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
-	agentSession: "Feynman Pi 0.84.1 correctness patch: issue #7053",
-	sessionManager: "Feynman Pi 0.84.1 correctness patch: restore eager tool results",
-	transformMessages: "Feynman Pi 0.84.1 correctness patch: order eager tool results",
+	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
+	sessionManager: "Feynman Pi 0.84.2 correctness patch: restore eager tool results",
+	transformMessages: "Feynman Pi 0.84.2 correctness patch: order eager tool results",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([

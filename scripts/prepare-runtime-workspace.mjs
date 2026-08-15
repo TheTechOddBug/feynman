@@ -57,7 +57,7 @@ const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const workspaceArchiveDigestPath = resolve(feynmanDir, "runtime-workspace.sha256");
 const PRUNE_VERSION = 8;
-const PI_RUNTIME_FALLBACK_VERSION = "0.84.1";
+const PI_RUNTIME_FALLBACK_VERSION = "0.84.2";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@modelcontextprotocol/sdk": {
