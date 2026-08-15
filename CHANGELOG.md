@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 05:41 EDT — intake-sweep-v0-3-22-completion
+
+- Objective: Finish the `0.3.22` release receipts and refresh the full Feynman intake queue.
+- Intake: Open issues and pull requests are empty. The 30 newest forks are behind `main`; `NioZow/feynman` is 1 commit ahead but 102 behind with only Nix packaging files, so it is rejected. Issue `#217` is closed with the semantic-version security-floor fix in `v0.3.13`. Dependabot alerts and repository advisories are empty. `pi-subagents@0.50.0` is rejected: its upstream `v0.49.0...v0.50.0` diff changes 131 files for async missions, schedules, FleetView, Herdr, worktrees, administration, and related control-plane surfaces without fixing a current Feynman research defect.
+- Release: PR `#229` merged as `586b7419d88e0cc95475eccff92e95b6b14f6ed2`. Publish run `31860841967` passed source verification, all six Linux/macOS/Windows package consumers, five native bundles, npm publication, GitHub release creation, provenance, checksums, and published-state verification. GitHub `v0.3.22` targets `586b741`; npm `@companion-ai/feynman@0.3.22` is latest with integrity `sha512-yAJepY8ZGPF7ppNDB4pCEjIBkEbJOqvhwvnn1UDlL0iHC74Gcz/GUdR9AJ0iVAA5tRpLKz4z837HA8xplETgIQ==`.
+- Verified locally: `npm test` passed `783/783`; typecheck, build, architecture check, production audit, and diff check passed. Dry and real packs both report `114,751,448` bytes, `298,731,472` unpacked bytes, and `29,134` files. A clean installed tarball passed consumer audit, package-artifact verification, 15-tool/9-command RPC and TypeBox checks, and document parse/search/screenshot. A fresh registry install passed the same runtime/document gates and audit; npm provenance resolves to `586b741`.
+- State: `verified` and production-live. Post-release workflow `31877648696` passed all six published-package jobs, three native installer jobs, live model smokes, and researcher-child smokes. The nested dirty `website` repository remains unchanged and preserved. Next: keep `main` synchronized.
+
 ### 2026-08-14 22:25 EDT — intake-sweep-pi-0.84.2-web-0.23.0
 
 - Objective: Adopt the current Pi and web research runtimes, reconcile the empty intake queues, and qualify Feynman `0.3.22`.
