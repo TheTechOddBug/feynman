@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 13:36 EDT — intake-sweep-0.3.23-post-release
+
+- Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.23` release and persist the verified state.
+- Intake: Open issues and PRs are empty. The recent merged PR `#230` is released and verified. All 30 newest forks are behind `main` except `NioZow/feynman`, which is 1 commit ahead and 108 behind with only an old Nix packaging commit; no port target exists.
+- Upstream: Pi `0.84.2`, `pi-web-access` `0.23.0`, `pi-docparser` `4.0.0`, `pi-btw` `0.4.1`, and `pi-otel` `0.1.0` are current. `pi-subagents` `0.50.0` is current upstream, but its 391-commit `0.40.0...0.50.0` migration adds missions, schedules, workflows, FleetView, Herdr, worktrees, and administration rather than fixing a Feynman research defect; the bundled `0.40.0` remains the correct scoped choice.
+- Security and freshness: Dependabot and repository advisory queues are empty; code scanning has no analysis. Root and website production audits report zero vulnerabilities. `npm outdated` reports non-security upgrades for general dependencies only; no coordinated research-runtime update is required.
+- Verified: `784/784` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root and website audits, diff check, dry and real packs, installed artifact verification, installed RPC/TypeBox/Copilot checks, and document parse/search/screenshot passed. The real pack is `114,755,952` bytes with `29,134` files and SHA-256 `95940c60ff9842b568b0c9b7af507081012353d7ad6fe54c53b567de05d0a1dd`.
+- State: `verified` and production-live on synchronized `main` `316e7a6`. The nested dirty `website` checkout and existing ignored research artifacts remain preserved and untouched. Next: refresh the queues on the next scheduled sweep.
+
 ### 2026-08-15 12:30 EDT — pi-copilot-rate-limit-0.3.23-final
 
 - Objective: Complete merge, publication, release identity, published-install, intake, and cleanup gates for Feynman `0.3.23`.
