@@ -35,7 +35,7 @@ To uninstall the standalone app, remove the launcher and runtime bundle, then op
 
 Local models are supported through the setup flow. For LM Studio, run `feynman setup`, choose `LM Studio`, and keep the default `http://localhost:1234/v1` unless you changed the server port. For LiteLLM, choose `LiteLLM Proxy` and keep the default `http://localhost:4000/v1`. For Ollama or vLLM, choose `Custom provider (baseUrl + API key)`, use `openai-completions`, and point it at the local `/v1` endpoint.
 
-To authenticate another hosted provider, run `feynman model login <provider>`. OpenRouter login opens an OAuth page and listens for a local callback; over SSH or in another headless environment, paste the browser's final redirect URL or authorization code into Feynman's prompt, or set `OPENROUTER_API_KEY` before launch to use API-key authentication without OAuth.
+To authenticate another hosted provider, run `feynman model login <provider>`. GitHub Copilot sign-in retries model discovery once when GitHub rate-limits the request. OpenRouter login opens an OAuth page and listens for a local callback; over SSH or in another headless environment, paste the browser's final redirect URL or authorization code into Feynman's prompt, or set `OPENROUTER_API_KEY` before launch to use API-key authentication without OAuth.
 
 ### Skills Only
 

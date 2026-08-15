@@ -8,6 +8,8 @@ import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mj
 import {
 	assertPiRuntimeCorrectnessVersion,
 	patchPiAgentSessionSource,
+	patchPiGithubCopilotDeviceCodeSource,
+	patchPiGithubCopilotOAuthSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
@@ -278,6 +280,36 @@ export function patchPiRuntimeNodeModules(
 			"pi-ai",
 			"dist/api/transform-messages.js",
 			patchPiTransformMessagesSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-ai",
+			"dist/auth/oauth/device-code.js",
+			patchPiGithubCopilotDeviceCodeSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-ai",
+			"dist/auth/oauth/device-code.js",
+			patchPiGithubCopilotDeviceCodeSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-ai",
+			"dist/auth/oauth/github-copilot.js",
+			patchPiGithubCopilotOAuthSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchNestedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"pi-ai",
+			"dist/auth/oauth/github-copilot.js",
+			patchPiGithubCopilotOAuthSource,
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(
