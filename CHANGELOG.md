@@ -14,6 +14,16 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - State: `unverified` for the exact committed SHA, Daytona proof, pull-request CI, merge, publication, and post-release identity. The nested dirty `website` checkout and existing ignored research artifacts remain preserved.
 - Next: Commit the candidate, run exact-head Daytona and GitHub gates, then merge and publish `0.3.24` if all release checks remain green.
 
+### 2026-08-15 19:45 EDT — liteparse-2.13.0-0.3.24-final
+
+- Objective: Complete the LiteParse `2.13.0` intake, release Feynman `0.3.24`, and persist the terminal receipts.
+- Delivery: PR `#231` passed exact-head checks and merged as `015fee9`. The source candidate was `d9a98ab`; its remote branch was deleted after merge.
+- Clean proof: A disposable 4 GB Daytona sandbox checked out `d9a98ab` and passed the package, runtime, clean-consumer, artifact, document, and CLI gates. The sandbox was deleted and confirmed destroyed.
+- CI: PR run `31910855836` passed source, six Node/OS consumer checks, and the Windows native installer. Main publish run `31912561202` passed source, website, audits, package consumers, five native builds, npm publication, GitHub release, provenance, assets, and published consumer verification.
+- Release: npm `@companion-ai/feynman@0.3.24` and GitHub `v0.3.24` target `015fee9`. The published npm integrity is `sha512-F/0cBuhGzW3DBVXyOAPniNU4JpdXbqf9/lS1JTN2sb3+v0GiL80JhM0euzxUQHw9FIcy7WuBlJ6bgjlj/CR1ug==`; all five native assets match `SHA256SUMS`.
+- Live proof: Post-release run `31915158425` passed six published consumers on Linux, macOS, and Windows, all three native installers, live model smokes, and researcher-child `RESULT=PONG` smokes. Open issue and PR queues are empty, and no active workflow remains.
+- State: `verified` and production-live on synchronized `main` `015fee9`. The nested dirty `website` checkout and existing ignored research artifacts remain preserved and untouched. Next: refresh the intake queues on the next scheduled sweep.
+
 ### 2026-08-15 13:36 EDT — intake-sweep-0.3.23-post-release
 
 - Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.23` release and persist the verified state.
