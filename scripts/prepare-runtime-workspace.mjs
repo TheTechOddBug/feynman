@@ -7,6 +7,8 @@ import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
+	patchPiGithubCopilotDeviceCodeSource,
+	patchPiGithubCopilotOAuthSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
@@ -479,7 +481,7 @@ function patchBundledPiAgentCore() {
 	return changed;
 }
 
-function patchBundledNestedPiAiTransformMessages() {
+function patchBundledNestedPiAiFile(relativePath, patchSource) {
 	let changed = false;
 	for (const codingScope of ["@earendil-works", "@mariozechner"]) {
 		for (const aiScope of ["@earendil-works", "@mariozechner"]) {
@@ -490,13 +492,11 @@ function patchBundledNestedPiAiTransformMessages() {
 				"node_modules",
 				aiScope,
 				"pi-ai",
-				"dist",
-				"api",
-				"transform-messages.js",
+				...relativePath.split("/"),
 			);
 			if (!existsSync(filePath)) continue;
 			const source = readFileSync(filePath, "utf8");
-			const patched = patchPiTransformMessagesSource(source);
+			const patched = patchSource(source);
 			if (patched === source) continue;
 			writeFileSync(filePath, patched, "utf8");
 			changed = true;
@@ -545,7 +545,28 @@ function patchBundledPiRuntimeCorrectness() {
 		"dist/api/transform-messages.js",
 		patchPiTransformMessagesSource,
 	) || changed;
-	changed = patchBundledNestedPiAiTransformMessages() || changed;
+	changed = patchBundledNestedPiAiFile(
+		"dist/api/transform-messages.js",
+		patchPiTransformMessagesSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-ai",
+		"dist/auth/oauth/device-code.js",
+		patchPiGithubCopilotDeviceCodeSource,
+	) || changed;
+	changed = patchBundledNestedPiAiFile(
+		"dist/auth/oauth/device-code.js",
+		patchPiGithubCopilotDeviceCodeSource,
+	) || changed;
+	changed = patchScopedPiWorkspaceFile(
+		"pi-ai",
+		"dist/auth/oauth/github-copilot.js",
+		patchPiGithubCopilotOAuthSource,
+	) || changed;
+	changed = patchBundledNestedPiAiFile(
+		"dist/auth/oauth/github-copilot.js",
+		patchPiGithubCopilotOAuthSource,
+	) || changed;
 	return changed;
 }
 

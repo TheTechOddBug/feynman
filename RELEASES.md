@@ -6,6 +6,17 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.23 - 2026-08-15
+
+### Provider login reliability
+
+- GitHub Copilot sign-in now enables model policies sequentially instead of sending a burst of parallel requests.
+- If Copilot rate-limits model discovery, Feynman honors `Retry-After` and retries once instead of ending sign-in.
+
+### Validation
+
+- Added exact source, packaged-runtime, and login regressions for the Copilot rate-limit path.
+
 ## v0.3.22 - 2026-08-14
 
 ### Web research

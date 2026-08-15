@@ -1,23 +1,30 @@
 /**
  * Temporary Pi 0.84.2 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7053
+ * - https://github.com/earendil-works/pi/issues/8121
  *
  * Removal condition: delete this patch once a supported released Pi version
  * eagerly persists finalized parallel tool results while restoring them in
- * tool-call order.
+ * tool-call order and includes upstream commits d5278ea and 086c32e.
  */
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
 		"dist/core/agent-session.js",
 		"dist/core/session-manager.js",
 	]),
-	piAi: Object.freeze(["dist/api/transform-messages.js"]),
+	piAi: Object.freeze([
+		"dist/api/transform-messages.js",
+		"dist/auth/oauth/device-code.js",
+		"dist/auth/oauth/github-copilot.js",
+	]),
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.2";
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
 	sessionManager: "Feynman Pi 0.84.2 correctness patch: restore eager tool results",
 	transformMessages: "Feynman Pi 0.84.2 correctness patch: order eager tool results",
+	githubCopilotDeviceCode: "Feynman Pi 0.84.2 correctness patch: export abortableSleep for upstream #8121",
+	githubCopilotOAuth: "Feynman Pi 0.84.2 correctness patch: upstream #8121",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
@@ -55,6 +62,23 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
     flushFeynmanToolResults();
 `,
 	]),
+	githubCopilotDeviceCode: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotDeviceCode,
+		"export function abortableSleep(ms, signal, cancelMessage) {",
+	]),
+	githubCopilotOAuth: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotOAuth,
+		'import { abortableSleep, pollOAuthDeviceCodeFlow } from "./device-code.js";',
+		"const MAX_RETRY_AFTER_MS = 10_000;",
+		"const DEFAULT_RETRY_AFTER_MS = 1_000;",
+		"const request = () =>",
+		"if (response.status === 429) {",
+		'response.headers.get("retry-after")',
+		'await abortableSleep(waitMs, signal, "Login cancelled");',
+		"return parseAvailableCopilotModelIds(await response.json(), allowPolicyFallback);",
+		"for (const model of Object.values(GITHUB_COPILOT_MODELS)) {",
+		"await enableGitHubCopilotModel(token, model.id, enterpriseDomain, signal);",
+	]),
 });
 
 const PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS = Object.freeze({
@@ -73,11 +97,26 @@ const PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS = Object.freeze({
 		"const flushFeynmanToolResults = () => {",
 		"pendingToolResults.set(msg.toolCallId, msg);",
 	]),
+	githubCopilotDeviceCode: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotDeviceCode,
+		"export function abortableSleep(ms, signal, cancelMessage) {",
+	]),
+	githubCopilotOAuth: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotOAuth,
+		"const request = () =>",
+		"if (response.status === 429) {",
+		'await abortableSleep(waitMs, signal, "Login cancelled");',
+		"for (const model of Object.values(GITHUB_COPILOT_MODELS)) {",
+	]),
 });
 
 const AGENT_SESSION_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession;
 const SESSION_MANAGER_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager;
 const TRANSFORM_MESSAGES_MARKER = PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.transformMessages;
+const GITHUB_COPILOT_DEVICE_CODE_MARKER =
+	PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotDeviceCode;
+const GITHUB_COPILOT_OAUTH_MARKER =
+	PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.githubCopilotOAuth;
 
 export function assertPiRuntimeCorrectnessVersion(version, surface) {
 	if (version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION) {
@@ -517,5 +556,123 @@ export function patchPiTransformMessagesSource(source) {
 		"transform-messages second pass",
 	);
 	assertPiRuntimeCorrectnessPatchSource(patched, "transformMessages");
+	return patched;
+}
+
+const ORIGINAL_COPILOT_MODEL_FETCH = `    const raw = await fetchJson(\`\${baseUrl}/models\`, {
+        headers: {
+            Accept: "application/json",
+            Authorization: \`Bearer \${copilotToken}\`,
+            ...COPILOT_HEADERS,
+            "X-GitHub-Api-Version": COPILOT_API_VERSION,
+        },
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+    });
+    return parseAvailableCopilotModelIds(raw, allowPolicyFallback);`;
+
+const PATCHED_COPILOT_MODEL_FETCH = `    const request = () =>
+        fetch(\`\${baseUrl}/models\`, {
+            headers: {
+                Accept: "application/json",
+                Authorization: \`Bearer \${copilotToken}\`,
+                ...COPILOT_HEADERS,
+                "X-GitHub-Api-Version": COPILOT_API_VERSION,
+            },
+            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+        });
+    // The login-time policy updates can drain the Copilot API rate-limit bucket, in which case
+    // this request is rejected with 429. Honor Retry-After and retry once instead of failing.
+    let response = await request();
+    if (response.status === 429) {
+        const retryAfterSeconds = Number(response.headers.get("retry-after"));
+        const waitMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? Math.min(retryAfterSeconds * 1000, MAX_RETRY_AFTER_MS)
+            : DEFAULT_RETRY_AFTER_MS;
+        await abortableSleep(waitMs, signal, "Login cancelled");
+        response = await request();
+    }
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(\`\${response.status} \${response.statusText}: \${text}\`);
+    }
+    return parseAvailableCopilotModelIds(await response.json(), allowPolicyFallback);`;
+
+const ORIGINAL_COPILOT_POLICY_UPDATES = `    const models = Object.values(GITHUB_COPILOT_MODELS);
+    for (let index = 0; index < models.length; index += COPILOT_POLICY_CONCURRENCY) {
+        await Promise.all(models.slice(index, index + COPILOT_POLICY_CONCURRENCY).map(async (model) => {
+            await enableGitHubCopilotModel(token, model.id, enterpriseDomain, signal);
+        }));
+    }`;
+
+const PATCHED_COPILOT_POLICY_UPDATES = `    for (const model of Object.values(GITHUB_COPILOT_MODELS)) {
+        await enableGitHubCopilotModel(token, model.id, enterpriseDomain, signal);
+    }`;
+
+export function patchPiGithubCopilotDeviceCodeSource(source) {
+	if (source.includes(GITHUB_COPILOT_DEVICE_CODE_MARKER)) {
+		assertPiRuntimeCorrectnessPatchSource(
+			source,
+			"githubCopilotDeviceCode",
+		"github-copilot device-code",
+		);
+		return source;
+	}
+	const patched = replaceRequired(
+		source,
+		"function abortableSleep(ms, signal, cancelMessage) {",
+		`// ${GITHUB_COPILOT_DEVICE_CODE_MARKER}
+export function abortableSleep(ms, signal, cancelMessage) {`,
+		"github-copilot device-code export",
+	);
+	assertPiRuntimeCorrectnessPatchSource(
+		patched,
+		"githubCopilotDeviceCode",
+		"github-copilot device-code",
+	);
+	return patched;
+}
+
+export function patchPiGithubCopilotOAuthSource(source) {
+	if (source.includes(GITHUB_COPILOT_OAUTH_MARKER)) {
+		assertPiRuntimeCorrectnessPatchSource(
+			source,
+			"githubCopilotOAuth",
+			"github-copilot OAuth",
+		);
+		return source;
+	}
+	let patched = replaceRequired(
+		source,
+		'import { pollOAuthDeviceCodeFlow } from "./device-code.js";',
+		'import { abortableSleep, pollOAuthDeviceCodeFlow } from "./device-code.js";',
+		"github-copilot OAuth import",
+	);
+	patched = replaceRequired(
+		patched,
+		`const COPILOT_API_VERSION = "2026-06-01";
+const COPILOT_POLICY_CONCURRENCY = 4;`,
+		`const COPILOT_API_VERSION = "2026-06-01";
+// ${GITHUB_COPILOT_OAUTH_MARKER}
+const MAX_RETRY_AFTER_MS = 10_000;
+const DEFAULT_RETRY_AFTER_MS = 1_000;`,
+		"github-copilot OAuth limits",
+	);
+	patched = replaceRequired(
+		patched,
+		ORIGINAL_COPILOT_MODEL_FETCH,
+		PATCHED_COPILOT_MODEL_FETCH,
+		"github-copilot model discovery",
+	);
+	patched = replaceRequired(
+		patched,
+		ORIGINAL_COPILOT_POLICY_UPDATES,
+		PATCHED_COPILOT_POLICY_UPDATES,
+		"github-copilot policy updates",
+	);
+	assertPiRuntimeCorrectnessPatchSource(
+		patched,
+		"githubCopilotOAuth",
+		"github-copilot OAuth",
+	);
 	return patched;
 }

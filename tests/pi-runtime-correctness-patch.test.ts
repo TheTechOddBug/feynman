@@ -14,6 +14,8 @@ import {
 	PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
+	patchPiGithubCopilotDeviceCodeSource,
+	patchPiGithubCopilotOAuthSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "../scripts/lib/pi-runtime-correctness-patch.mjs";
@@ -61,6 +63,52 @@ const nestedTransformMessagesPath = resolve(
 	"api",
 	"transform-messages.js",
 );
+const githubCopilotDeviceCodePath = resolve(
+	appRoot,
+	"node_modules",
+	"@earendil-works",
+	"pi-ai",
+	"dist",
+	"auth",
+	"oauth",
+	"device-code.js",
+);
+const githubCopilotOAuthPath = resolve(
+	appRoot,
+	"node_modules",
+	"@earendil-works",
+	"pi-ai",
+	"dist",
+	"auth",
+	"oauth",
+	"github-copilot.js",
+);
+const nestedGithubCopilotDeviceCodePath = resolve(
+	appRoot,
+	"node_modules",
+	"@earendil-works",
+	"pi-coding-agent",
+	"node_modules",
+	"@earendil-works",
+	"pi-ai",
+	"dist",
+	"auth",
+	"oauth",
+	"device-code.js",
+);
+const nestedGithubCopilotOAuthPath = resolve(
+	appRoot,
+	"node_modules",
+	"@earendil-works",
+	"pi-coding-agent",
+	"node_modules",
+	"@earendil-works",
+	"pi-ai",
+	"dist",
+	"auth",
+	"oauth",
+	"github-copilot.js",
+);
 
 function createResourceLoader(runtime: unknown) {
 	return {
@@ -85,6 +133,16 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	const sessionManagerSource = readFileSync(sessionManagerPath, "utf8");
 	const transformMessagesSource = readFileSync(transformMessagesPath, "utf8");
 	const nestedTransformMessagesSource = readFileSync(nestedTransformMessagesPath, "utf8");
+	const githubCopilotDeviceCodeSource = readFileSync(githubCopilotDeviceCodePath, "utf8");
+	const githubCopilotOAuthSource = readFileSync(githubCopilotOAuthPath, "utf8");
+	const nestedGithubCopilotDeviceCodeSource = readFileSync(
+		nestedGithubCopilotDeviceCodePath,
+		"utf8",
+	);
+	const nestedGithubCopilotOAuthSource = readFileSync(
+		nestedGithubCopilotOAuthPath,
+		"utf8",
+	);
 	const patchSource = readFileSync(
 		resolve(appRoot, "scripts", "lib", "pi-runtime-correctness-patch.mjs"),
 		"utf8",
@@ -102,16 +160,49 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	assert.match(transformMessagesSource, /flushFeynmanToolResults/);
 	assert.match(nestedTransformMessagesSource, /order eager tool results/);
 	assert.match(nestedTransformMessagesSource, /flushFeynmanToolResults/);
+	for (const source of [
+		githubCopilotDeviceCodeSource,
+		nestedGithubCopilotDeviceCodeSource,
+	]) {
+		assert.match(source, /export abortableSleep for upstream #8121/);
+		assert.match(source, /export function abortableSleep/);
+	}
+	for (const source of [githubCopilotOAuthSource, nestedGithubCopilotOAuthSource]) {
+		assert.match(source, /upstream #8121/);
+		assert.match(source, /response\.status === 429/);
+		assert.match(source, /response\.headers\.get\("retry-after"\)/);
+		assert.match(source, /for \(const model of Object\.values\(GITHUB_COPILOT_MODELS\)\)/);
+		assert.doesNotMatch(source, /COPILOT_POLICY_CONCURRENCY/);
+	}
 	assert.match(patchSource, /Removal condition: delete this patch once a supported released Pi version/);
+	assert.match(patchSource, /upstream commits d5278ea and 086c32e/);
 
 	assert.equal(patchPiAgentSessionSource(agentSessionSource), agentSessionSource);
 	assert.equal(patchPiSessionManagerSource(sessionManagerSource), sessionManagerSource);
 	assert.equal(patchPiTransformMessagesSource(transformMessagesSource), transformMessagesSource);
 	assert.equal(patchPiTransformMessagesSource(nestedTransformMessagesSource), nestedTransformMessagesSource);
+	assert.equal(
+		patchPiGithubCopilotDeviceCodeSource(githubCopilotDeviceCodeSource),
+		githubCopilotDeviceCodeSource,
+	);
+	assert.equal(
+		patchPiGithubCopilotDeviceCodeSource(nestedGithubCopilotDeviceCodeSource),
+		nestedGithubCopilotDeviceCodeSource,
+	);
+	assert.equal(
+		patchPiGithubCopilotOAuthSource(githubCopilotOAuthSource),
+		githubCopilotOAuthSource,
+	);
+	assert.equal(
+		patchPiGithubCopilotOAuthSource(nestedGithubCopilotOAuthSource),
+		nestedGithubCopilotOAuthSource,
+	);
 	for (const [target, source] of [
 		["agentSession", agentSessionSource],
 		["sessionManager", sessionManagerSource],
 		["transformMessages", transformMessagesSource],
+		["githubCopilotDeviceCode", githubCopilotDeviceCodeSource],
+		["githubCopilotOAuth", githubCopilotOAuthSource],
 	] as const) {
 		assert.doesNotThrow(() => assertPiRuntimeCorrectnessPatchSource(source, target));
 		for (const fragment of PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS[target]) {
@@ -135,6 +226,14 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 		() => patchPiAgentSessionSource("export class AgentSession {}\n"),
 		/Unsupported Pi 0\.84\.2 agent-session import layout/,
 	);
+	assert.throws(
+		() => patchPiGithubCopilotDeviceCodeSource("function sleep() {}\n"),
+		/Unsupported Pi 0\.84\.2 github-copilot device-code export layout/,
+	);
+	assert.throws(
+		() => patchPiGithubCopilotOAuthSource("export const githubCopilotOAuth = {};\n"),
+		/Unsupported Pi 0\.84\.2 github-copilot OAuth import layout/,
+	);
 	assert.doesNotThrow(() =>
 		assertPiRuntimeCorrectnessVersion(PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION, "test"),
 	);
@@ -146,6 +245,81 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 		() => assertPiRuntimeCorrectnessVersion("0.84.0", "test"),
 		/expected 0\.84\.2, found 0\.84\.0/,
 	);
+});
+
+test("GitHub Copilot login serializes policy updates and retries model discovery after 429", async (t) => {
+	const originalFetch = globalThis.fetch;
+	t.after(() => {
+		globalThis.fetch = originalFetch;
+	});
+	let activePolicyRequests = 0;
+	let maxActivePolicyRequests = 0;
+	let policyRequestCount = 0;
+	let modelsRequestCount = 0;
+	globalThis.fetch = async (input) => {
+		const url = typeof input === "string" || input instanceof URL
+			? String(input)
+			: input.url;
+		if (url.endsWith("/login/device/code")) {
+			return Response.json({
+				device_code: "device-code",
+				user_code: "ABCD-EFGH",
+				verification_uri: "https://github.com/login/device",
+				interval: 1,
+				expires_in: 30,
+			});
+		}
+		if (url.endsWith("/login/oauth/access_token")) {
+			return Response.json({ access_token: "ghu_refresh_token" });
+		}
+		if (url.includes("/copilot_internal/v2/token")) {
+			return Response.json({
+				token: "tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;",
+				expires_at: 9_999_999_999,
+			});
+		}
+		if (url.includes("/models/") && url.endsWith("/policy")) {
+			policyRequestCount += 1;
+			activePolicyRequests += 1;
+			maxActivePolicyRequests = Math.max(maxActivePolicyRequests, activePolicyRequests);
+			await new Promise((resolveDelay) => setTimeout(resolveDelay, 1));
+			activePolicyRequests -= 1;
+			return new Response("", { status: 200 });
+		}
+		if (url.endsWith("/models")) {
+			modelsRequestCount += 1;
+			if (modelsRequestCount === 1) {
+				return new Response("too many requests", {
+					status: 429,
+					headers: { "retry-after": "0.001" },
+				});
+			}
+			return Response.json({
+				data: [{ id: "gpt-5.4", model_picker_enabled: true }],
+			});
+		}
+		throw new Error(`Unexpected GitHub Copilot request: ${url}`);
+	};
+
+	const copilotModule = await import(`${pathToFileURL(githubCopilotOAuthPath).href}?test=${Date.now()}`) as {
+		githubCopilotOAuth: {
+			login: (interaction: {
+				prompt: () => Promise<string>;
+				notify: (event: unknown) => void;
+				signal: AbortSignal;
+			}) => Promise<{ availableModelIds?: string[] }>;
+		};
+	};
+	const credentials = await copilotModule.githubCopilotOAuth.login({
+		prompt: async () => "",
+		notify: () => {},
+		signal: new AbortController().signal,
+	});
+
+	assert.ok(policyRequestCount > 1);
+	assert.equal(maxActivePolicyRequests, 1);
+	assert.equal(modelsRequestCount, 2);
+	assert.deepEqual(credentials.availableModelIds, ["gpt-5.4"]);
 });
 
 test("Pi 0.84.2 correctness patch migrates the pre-review eager persistence layout", () => {

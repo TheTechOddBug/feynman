@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
 	createAgentSession,
@@ -627,10 +627,95 @@ export async function verifyInstalledSchemas() {
 	}
 }
 
+export async function verifyGithubCopilotRateLimitLogin() {
+	const copilotModulePath = resolve(
+		packageRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-ai",
+		"dist",
+		"auth",
+		"oauth",
+		"github-copilot.js",
+	);
+	assert.ok(existsSync(copilotModulePath), "Installed GitHub Copilot OAuth module is missing");
+	const originalFetch = globalThis.fetch;
+	let activePolicyRequests = 0;
+	let maxActivePolicyRequests = 0;
+	let policyRequestCount = 0;
+	let modelsRequestCount = 0;
+	globalThis.fetch = async (input) => {
+		const url = typeof input === "string" || input instanceof URL
+			? String(input)
+			: input.url;
+		if (url.endsWith("/login/device/code")) {
+			return Response.json({
+				device_code: "device-code",
+				user_code: "ABCD-EFGH",
+				verification_uri: "https://github.com/login/device",
+				interval: 1,
+				expires_in: 30,
+			});
+		}
+		if (url.endsWith("/login/oauth/access_token")) {
+			return Response.json({ access_token: "ghu_refresh_token" });
+		}
+		if (url.includes("/copilot_internal/v2/token")) {
+			return Response.json({
+				token: "tid=test;exp=9999999999;proxy-ep=proxy.individual.githubcopilot.com;",
+				expires_at: 9_999_999_999,
+			});
+		}
+		if (url.includes("/models/") && url.endsWith("/policy")) {
+			policyRequestCount += 1;
+			activePolicyRequests += 1;
+			maxActivePolicyRequests = Math.max(maxActivePolicyRequests, activePolicyRequests);
+			await new Promise((resolveDelay) => setTimeout(resolveDelay, 1));
+			activePolicyRequests -= 1;
+			return new Response("", { status: 200 });
+		}
+		if (url.endsWith("/models")) {
+			modelsRequestCount += 1;
+			if (modelsRequestCount === 1) {
+				return new Response("too many requests", {
+					status: 429,
+					headers: { "retry-after": "0.001" },
+				});
+			}
+			return Response.json({
+				data: [{ id: "gpt-5.4", model_picker_enabled: true }],
+			});
+		}
+		throw new Error(`Unexpected GitHub Copilot request: ${url}`);
+	};
+
+	try {
+		const copilotModule = await import(
+			`${pathToFileURL(copilotModulePath).href}?installed-verifier=${Date.now()}`
+		);
+		const credentials = await copilotModule.githubCopilotOAuth.login({
+			prompt: async () => "",
+			notify: () => {},
+			signal: new AbortController().signal,
+		});
+		assert.ok(policyRequestCount > 1, "Copilot login did not enable model policies");
+		assert.equal(
+			maxActivePolicyRequests,
+			1,
+			"Copilot login sent concurrent policy requests",
+		);
+		assert.equal(modelsRequestCount, 2, "Copilot model discovery did not retry exactly once");
+		assert.deepEqual(credentials.availableModelIds, ["gpt-5.4"]);
+	} finally {
+		globalThis.fetch = originalFetch;
+	}
+}
+
 async function main() {
 	await verifyRpcSurface();
 	await verifyWebAccessRegistrationGates();
 	await verifyInstalledSchemas();
+	await verifyGithubCopilotRateLimitLogin();
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
 		commands: EXPECTED_FEYNMAN_COMMANDS.length,
@@ -640,6 +725,7 @@ async function main() {
 		typeboxOptionalNull: "omitted",
 		typeboxMalformedArguments: "rejected",
 		webAccessRegistrationGates: "passed",
+		githubCopilotRateLimit: "passed",
 	}));
 }
 

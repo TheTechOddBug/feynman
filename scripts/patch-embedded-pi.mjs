@@ -13,6 +13,8 @@ import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
+	patchPiGithubCopilotDeviceCodeSource,
+	patchPiGithubCopilotOAuthSource,
 	patchPiSessionManagerSource,
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
@@ -123,10 +125,6 @@ const sessionManagerPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core"
 const llamaProviderPath = piPackageRoot
 	? resolve(piPackageRoot, "dist", "extensions", "llama", "provider.js")
 	: null;
-const transformMessagesPath = piAiRoot ? resolve(piAiRoot, "dist", "api", "transform-messages.js") : null;
-const nestedTransformMessagesPaths = piPackageRoot
-	? resolveNestedPiFiles(piPackageRoot, "pi-ai", "dist", "api", "transform-messages.js")
-	: [];
 const agentLoopPath = piAgentCoreRoot ? resolve(piAgentCoreRoot, "dist", "agent-loop.js") : null;
 const nestedAgentLoopPaths = resolveNestedPiFiles(piPackageRoot, "pi-agent-core", "dist", "agent-loop.js");
 const tuiPath = piTuiRoot ? resolve(piTuiRoot, "dist", "tui.js") : null;
@@ -145,6 +143,28 @@ function resolveWorkspacePiFile(packageName, ...segments) {
 	return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
 }
 
+function resolvePiAiRuntimeFiles(...segments) {
+	return [
+		piAiRoot ? resolve(piAiRoot, ...segments) : null,
+		...resolveNestedPiFiles(piPackageRoot, "pi-ai", ...segments),
+		resolveWorkspacePiFile("pi-ai", ...segments),
+		...resolveWorkspaceNestedPiFiles(workspaceRoot, "pi-ai", ...segments),
+	].filter(Boolean);
+}
+
+const transformMessagesPaths = resolvePiAiRuntimeFiles("dist", "api", "transform-messages.js");
+const githubCopilotDeviceCodePaths = resolvePiAiRuntimeFiles(
+	"dist",
+	"auth",
+	"oauth",
+	"device-code.js",
+);
+const githubCopilotOAuthPaths = resolvePiAiRuntimeFiles(
+	"dist",
+	"auth",
+	"oauth",
+	"github-copilot.js",
+);
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
 const workspaceNestedAgentLoopPaths = resolveWorkspaceNestedPiFiles(
 	workspaceRoot,
@@ -160,14 +180,6 @@ const workspaceLlamaProviderPath = resolveWorkspacePiFile(
 	"extensions",
 	"llama",
 	"provider.js",
-);
-const workspaceTransformMessagesPath = resolveWorkspacePiFile("pi-ai", "dist", "api", "transform-messages.js");
-const workspaceNestedTransformMessagesPaths = resolveWorkspaceNestedPiFiles(
-	workspaceRoot,
-	"pi-ai",
-	"dist",
-	"api",
-	"transform-messages.js",
 );
 
 function assertPiPackageVersion(packageRoot, surface) {
@@ -201,8 +213,8 @@ assertPiPackageVersion(piTuiRoot, "bundled pi-tui");
 for (const entryPath of nestedAgentLoopPaths) {
 	assertPiPackageVersion(resolve(entryPath, "..", ".."), "bundled nested pi-agent-core");
 }
-for (const entryPath of nestedTransformMessagesPaths) {
-	assertPiPackageVersion(resolve(entryPath, "..", "..", ".."), "bundled nested pi-ai");
+for (const entryPath of transformMessagesPaths) {
+	assertPiPackageVersion(resolve(entryPath, "..", "..", ".."), "Pi AI runtime package");
 }
 for (const entryPath of nestedTuiPaths) {
 	assertPiPackageVersion(resolve(entryPath, "..", ".."), "bundled nested pi-tui");
@@ -971,10 +983,15 @@ for (const [entryPath, patchSource] of [
 	[workspaceAgentSessionPath, patchPiAgentSessionSource],
 	[sessionManagerPath, patchPiSessionManagerSource],
 	[workspaceSessionManagerPath, patchPiSessionManagerSource],
-	[transformMessagesPath, patchPiTransformMessagesSource],
-	[workspaceTransformMessagesPath, patchPiTransformMessagesSource],
-	...nestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
-	...workspaceNestedTransformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
+	...transformMessagesPaths.map((entryPath) => [entryPath, patchPiTransformMessagesSource]),
+	...githubCopilotDeviceCodePaths.map((entryPath) => [
+		entryPath,
+		patchPiGithubCopilotDeviceCodeSource,
+	]),
+	...githubCopilotOAuthPaths.map((entryPath) => [
+		entryPath,
+		patchPiGithubCopilotOAuthSource,
+	]),
 ]) {
 	if (
 		!entryPath ||

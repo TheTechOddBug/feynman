@@ -189,6 +189,8 @@ requireMarkers(
 		"valid-typebox-probe",
 		"null-typebox-probe",
 		"invalid-typebox-probe",
+		"verifyGithubCopilotRateLimitLogin",
+		'githubCopilotRateLimit: "passed"',
 		"terminateChildProcessTree",
 	],
 );
@@ -275,6 +277,32 @@ for (const [label, path] of [
 	],
 ]) {
 	assertPiRuntimeCorrectnessPatchSource(readText(path, label), "transformMessages", label);
+}
+for (const [target, relativePath] of [
+	["githubCopilotDeviceCode", "dist/auth/oauth/device-code.js"],
+	["githubCopilotOAuth", "dist/auth/oauth/github-copilot.js"],
+]) {
+	for (const [label, path] of [
+		[
+			`bundled root Pi AI ${target}`,
+			resolve(packageRoot, "node_modules", "@earendil-works", "pi-ai", ...relativePath.split("/")),
+		],
+		[
+			`bundled nested Pi AI ${target}`,
+			resolve(
+				packageRoot,
+				"node_modules",
+				"@earendil-works",
+				"pi-coding-agent",
+				"node_modules",
+				"@earendil-works",
+				"pi-ai",
+				...relativePath.split("/"),
+			),
+		],
+	]) {
+		assertPiRuntimeCorrectnessPatchSource(readText(path, label), target, label);
+	}
 }
 if (
 	readJson(
@@ -636,6 +664,27 @@ for (const [label, entryPath] of [
 		"transformMessages",
 		label,
 	);
+}
+for (const [target, relativePath] of [
+	["githubCopilotDeviceCode", "dist/auth/oauth/device-code.js"],
+	["githubCopilotOAuth", "dist/auth/oauth/github-copilot.js"],
+]) {
+	for (const [label, entryPath] of [
+		[
+			`runtime root Pi AI ${target}`,
+			`npm/node_modules/@earendil-works/pi-ai/${relativePath}`,
+		],
+		[
+			`runtime nested Pi AI ${target}`,
+			`npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/${relativePath}`,
+		],
+	]) {
+		assertPiRuntimeCorrectnessPatchSource(
+			readArchivedText(archivePath, entryPath),
+			target,
+			label,
+		);
+	}
 }
 for (const [label, entryPath] of [
 	[

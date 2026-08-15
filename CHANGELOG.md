@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 09:38 EDT — pi-copilot-rate-limit-0.3.23
+
+- Objective: Port Pi's merged GitHub Copilot login fixes into the current `0.84.2` runtime and qualify Feynman `0.3.23`.
+- Intake: Open Feynman issues and pull requests remain empty. No issue or PR changed after the prior automation cutoff. The 30 newest forks are behind or equal to `main` except `NioZow/feynman`, whose old Nix packaging commit remains rejected. Security alert and advisory queues are empty.
+- Fixed: Applied upstream Pi commits `d5278ea` and `086c32e` to every root, nested, vendored, and agent-managed Pi AI runtime copy. Copilot policy updates now run sequentially, and model discovery honors `Retry-After` before one bounded retry.
+- Fixed: Consolidated embedded Pi AI target discovery after the first full test found `scripts/patch-embedded-pi.mjs` above the architecture limit. The script is now `1,170` lines without weakening the guard.
+- Verified: Focused patch tests passed (`9/9`), and the full suite passed (`784/784`). Typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/website/runtime audits, package freshness review, and diff checks passed. The mocked Copilot login proved one active policy request and a successful second model request after `429`.
+- Package proof: Dry and real packs matched at `114,755,955` bytes and `29,134` files. The tarball SHA-256 is `0c7db229e9cd6d1ae45fd80319f0d82311196c3a77cb65c3d64fdc365ca78728`; clean source/runtime/consumer audits and package, stale-upgrade, 15-tool/9-command RPC, TypeBox, Copilot, and document parse/search/screenshot verifiers passed.
+- State: `unverified` for exact-commit Daytona, PR CI, merge, publication, and post-release identity. Next: finish those gates, then publish and verify `0.3.23`.
+
 ### 2026-08-15 06:32 EDT — intake-sweep-v0-3-22-daytona-proof
 
 - Objective: Complete clean-machine proof for the published Feynman `0.3.22` release and close the intake sweep.
