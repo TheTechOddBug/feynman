@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-16 19:21 EDT — 0.3.25-malformed-agent-release-complete
+
+- Objective: Finish the malformed research-agent intake through exact-head CI, merge, publication, live installers, and terminal queue reconciliation.
+- Merge: PR `#232` head `9f51344` passed release-candidate validation, six Linux/macOS/Windows package consumers, and the Windows native installer in run `31972388657`, then merged as `b3c76de`. Exact-head Daytona sandbox `ab1fe2a8-1d10-4c99-9fe6-4367b8bacbb9` passed the full source, website, package, runtime, RPC, model, and document ladder on Node `25.9.0` and was deleted.
+- Release: Publish run `31974166620` passed all `16` jobs. npm latest is `@companion-ai/feynman@0.3.25` with integrity `sha512-XogQQFJ+BLf8Wo3Jz8SD6ClzKimCQ2XIzovI+L+/iYphV4JHxd9VB0hwgJs5A0rZoYtloXlU3oGgxYdnSoTo6A==`; npm signatures and SLSA provenance resolve to `b3c76de`. GitHub tag `v0.3.25` targets the same commit, and all five native asset digests match `SHA256SUMS`.
+- Post-release: Run `31977982475` passed published-package installs on Ubuntu Node `22/24/25`, macOS Node `24`, and Windows Node `24/25`, plus live Ubuntu, macOS, and Windows native installers. Every package-consumer job passed JSON and text model calls plus the researcher-child `RESULT=PONG` smoke.
+- Live docs: Vercel reports success for `b3c76de`, and `https://feynman.is/docs/reference/releases/` serves the `v0.3.25` release entry.
+- Intake: Open issues, open pull requests, active workflows, Dependabot alerts, and repository advisories are empty. Code scanning still has no analysis, and secret scanning remains disabled. The repository has only `main`; among the `30` newest forks, only `NioZow/feynman` has an exclusive commit, the rejected generic Nix flake `924ce4f`.
+- Freshness and cleanup: Pi `0.84.2`, `pi-web-access` `0.23.0`, `pi-docparser` `4.0.0`, `pi-btw` `0.4.1`, `pi-otel` `0.1.0`, alpha-hub `0.1.3`, and LiteParse `2.13.0` remain current. `pi-subagents@0.50.0` remains outside the synchronous research path; non-security dependency drift has no release blocker. The release branch and owned model-probe artifacts were removed, while the unrelated dirty nested `website` repository and ignored research artifacts remain preserved.
+- State: `verified` and released. Next: refresh the same queues on the next scheduled run.
+
 ### 2026-08-16 15:56 EDT — pi-subagents-malformed-agent-0.3.25
 
 - Objective: Backport the current upstream malformed-agent isolation repair into Feynman's bundled synchronous research-agent runtime and qualify `0.3.25`.
