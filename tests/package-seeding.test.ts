@@ -110,6 +110,7 @@ test("0.3.25 release notes name malformed-agent isolation", () => {
 		assert.match(currentRelease, /invalid configuration/i);
 		assert.match(currentRelease, /pi-web-access@0\.22\.0/);
 		assert.match(currentRelease, /bundled `0\.23\.0` release/i);
+		assert.match(currentRelease, /split prompt metadata/i);
 	}
 });
 

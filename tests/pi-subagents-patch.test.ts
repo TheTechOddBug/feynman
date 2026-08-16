@@ -100,6 +100,7 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 	assert.deepEqual(
 		[
 			"src/extension/index.ts",
+			"src/extension/tool-description.ts",
 			"src/agents/agents.ts",
 			"src/agents/agent-management.ts",
 			"src/api/preflight.ts",
@@ -129,6 +130,48 @@ test("patchPiSubagentsSource rewrites current src paths", () => {
 
 	assert.match(patched, /function resolvePiAgentDir\(\): string \{/);
 	assert.match(patched, /path\.join\(resolvePiAgentDir\(\), "extensions", "subagent", "config\.json"\)/);
+});
+
+test("patchPiSubagentsSource registers split prompt metadata by default", () => {
+	const toolDescription = [
+		'import type { ExtensionConfig, ToolDescriptionMode } from "../shared/types.ts";',
+		'const CUSTOM_TOOL_DESCRIPTION_FILE = "subagent-tool-description.md";',
+		"const CUSTOM_TOOL_DESCRIPTION_MAX_BYTES = 50 * 1024;",
+		"export const FULL_SUBAGENT_TOOL_DESCRIPTION = `full`;",
+		"export const COMPACT_SUBAGENT_TOOL_DESCRIPTION = `compact`;",
+		"export interface ToolDescriptionOptions {",
+		"\tcwd?: string;",
+		"\tagentDir?: string;",
+		"\twarn?: (message: string) => void;",
+		"}",
+		"",
+		'export function resolveToolDescriptionMode(config: Pick<ExtensionConfig, "toolDescriptionMode">, options?: ToolDescriptionOptions): ToolDescriptionMode {',
+		'\treturn config.toolDescriptionMode ?? "full";',
+		"}",
+		"",
+		'export function buildSubagentToolDescription(config: Pick<ExtensionConfig, "toolDescriptionMode"> = {}, options?: ToolDescriptionOptions): string {',
+		"\tconst mode = resolveToolDescriptionMode(config, options);",
+		'\treturn mode === "compact" ? COMPACT_SUBAGENT_TOOL_DESCRIPTION : FULL_SUBAGENT_TOOL_DESCRIPTION;',
+		"}",
+	].join("\n");
+	const extensionIndex = [
+		'import { buildSubagentToolDescription } from "./tool-description.ts";',
+		"const tool = {",
+		'\t\tdescription: buildSubagentToolDescription(config),',
+		"\t\tparameters: SubagentParams,",
+		"};",
+	].join("\n");
+
+	const patchedDescription = patchPiSubagentsSource("src/extension/tool-description.ts", toolDescription);
+	const patchedIndex = patchPiSubagentsSource("src/extension/index.ts", extensionIndex);
+
+	assert.match(patchedDescription, /feynman-pi-subagents-prompt-metadata-v1/);
+	assert.match(patchedDescription, /Delegate to configured research subagents/);
+	assert.match(patchedDescription, /buildSubagentToolPromptMetadata/);
+	assert.match(patchedDescription, /if \(config\.toolDescriptionMode === undefined\) return DEFAULT_SUBAGENT_TOOL_DESCRIPTION/);
+	assert.match(patchedIndex, /\.\.\.buildSubagentToolPromptMetadata\(config\)/);
+	assert.equal(patchPiSubagentsSource("src/extension/tool-description.ts", patchedDescription), patchedDescription);
+	assert.equal(patchPiSubagentsSource("src/extension/index.ts", patchedIndex), patchedIndex);
 });
 
 test("patchPiSubagentsSource is idempotent", () => {

@@ -16,6 +16,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 - A malformed custom agent definition no longer blocks unrelated valid research agents from loading or running.
 - Direct requests for a malformed agent now report its invalid configuration instead of using a lower-priority definition.
 - Agent listings and doctor diagnostics now identify malformed definitions without stopping discovery.
+- The default subagent tool now uses concise split prompt metadata, reducing always-loaded instructions while keeping explicit full, compact, and custom modes.
 
 ### Package reliability
 

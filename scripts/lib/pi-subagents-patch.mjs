@@ -1,4 +1,5 @@
 import { patchPiSubagentAgentDiagnostics } from "./pi-subagents-agent-diagnostics-patch.mjs";
+import { patchPiSubagentPromptMetadata } from "./pi-subagents-prompt-metadata-patch.mjs";
 
 export const PI_SUBAGENTS_PATCH_TARGETS = [
 	"index.ts",
@@ -11,6 +12,7 @@ export const PI_SUBAGENTS_PATCH_TARGETS = [
 	"subagent-executor.ts",
 	"schemas.ts",
 	"src/extension/index.ts",
+	"src/extension/tool-description.ts",
 	"src/agents/agents.ts",
 	"src/agents/agent-management.ts",
 	"src/api/preflight.ts",
@@ -277,7 +279,10 @@ export function stripPiSubagentBuiltinModelSource(source) {
 
 export function patchPiSubagentsSource(relativePath, source) {
 	const target = relativePath.split("/").pop();
-	let patched = patchPiSubagentAgentDiagnostics(relativePath, source);
+	let patched = patchPiSubagentPromptMetadata(
+		relativePath,
+		patchPiSubagentAgentDiagnostics(relativePath, source),
+	);
 
 	switch (target) {
 		case "index.ts":

@@ -20,7 +20,7 @@ import {
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
-import { assertPiSubagentAgentDiagnosticsSources } from "./lib/pi-subagents-agent-diagnostics-patch.mjs";
+import { assertPiSubagentPatchedSources } from "./lib/pi-subagents-verification.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -631,7 +631,7 @@ for (const spec of runtimeManifest.packageSpecs) {
 	}
 }
 
-assertPiSubagentAgentDiagnosticsSources((relativePath) => readArchivedText(archivePath, `npm/node_modules/pi-subagents/${relativePath}`), "runtime pi-subagents");
+assertPiSubagentPatchedSources((relativePath) => readArchivedText(archivePath, `npm/node_modules/pi-subagents/${relativePath}`), "runtime pi-subagents");
 
 assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(
