@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-16 10:08 EDT — intake-sweep-0.3.24-synchronized
+
+- Objective: Refresh the complete Feynman AI-researcher intake from synchronized `main` and persist current package, release, and provider receipts.
+- Queue: Open issues, open pull requests, changed issue or pull-request items after the prior sweep, and active workflows are empty. Recent closed issues remain terminal, and merged pull requests through `#231` require no follow-up.
+- Worktrees and forks: Root `main` was clean at `2f0ca1b`. The unrelated dirty nested `website` repository, ignored research artifacts, old Conductor checkpoint refs, and six active Relay-labeled Daytona sandboxes remain preserved. The 30 newest forks have no exclusive commit except `NioZow/feynman` commit `924ce4f`, an old generic Nix flake that remains rejected.
+- Runtime: Pi `0.84.2`, `pi-web-access` `0.23.0`, `pi-docparser` `4.0.0`, `pi-btw` `0.4.1`, `pi-otel` `0.1.0`, alpha-hub `0.1.3`, and LiteParse `2.13.0` remain current. New unreleased `pi-subagents` work after the prior cutoff adds an external job runner, Orca progress tabs, and provider-profile probing. Those surfaces do not repair Feynman's bundled synchronous research path, so the adjacent `0.50.0` migration remains rejected.
+- Security and freshness: Root, website, bundled runtime, local-tarball consumer, extracted runtime, and published-package consumer audits report zero vulnerabilities. Dependabot and repository advisories are empty; code scanning has no analysis and secret scanning is disabled. Root and website outdated reports contain non-security dependency drift only.
+- Verified: Clean root and website installs, `784/784` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), audits, diff check, source artifact verification, dry pack, real pack, and clean local and published consumer checks passed. The local pack is `114,823,227` bytes with `29,134` files and SHA-256 `769ff83ac942436f16317c37e724ead639010d830f4c7a5dedcec8a3bcc83d53`.
+- Installed and release proof: Local-tarball plus fresh npm local and global installs passed CLI, package/search, stale-Pi, artifact, 15-tool/9-command RPC and TypeBox, Copilot rate-limit, and document parse/search/screenshot checks. npm signatures and SLSA provenance resolve `0.3.24` to `015fee9`. GitHub `v0.3.24` targets the same commit, and all five native provider digests match `SHA256SUMS`. Current Vercel production deployment `5929775267` is green.
+- State: `verified` with no product, dependency, issue, pull-request, merge, Daytona, or release action required. Next: refresh the same queues on the next scheduled sweep.
+
 ### 2026-08-16 05:50 EDT — intake-sweep-0.3.24-no-action
 
 - Objective: Refresh the complete Feynman AI-researcher intake from synchronized `main` and persist current release, package, and validation receipts.
