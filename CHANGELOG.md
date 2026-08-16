@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-15 21:50 EDT — intake-sweep-0.3.24-post-release
+
+- Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.24` release and persist the terminal receipts.
+- Queue: Open issues, open pull requests, active workflows, Dependabot alerts, and repository advisories are empty. Recently closed issues `#217`, `#214`, `#209`, `#208`, `#207`, and `#202` already have verified released fixes; no re-open or port action is required. Merged PR `#231` remains released and verified.
+- Forks: The 30 newest forks are behind `main` except `NioZow/feynman`, which has one old generic Nix flake commit and remains rejected. The repository has no `codex` or `codex-automation` labels.
+- Upstream: Pi `0.84.2`, `pi-web-access` `0.23.0`, `pi-docparser` `4.0.0`, `pi-btw` `0.4.1`, `pi-otel` `0.1.0`, and LiteParse `2.13.0` are current released versions. Pi main has six unreleased commits after `v0.84.2`; its Copilot fixes are already carried in Feynman `0.3.23`. `pi-subagents` `0.50.0` remains rejected because its official `391`-commit migration adds missions, schedules, workflows, FleetView, Herdr, worktrees, and administration rather than repairing a Feynman research defect.
+- Security and freshness: Root and website production audits report zero vulnerabilities. `npm outdated` reports non-security general dependency drift only; no coordinated research-runtime update is justified.
+- Verified: `784/784` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root and website audits, diff check, dry pack, real pack, clean consumer audit, installed artifact verifier, 15-tool/9-command RPC and TypeBox verifier, Copilot verifier, document parse/search/screenshot verifier, and CLI version/help/package/alpha status smokes passed. The real pack is `114,842,276` bytes, `29,140` files, and SHA-256 `1523c00e0b446942303499e0aab366b1c7dd33ef6b12fa0a9e9957e3cbf62545`.
+- Release: GitHub `v0.3.24` and npm `@companion-ai/feynman@0.3.24` target merged commit `015fee9`; publish run `31912561202`, post-release run `31915158425`, and synchronized-main run `31915614546` passed. Native asset digests match `SHA256SUMS`; npm latest includes SLSA provenance.
+- State: `verified` and production-live on synchronized `main` `1d6b833`. No product or dependency changes were needed. The unrelated nested website checkout and existing ignored research artifacts remain preserved and untouched. Next: refresh the queues on the next scheduled sweep.
+
 ### 2026-08-15 17:56 EDT — liteparse-2.13.0-0.3.24
 
 - Objective: Qualify the new LiteParse `2.13.0` document research runtime and carry the update toward release.
