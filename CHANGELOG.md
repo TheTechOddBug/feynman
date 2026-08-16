@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-16 01:53 EDT — intake-sweep-0.3.24-current
+
+- Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.24` release and persist current receipts.
+- Queue: Open issues, open pull requests, and active workflows are empty. Recently closed issues `#217`, `#214`, `#209`, `#208`, `#207`, and `#202` have released fixes with verified receipts. Merged PRs through `#231` require no port or follow-up action.
+- Forks: The 30 newest forks are behind `main` except `NioZow/feynman`, which is 1 commit ahead with a generic Nix flake and remains rejected. No contributor branch or fork contains a fresh core research-loop fix.
+- Runtime: Pi `0.84.2`, `pi-web-access` `0.23.0`, `pi-docparser` `4.0.0`, `pi-btw` `0.4.1`, `pi-otel` `0.1.0`, LiteParse `2.13.0`, and alpha-hub `0.1.3` match current releases. `pi-subagents` `0.50.0` is newer than the bundled `0.40.0`, but its documented migration adds missions, schedules, workflows, FleetView, and administration rather than fixing a Feynman research defect.
+- Security and freshness: Root, website, bundled runtime, local-pack consumer, and published-package consumer audits report zero vulnerabilities. GitHub Dependabot and repository advisories are empty; code scanning has no analysis and secret scanning is disabled. `npm outdated` reports non-security dependency drift only.
+- Verified: Clean `npm ci`, `784/784` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root and website audits, `git diff --check`, source artifact verification, dry pack, real pack, and clean local-pack and published-package consumer smokes passed. The clean real pack is `114,823,227` bytes, `29,134` files, and SHA-256 `769ff83ac942436f16317c37e724ead639010d830f4c7a5dedcec8a3bcc83d53`; both consumer paths passed package, runtime, TypeBox/RPC, and document-parser verifiers.
+- Release: GitHub `v0.3.24` targets `015fee9`; npm `@companion-ai/feynman@0.3.24` is latest with valid signatures and published integrity `sha512-F/0cBuhGzW3DBVXyOAPniNU4JpdXbqf9/lS1JTN2sb3+v0GiL80JhM0euzxUQHw9FIcy7WuBlJ6bgjlj/CR1ug==`. Publish run `31912561202`, post-release run `31915158425`, and current documentation-only main run `31920536741` passed their applicable gates.
+- State: `verified` and production-live on synchronized `main` `67e88ab`. No product or dependency changes were needed. Existing architecture/build warnings, non-security freshness drift, and the unrelated nested `website` checkout remain preserved and unchanged. Next: refresh the queues on the next scheduled sweep.
+
 ### 2026-08-15 21:50 EDT — intake-sweep-0.3.24-post-release
 
 - Objective: Refresh the complete Feynman AI-researcher intake after the `0.3.24` release and persist the terminal receipts.
