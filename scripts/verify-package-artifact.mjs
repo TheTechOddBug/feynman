@@ -19,10 +19,8 @@ import {
 	readArchiveEntry,
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
-import {
-	PI_WEB_ACCESS_PATCH_TARGETS,
-	assertPiWebAccessPatchedSources,
-} from "./lib/pi-web-access-patch.mjs";
+import { PI_WEB_ACCESS_PATCH_TARGETS, assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
+import { assertPiSubagentPatchedSources } from "./lib/pi-subagents-verification.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -632,6 +630,8 @@ for (const spec of runtimeManifest.packageSpecs) {
 		fail(`runtime archive ${name} version mismatch: expected ${version}, found ${archived.version}`);
 	}
 }
+
+assertPiSubagentPatchedSources((relativePath) => readArchivedText(archivePath, `npm/node_modules/pi-subagents/${relativePath}`), "runtime pi-subagents");
 
 assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(

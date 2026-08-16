@@ -317,6 +317,17 @@ test("managed package reconciliation updates every previously shipped package pi
 			"npm:pi-otel@0.1.0",
 		],
 	);
+	assert.deepEqual(
+		reconcileManagedCorePackageSources(["npm:pi-web-access@0.22.0"]),
+		[
+			"npm:pi-web-access@0.23.0",
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-subagents@0.40.0",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
 });
 
 test("managed package reconciliation preserves an explicit custom core selector without adding a duplicate", () => {

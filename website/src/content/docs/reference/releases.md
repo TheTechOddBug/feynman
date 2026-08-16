@@ -9,6 +9,23 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.25 - 2026-08-16
+
+### Research agents
+
+- A malformed custom agent definition no longer blocks unrelated valid research agents from loading or running.
+- Direct requests for a malformed agent now report its invalid configuration instead of using a lower-priority definition.
+- Agent listings and doctor diagnostics now identify malformed definitions without stopping discovery.
+- The default subagent tool now uses concise split prompt metadata, reducing always-loaded instructions while keeping explicit full, compact, and custom modes.
+
+### Package reliability
+
+- Existing `pi-web-access@0.22.0` core pins now upgrade to the bundled `0.23.0` release before launch.
+
+### Validation
+
+- Backported the focused upstream `pi-subagents` malformed-agent isolation fix and added installed-runtime and stale-settings regressions.
+
 ## v0.3.24 - 2026-08-15
 
 ### Document research

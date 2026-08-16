@@ -75,6 +75,7 @@ export async function verifyRpcSurface(options = {}) {
 	const verificationTimeoutMs = options.timeoutMs ?? 45 * 60_000;
 	const home = mkdtempSync(resolve(tmpdir(), "feynman-installed-rpc-"));
 	const invocation = resolveChildProcessCommand(binaryPath, ["--mode", "rpc"]);
+	const malformedAgentsDir = resolve(home, ".feynman", "agent", "agents");
 	let stderr = "";
 	let stdoutBuffer = "";
 	let commandsVerified = false;
@@ -82,8 +83,17 @@ export async function verifyRpcSurface(options = {}) {
 	let toolsVerified = false;
 	let webToolsVerified = false;
 	let schemaSummaryVerified = false;
+	let validSubagentListed = false;
+	let invalidSubagentRejected = false;
 	let promptAccepted = false;
 	let stdinEnded = false;
+
+	mkdirSync(malformedAgentsDir, { recursive: true });
+	writeFileSync(
+		resolve(malformedAgentsDir, "broken.md"),
+		"---\nname: broken\ndescription: Invalid installed-runtime test agent\nasync: maybe\n---\nBroken.\n",
+		"utf8",
+	);
 
 	try {
 		await new Promise((resolvePromise, rejectPromise) => {
@@ -125,7 +135,7 @@ export async function verifyRpcSurface(options = {}) {
 			timeout = setTimeout(() => {
 				void fail(
 					new Error(
-						`Installed RPC verification timed out. commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified}\n${stderr}`,
+						`Installed RPC verification timed out. commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} validSubagent=${validSubagentListed} invalidSubagent=${invalidSubagentRejected}\n${stderr}`,
 					),
 				);
 			}, verificationTimeoutMs);
@@ -147,6 +157,8 @@ export async function verifyRpcSurface(options = {}) {
 					toolsVerified &&
 					webToolsVerified &&
 					schemaSummaryVerified &&
+					validSubagentListed &&
+					invalidSubagentRejected &&
 					promptAccepted
 				) {
 					stdinEnded = true;
@@ -158,6 +170,28 @@ export async function verifyRpcSurface(options = {}) {
 				}
 			};
 			const handleRecord = (record) => {
+				if (
+					record.type === "message_end" &&
+					record.message?.customType === "subagents-admin" &&
+					typeof record.message.content === "string" &&
+					record.message.content.includes("- researcher (user)")
+				) {
+					validSubagentListed = true;
+					finishInput();
+					return;
+				}
+				if (
+					record.type === "extension_ui_request" &&
+					record.method === "notify" &&
+					record.notifyType === "error" &&
+					typeof record.message === "string" &&
+					record.message.startsWith("Agent 'broken' has invalid configuration:")
+				) {
+					assert.match(record.message, /invalid async frontmatter/);
+					invalidSubagentRejected = true;
+					finishInput();
+					return;
+				}
 				if (
 					record.type === "response" &&
 					record.command === "get_commands" &&
@@ -285,11 +319,13 @@ export async function verifyRpcSurface(options = {}) {
 					!toolsVerified ||
 					!webToolsVerified ||
 					!schemaSummaryVerified ||
+					!validSubagentListed ||
+					!invalidSubagentRejected ||
 					!promptAccepted
 				) {
 					void fail(
 						new Error(
-							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
+							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} validSubagent=${validSubagentListed} invalidSubagent=${invalidSubagentRejected} prompt=${promptAccepted}\n${stderr}`,
 						),
 					);
 				}
@@ -305,11 +341,13 @@ export async function verifyRpcSurface(options = {}) {
 					!toolsVerified ||
 					!webToolsVerified ||
 					!schemaSummaryVerified ||
+					!validSubagentListed ||
+					!invalidSubagentRejected ||
 					!promptAccepted
 				) {
 					void fail(
 						new Error(
-							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} prompt=${promptAccepted}\n${stderr}`,
+							`Installed RPC verification failed: code=${code} signal=${signal} commands=${commandsVerified} webCommand=${webCommandVerified} tools=${toolsVerified} webTools=${webToolsVerified} schema=${schemaSummaryVerified} validSubagent=${validSubagentListed} invalidSubagent=${invalidSubagentRejected} prompt=${promptAccepted}\n${stderr}`,
 						),
 					);
 					return;
@@ -326,6 +364,16 @@ export async function verifyRpcSurface(options = {}) {
 				id: "feynman-tool-browser",
 				type: "prompt",
 				message: "/tools",
+			});
+			writeRecord({
+				id: "feynman-subagent-list",
+				type: "prompt",
+				message: "/subagents broken",
+			});
+			writeRecord({
+				id: "feynman-invalid-subagent",
+				type: "prompt",
+				message: "/run broken Verify",
 			});
 		});
 	} finally {
@@ -725,6 +773,7 @@ async function main() {
 		typeboxOptionalNull: "omitted",
 		typeboxMalformedArguments: "rejected",
 		webAccessRegistrationGates: "passed",
+		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",
 	}));
 }
