@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-16 15:56 EDT — pi-subagents-malformed-agent-0.3.25
+
+- Objective: Backport the current upstream malformed-agent isolation repair into Feynman's bundled synchronous research-agent runtime and qualify `0.3.25`.
+- Intake: Open issues, open pull requests, active workflows, Dependabot alerts, repository advisories, and contributor port targets are empty. The only new scoped upstream change is `pi-subagents` commit `e973fa3`, which prevents one invalid agent definition from disabling valid research agents.
+- Changed: Added per-definition diagnostics and precedence-aware direct-launch blocking to discovery, preflight, execution, management listings, doctor output, and `/run`. Added package-artifact markers and transitive runtime-input hashing. Existing `pi-web-access@0.22.0` core pins now migrate to bundled `0.23.0`.
+- Review repair: An adversarial clean-tree pass found tests that incorrectly depended on ignored generated runtime files and direct discovery that selected the lower-priority duplicate package. Moved the behavioral gate into the installed-runtime verifier and matched upstream first-package precedence in both discovery paths.
+- Verified locally: Focused source coverage passed `68/68`; the clean-tree full suite passed `784/784`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, freshness review, and `git diff --check` passed. A direct precedence probe selected the same high-priority package in launch and management paths, then rejected its malformed override.
+- Package proof: Dry and real packs matched at `114,839,878` bytes and `29,136` files with SHA-256 `d046199e99ec6f48166552b0f694f39e45a6f2021c39b06dd3371d1e1ea9b095`. Clean installed verification passed stale-Pi repair, package-artifact precedence markers, malformed-agent isolation, `15` tools, `9` commands, TypeBox, Copilot, document parse/search/screenshot, and `pi-web-access@0.22.0` migration to installed `0.23.0`.
+- Live proof: A clean installed run listed the malformed definition with its exact `invalid async frontmatter` diagnostic while an unrelated `researcher` agent completed and returned `RESULT=PONG`.
+- State: `verified` locally and `unverified` for the exact committed SHA in Daytona, pull-request CI, merge, publication, and post-release identity. Next: prove the exact commit in Daytona and CI, then merge and verify every `0.3.25` delivery surface.
+
 ### 2026-08-16 10:08 EDT — intake-sweep-0.3.24-synchronized
 
 - Objective: Refresh the complete Feynman AI-researcher intake from synchronized `main` and persist current package, release, and provider receipts.

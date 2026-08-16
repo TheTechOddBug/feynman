@@ -101,6 +101,10 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 		[
 			"src/extension/index.ts",
 			"src/agents/agents.ts",
+			"src/agents/agent-management.ts",
+			"src/api/preflight.ts",
+			"src/extension/doctor.ts",
+			"src/slash/slash-commands.ts",
 			"src/shared/artifacts.ts",
 			"src/runs/shared/run-history.ts",
 			"src/agents/skills.ts",

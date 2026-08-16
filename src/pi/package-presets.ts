@@ -187,6 +187,7 @@ const MANAGED_CORE_PACKAGE_SOURCES = new Set<string>([
 	"npm:pi-web-access@0.14.0",
 	"npm:pi-web-access@0.18.0",
 	"npm:pi-web-access@0.21.0",
+	"npm:pi-web-access@0.22.0",
 	...CORE_PACKAGE_SOURCES,
 ]);
 const MANAGED_CORE_PACKAGE_NAMES = new Set(

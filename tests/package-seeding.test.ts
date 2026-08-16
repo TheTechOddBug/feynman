@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 import {
 	getMissingConfiguredPackages,
@@ -43,17 +43,29 @@ test("Pi runtime fallback version follows the bundled Pi runtime version", async
 	assert.match(runtimeWorkspaceSource, new RegExp(`PI_RUNTIME_FALLBACK_VERSION = "${version}"`));
 });
 
-test("prepare runtime workspace hash tracks every imported patch file", async () => {
-	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
-	const importedPatchFiles = [...runtimeWorkspaceSource.matchAll(/from "\.\/lib\/([^"]+\.mjs)"/g)].map((match) => match[1]);
+test("prepare runtime workspace hash tracks every transitive patch file", async () => {
+	const repoRoot = process.cwd();
+	const pending = [resolve(repoRoot, "scripts", "prepare-runtime-workspace.mjs")];
+	const importedFiles = new Set<string>();
+	while (pending.length > 0) {
+		const currentPath = pending.shift()!;
+		const currentFile = relative(repoRoot, currentPath).split("\\").join("/");
+		if (importedFiles.has(currentFile)) continue;
+		importedFiles.add(currentFile);
+		const source = readFileSync(currentPath, "utf8");
+		for (const match of source.matchAll(/from ["'](\.[^"']+\.mjs)["']/g)) {
+			const importedPath = resolve(dirname(currentPath), match[1]!);
+			if (existsSync(importedPath)) pending.push(importedPath);
+		}
+	}
 
 	assert.ok(RUNTIME_INPUT_FILES.includes("scripts/prepare-runtime-workspace.mjs"));
 	assert.ok(RUNTIME_INPUT_FILES.includes("scripts/prune-runtime-deps.mjs"));
-	assert.ok(importedPatchFiles.length > 0);
-	for (const patchFile of importedPatchFiles) {
+	assert.ok(importedFiles.size > 1);
+	for (const importedFile of importedFiles) {
 		assert.ok(
-			RUNTIME_INPUT_FILES.includes(`scripts/lib/${patchFile}`),
-			`${patchFile} must be included in the runtime input hash`,
+			RUNTIME_INPUT_FILES.includes(importedFile),
+			`${importedFile} must be included in the runtime input hash`,
 		);
 	}
 	for (const inputFile of RUNTIME_INPUT_FILES) {
@@ -86,15 +98,18 @@ test("installed runtime scripts follow npm's platform-specific global prefix lay
 	}
 });
 
-test("0.3.24 release notes name the current document research runtime update", () => {
+test("0.3.25 release notes name malformed-agent isolation", () => {
 	for (const path of [
 		resolve(process.cwd(), "RELEASES.md"),
 		resolve(process.cwd(), "website", "src", "content", "docs", "reference", "releases.md"),
 	]) {
 		const releases = readFileSync(path, "utf8");
-		const currentRelease = releases.match(/## v0\.3\.24[\s\S]*?(?=\n## v0\.3\.23)/)?.[0] ?? "";
-		assert.match(currentRelease, /bundled LiteParse runtime to `2\.13\.0`/);
-		assert.match(currentRelease, /garbled-text detection/i);
+		const currentRelease = releases.match(/## v0\.3\.25[\s\S]*?(?=\n## v0\.3\.24)/)?.[0] ?? "";
+		assert.match(currentRelease, /malformed custom agent definition/i);
+		assert.match(currentRelease, /unrelated valid research agents/i);
+		assert.match(currentRelease, /invalid configuration/i);
+		assert.match(currentRelease, /pi-web-access@0\.22\.0/);
+		assert.match(currentRelease, /bundled `0\.23\.0` release/i);
 	}
 });
 
