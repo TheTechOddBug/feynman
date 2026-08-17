@@ -16,6 +16,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 - Added an installed-runtime regression that reproduces the lost table-header cell and checks the corrected Markdown table.
 - Re-ran the installed document parse, search, and screenshot flow against the bundled runtime.
+- Fixed cross-Node runtime repair to preserve the bundled exact package manifest and overrides. Node 22 consumers now keep LiteParse `2.13.1` instead of reinstalling pi-docparser's older transitive default.
 
 ## v0.3.25 - 2026-08-16
 

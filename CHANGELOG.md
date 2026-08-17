@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-17 04:30 EDT — liteparse-node22-runtime-repair
+
+- Objective: Repair PR `#233` after its exact Node `22.22.0` candidate consumer replaced the bundled LiteParse `2.13.1` graph and failed the new table-header regression.
+- Evidence: The PR artifact and Daytona pack are byte-identical at SHA-256 `755b9c3a16cc894905f3904648a195712aea90facc47cf6fa8c6771f40809334`. Its archive contains LiteParse `2.13.1`, and the direct Node 22 verifier passes. Running `feynman --version` under Node 22 rejects the Node 24 ABI manifest, restores the archive, then overwrites `feynman-runtime` with a six-package fallback. npm consequently installs LiteParse `2.10.1`, and the verifier loses the table-header fixture.
+- Changed: Cross-ABI runtime repair now retains the verified archive package manifest and overrides, reinstalls every archived exact runtime package plus new configured packages, uses npm `--save-exact`, and records the full repaired package set. Added focused merge and source-contract regressions plus public release documentation.
+- Verified locally: Focused tests passed `27/27`; the full suite passed `787/787`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime audits, outdated review, and diff checks passed. Dry and real packs matched at `114,854,905` bytes, `298,950,889` unpacked bytes, and `29,144` files with SHA-256 `efcb79007257a04466c7308c1cf9660075513b1512287a87b6c22ec9e6f4ff55`. Clean Node 24 and Node `22.22.0` local/global consumers passed zero-vulnerability audits, stale-Pi repair, package, `15`-tool/`9`-command RPC, TypeBox, extension, parse, search, screenshot, and four-column table checks. The Node 22 repaired workspace retained all `13` exact runtime packages plus LiteParse `2.13.1`, Pi `0.84.2`, and Undici `8.10.0`.
+- State: `unverified` for replacement Daytona proof, amended PR CI, merge, publication, and post-release identity. Next: push the exact candidate, rerun clean Linux proof, then merge and publish PR `#233`.
+
 ### 2026-08-17 03:00 EDT — liteparse-table-header-0.3.26
 
 - Objective: Adopt LiteParse `2.13.1` as Feynman `0.3.26` and prove that multi-line table headers keep in-table cells that fall between established columns.
