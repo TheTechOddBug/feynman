@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-17 06:36 EDT — liteparse-node22-0.3.26-release-complete
+
+- Objective: Finish the LiteParse `2.13.1` update and cross-Node runtime repair through exact-head CI, merge, publication, live installers, and terminal intake reconciliation.
+- Delivery: PR `#233` head `45bab8f` passed release-candidate validation, all six Linux/macOS/Windows package consumers, and the Windows native installer in run `32011538818`, then merged as `14ec4a8`. The remote and local source branches were deleted.
+- Clean proof: Daytona sandbox `880d5d13-9aa0-4a9b-9370-d050009d4545` passed `787/787` tests on Node `25.9.0`, typecheck, build, architecture, website lint/typecheck/build, audits, freshness review, and diff checks. Node `24.18.0` dry and real packs matched at `116,546,653` bytes, `300,604,747` unpacked bytes, and `29,138` files with SHA-256 `cbc36c7e187ff12437da2fa03b2e9dbe82e4b18e81bccb02e3c9e5552b2c5edf`; GitHub's exact-head artifact matched byte-for-byte. Clean Node `22.22.0` local and global consumers retained all `13` exact runtime packages, LiteParse `2.13.1`, Pi `0.84.2`, and Undici `8.10.0`, then passed package, RPC, TypeBox, extension, and document checks. The sandbox was deleted and returns not found.
+- Release: Publish run `32015815254` passed all `16` jobs. npm latest is `@companion-ai/feynman@0.3.26` with integrity `sha512-xvi7qGseUJJFOtAax+nROGXCKbKCKv8pucTZX8cC2LR6CmuODbB0JN6AT4ZGmxraStfcSjMYE0/ZkBJbglRFJg==`; npm signatures and SLSA provenance resolve to `14ec4a8`. GitHub tag `v0.3.26` targets the same commit, and all five native asset provider digests match `SHA256SUMS`.
+- Published proof: A clean registry local and global install passed zero-vulnerability package/runtime audits, CLI, artifact, `15`-tool/`9`-command RPC, TypeBox, malformed-agent isolation, Copilot rate limiting, and document parse/search/screenshot/four-column table checks. Post-release run `32020230724` passed six published-package jobs and all three live native installers; every package job passed JSON/text model calls and researcher-child `RESULT=PONG`.
+- Intake and preservation: Open issues and pull requests are empty. No fork changed after the prior sweep; the prior generic Nix rejection remains unchanged. Dependabot alerts and repository advisories are empty, code scanning has no analysis, and secret scanning remains disabled. Current Pi, pi-web-access, pi-docparser, pi-btw, pi-otel, alpha-hub, and LiteParse releases are installed; `pi-subagents@0.50.0` and non-security general dependency drift remain outside this fix. The independently dirty nested `website` repository was preserved byte-for-byte, and the live release page serves `v0.3.26`.
+- State: `verified` and released. Next: refresh the same queues on the next scheduled sweep.
+
 ### 2026-08-17 04:30 EDT — liteparse-node22-runtime-repair
 
 - Objective: Repair PR `#233` after its exact Node `22.22.0` candidate consumer replaced the bundled LiteParse `2.13.1` graph and failed the new table-header regression.
