@@ -9,6 +9,7 @@ import {
 	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
 	computeRuntimeTreeHash,
+	mergeRuntimePackageSpecs,
 	readArchiveEntry,
 	RUNTIME_INPUT_FILES,
 	runtimeArchiveMatches,
@@ -125,6 +126,28 @@ test("runtime manifest verification checks bundled packages beyond configured ex
 		runtimeManifestPackagesMatch(root, manifestSpecs, ["missing-package@1.0.0"]),
 		false,
 	);
+});
+
+test("runtime reinstall preserves archived exact packages and adds new configured packages", () => {
+	assert.deepEqual(
+		mergeRuntimePackageSpecs(
+			[
+				"pi-docparser@4.0.0",
+				"@earendil-works/pi-coding-agent@0.84.2",
+				"undici@8.10.0",
+			],
+			["pi-docparser@4.0.0", "pi-web-access@0.23.0"],
+		),
+		[
+			"pi-docparser@4.0.0",
+			"@earendil-works/pi-coding-agent@0.84.2",
+			"undici@8.10.0",
+			"pi-web-access@0.23.0",
+		],
+	);
+	assert.deepEqual(mergeRuntimePackageSpecs(undefined, ["pi-docparser@4.0.0"]), [
+		"pi-docparser@4.0.0",
+	]);
 });
 
 test("runtime archive integrity rejects a lock that differs from the committed graph", () => {

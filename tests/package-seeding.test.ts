@@ -75,15 +75,20 @@ test("prepare runtime workspace hash tracks every transitive patch file", async 
 
 test("prepare runtime workspace pins audited transitive runtime overrides", async () => {
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
+	const installedRuntimeSource = readFileSync(resolve(process.cwd(), "scripts", "patch-embedded-pi.mjs"), "utf8");
 
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/resources": "2\.10\.0"/);
-	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.13\.0"/);
+	assert.match(runtimeWorkspaceSource, /"@llamaindex\/liteparse": "2\.13\.1"/);
 	assert.match(runtimeWorkspaceSource, /"ip-address": "10\.5\.0"/);
 	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
+	assert.match(installedRuntimeSource, /mergeRuntimePackageSpecs/);
+	assert.match(installedRuntimeSource, /"--save-exact"/);
+	assert.match(installedRuntimeSource, /if \(!existsSync\(workspacePackageJsonPath\)\)/);
+	assert.match(installedRuntimeSource, /writeWorkspaceManifest\(installPackageSpecs\)/);
 });
 
 test("installed runtime scripts follow npm's platform-specific global prefix layout", () => {
@@ -98,19 +103,16 @@ test("installed runtime scripts follow npm's platform-specific global prefix lay
 	}
 });
 
-test("0.3.25 release notes name malformed-agent isolation", () => {
+test("0.3.26 release notes name the table-header extraction repair", () => {
 	for (const path of [
 		resolve(process.cwd(), "RELEASES.md"),
 		resolve(process.cwd(), "website", "src", "content", "docs", "reference", "releases.md"),
 	]) {
 		const releases = readFileSync(path, "utf8");
-		const currentRelease = releases.match(/## v0\.3\.25[\s\S]*?(?=\n## v0\.3\.24)/)?.[0] ?? "";
-		assert.match(currentRelease, /malformed custom agent definition/i);
-		assert.match(currentRelease, /unrelated valid research agents/i);
-		assert.match(currentRelease, /invalid configuration/i);
-		assert.match(currentRelease, /pi-web-access@0\.22\.0/);
-		assert.match(currentRelease, /bundled `0\.23\.0` release/i);
-		assert.match(currentRelease, /split prompt metadata/i);
+		const currentRelease = releases.match(/## v0\.3\.26[\s\S]*?(?=\n## v0\.3\.25)/)?.[0] ?? "";
+		assert.match(currentRelease, /bundled LiteParse runtime to `2\.13\.1`/i);
+		assert.match(currentRelease, /multi-line table headers/i);
+		assert.match(currentRelease, /silently dropping/i);
 	}
 });
 
@@ -160,9 +162,9 @@ test("release manifests pin current document and website security repairs", () =
 		"@llamaindex/liteparse-win32-arm64-msvc",
 		"@llamaindex/liteparse-win32-x64-msvc",
 	]) {
-		assert.equal(manifest.optionalDependencies?.[packageName], "2.13.0");
-		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.13.0");
-		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.13.0");
+		assert.equal(manifest.optionalDependencies?.[packageName], "2.13.1");
+		assert.equal(lock.packages?.[""]?.optionalDependencies?.[packageName], "2.13.1");
+		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.version, "2.13.1");
 		assert.equal(lock.packages?.[`node_modules/${packageName}`]?.optional, true);
 	}
 	assert.equal(websiteManifest.overrides?.["js-yaml"], "4.3.1");

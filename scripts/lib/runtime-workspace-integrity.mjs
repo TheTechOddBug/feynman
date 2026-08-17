@@ -78,6 +78,19 @@ export function runtimeManifestPackagesMatch(
 	return workspacePackagesMatch(nodeModulesPath, manifestPackageSpecs);
 }
 
+export function mergeRuntimePackageSpecs(manifestPackageSpecs, configuredPackageSpecs) {
+	const merged = [];
+	for (const spec of [
+		...(Array.isArray(manifestPackageSpecs) ? manifestPackageSpecs : []),
+		...(Array.isArray(configuredPackageSpecs) ? configuredPackageSpecs : []),
+	]) {
+		if (typeof spec === "string" && !merged.includes(spec)) {
+			merged.push(spec);
+		}
+	}
+	return merged;
+}
+
 export function computeFileSha256(path) {
 	return createHash("sha256").update(readFileSync(path)).digest("hex");
 }

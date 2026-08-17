@@ -14,6 +14,10 @@ export declare function runtimeManifestPackagesMatch(
 	manifestPackageSpecs: string[],
 	configuredPackageSpecs?: string[],
 ): boolean;
+export declare function mergeRuntimePackageSpecs(
+	manifestPackageSpecs: unknown,
+	configuredPackageSpecs: unknown,
+): string[];
 
 export declare function computeFileSha256(path: string): string;
 export declare function computeRuntimeInputHash(

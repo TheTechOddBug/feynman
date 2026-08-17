@@ -51,9 +51,9 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 			integrity: (runtimeLock.packages["node_modules/@llamaindex/liteparse"] as { integrity?: string })?.integrity,
 		},
 		{
-			version: "2.13.0",
-			resolved: "https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-2.13.0.tgz",
-			integrity: "sha512-Gbe9oBrllB7R81R80ztZoYvJnxHx1n9ggl+idpq1Nb8LRz95tYb1dDVGeH02JbJPgCl6ewK3V9HMIb4FbXGu0g==",
+			version: "2.13.1",
+			resolved: "https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-2.13.1.tgz",
+			integrity: "sha512-EtMFEYFZIY+Gpj6nebvyiIkU9NTmLG5CXe2WpYy5S0pjCLfFgW0Tn9iN68ik3QIk64ELSdLJlgijSzCzfSpeoQ==",
 		},
 	);
 	assert.equal(runtimeLock.packages["node_modules/undici"]?.version, "8.10.0");

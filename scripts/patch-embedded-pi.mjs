@@ -31,6 +31,7 @@ import {
 	patchPiTuiSource,
 } from "./lib/pi-tui-patch.mjs";
 import {
+	mergeRuntimePackageSpecs,
 	runtimeManifestPackagesMatch,
 	verifyFileSha256,
 } from "./lib/runtime-workspace-integrity.mjs";
@@ -326,6 +327,7 @@ function createInstallCommand(packageManager, packageSpecs) {
 				"install",
 				"--global=false",
 				"--location=project",
+				"--save-exact",
 				"--prefer-offline",
 				"--no-audit",
 				"--no-fund",
@@ -425,6 +427,17 @@ function parsePackageName(spec) {
 function filterUnsupportedPackageSpecs(packageSpecs) {
 	if (supportsNativePackageSources()) return packageSpecs;
 	return packageSpecs.filter((spec) => !NATIVE_PACKAGE_SPECS.has(parsePackageName(spec)));
+}
+
+function readWorkspaceInstallPackageSpecs(configuredPackageSpecs) {
+	try {
+		const manifest = JSON.parse(readFileSync(workspaceManifestPath, "utf8"));
+		return filterUnsupportedPackageSpecs(
+			mergeRuntimePackageSpecs(manifest.packageSpecs, configuredPackageSpecs),
+		);
+	} catch {
+		return configuredPackageSpecs;
+	}
 }
 
 function workspaceMatchesRuntime(packageSpecs) {
@@ -723,12 +736,15 @@ function ensurePackageWorkspaceUnlocked() {
 		return;
 	}
 
+	const installPackageSpecs = readWorkspaceInstallPackageSpecs(supportedPackageSpecs);
 	mkdirSync(workspaceDir, { recursive: true });
-	writeFileSync(
-		workspacePackageJsonPath,
-		JSON.stringify({ name: "feynman-packages", private: true }, null, 2) + "\n",
-		"utf8",
-	);
+	if (!existsSync(workspacePackageJsonPath)) {
+		writeFileSync(
+			workspacePackageJsonPath,
+			JSON.stringify({ name: "feynman-packages", private: true }, null, 2) + "\n",
+			"utf8",
+		);
+	}
 
 	const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 	let frame = 0;
@@ -738,7 +754,7 @@ function ensurePackageWorkspaceUnlocked() {
 		process.stderr.write(`\r${frames[frame++ % frames.length]} setting up feynman... ${elapsed}s`);
 	}, 80);
 
-	const result = installWorkspacePackages(supportedPackageSpecs);
+	const result = installWorkspacePackages(installPackageSpecs);
 
 	clearInterval(spinner);
 	const elapsed = Math.round((Date.now() - start) / 1000);
@@ -747,7 +763,7 @@ function ensurePackageWorkspaceUnlocked() {
 		process.stderr.write(`\r✗ setup failed (${elapsed}s)\n`);
 	} else {
 		process.stderr.write("\r\x1b[2K");
-		writeWorkspaceManifest(supportedPackageSpecs);
+		writeWorkspaceManifest(installPackageSpecs);
 		ensureBundledPackageLinks(supportedPackageSpecs);
 	}
 }
