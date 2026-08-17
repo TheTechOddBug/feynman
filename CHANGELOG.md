@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-17 14:58 EDT — pi-provider-forward-fixes-0.3.27-release-complete
+
+- Objective: Finish the four Pi provider corrections through exact-head CI, merge, publication, live installers, and terminal intake reconciliation.
+- Delivery: PR `#234` head `7f7d8cf` passed release-candidate validation, all six supported Linux/macOS/Windows consumers, and the Windows native installer in run `32045776541`, then merged as `d3966b9`. The candidate and merge trees match. The source branch was deleted locally and remotely.
+- Clean proof: Daytona sandbox `87887474-4ab5-4886-9284-9802f5ac73e8` passed the source, website, package, runtime, provider, and document ladder for the exact candidate. The sandbox was deleted and now returns not found.
+- Release: Publish run `32049127369` passed all `16` jobs on attempt `4`. GitHub's critical API incident returned `503` during three release attempts; the exact tested native artifacts were reconciled into a complete draft, then the workflow re-uploaded, published, and verified them. npm latest is `@companion-ai/feynman@0.3.27` with integrity `sha512-z54H64Qs7n+scoNlHCxB4htbWdQhV1+kbCSzL8sA3KHPtBnQEeEZgrwvsdd+RAJvnr5zM6zbhS6qGXFOZhjuBg==`; signatures and SLSA provenance resolve to `d3966b9`. GitHub tag `v0.3.27` targets the same commit, and all five native provider digests match `SHA256SUMS`.
+- Published proof: Fresh local and global registry installs passed package and runtime inspection, zero-vulnerability consumer audit, `15`-tool/`9`-command RPC, TypeBox, malformed-agent isolation, Copilot rate limiting, the Google/Vertex/Bedrock/Xiaomi/Z.AI forward-fix verifier, and document parse/search/screenshot/four-column table checks. Post-release run `32056579814` passed all six package jobs and all three live native installers; every package job passed JSON/text model calls and researcher-child `RESULT=PONG`. The first parallel Node 22 text smoke received an OpenAI TPM limit, and its isolated retry passed.
+- Intake and preservation: Open issues and pull requests are empty. No contributor branch or fork contains a new research-loop port target; `birhantprkc/feynman` matches `main`, and `NioZow/feynman` still contains only the rejected generic Nix commit. The independently dirty nested `website` repository remains preserved at `67186845`. The live release page serves `v0.3.27`, and all four public installer endpoints return HTTP `200`.
+- State: `verified` and released. Next: refresh the same queues on the next scheduled sweep.
+
 ### 2026-08-17 11:09 EDT — pi-provider-forward-fixes-0.3.27
 
 - Objective: Reproduce and carry four research-provider fixes from Pi `main` into the released `0.84.2` runtime, then finish Feynman `0.3.27`.
