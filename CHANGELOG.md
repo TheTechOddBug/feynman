@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-17 03:00 EDT — liteparse-table-header-0.3.26
+
+- Objective: Adopt LiteParse `2.13.1` as Feynman `0.3.26` and prove that multi-line table headers keep in-table cells that fall between established columns.
+- Intake: Open issues, pull requests, active workflows, Dependabot alerts, and repository advisories remain empty. No fork changed after the prior sweep. Pi `0.84.2`, pi-web-access `0.23.0`, pi-docparser `4.0.0`, pi-btw `0.4.1`, pi-otel `0.1.0`, and alpha-hub `0.1.3` remain current. Pi main has unreleased provider, token-accounting, and compaction-routing work; its TUI compaction path still passes no routing session and has no Feynman defect to port. Keep `pi-subagents@0.40.0`; `0.50.0` still bundles generic workflows, scheduling, fleet, and administration.
+- Evidence: Upstream LiteParse PR `#420` merged as `2856997` after Linux, macOS, Windows, Node, Python, WASM, and output-comparison checks. The Node release run `31996133977` published all seven platform packages. A synthetic positioned-table probe loses `Detail`, `X`, `Y`, and `Z` with `2.13.0`, then preserves all four cells with `2.13.1`.
+- Changed: Updated the wrapper and seven native package pins, runtime lock, package verifier integrity, release notes, and exact-version tests. Added source-native and installed-runtime regressions for the table-header cell-loss path. Adversarial review moved the native test to Node 22-compatible loading and removed unrelated `es-module-lexer@2.3.2` lock drift.
+- Verified locally: Focused tests passed `20/20` on Node `22.22.3` and `24.18.0`; the installed document verifier returned LiteParse `2.13.1`, four table columns, one exact search hit, and a valid PNG. The full suite passed `786/786`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/local-consumer audits, and `git diff --check` passed. Dry and real packs matched at `114,854,353` bytes, `298,949,625` unpacked bytes, and `29,144` files with SHA-256 `8d43486a3d24b0d21c6b2835607d1d69d62e05f843960763bf3e53f028344955`. The clean tarball consumer passed stale-Pi repair plus package, runtime, TypeBox, extension, and document checks with zero vulnerabilities. State: `unverified` for Daytona, PR CI, merge, publication, and post-release identity. Next: complete the clean-machine ladder, then merge and publish the exact tested commit.
+
 ### 2026-08-16 23:08 EDT — intake-sweep-0.3.25-current
 
 - Objective: Refresh the complete maintainer intake after the `0.3.25` release and prove that no new research-loop work or release repair remains.

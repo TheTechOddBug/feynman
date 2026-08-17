@@ -89,6 +89,17 @@ export function resolveInstalledDocparserPaths(packageRoot = defaultPackageRoot)
 		"node_modules",
 		"pi-docparser",
 	);
+	const runtimeRoot = resolve(resolvedPackageRoot, ".feynman", "npm");
+	const runtimeRequire = createRequire(resolve(runtimeRoot, "package.json"));
+	const liteparseManifestPath = realpathSync(runtimeRequire.resolve("@llamaindex/liteparse/package.json"));
+	const liteparseManifest = JSON.parse(readFileSync(liteparseManifestPath, "utf8"));
+	const liteparseEntryPath = realpathSync(
+		resolve(liteparseManifestPath, "..", liteparseManifest.main),
+	);
+	assert.ok(
+		isPathInside(liteparseEntryPath, resolve(runtimeRoot, "node_modules")),
+		`Installed LiteParse resolved outside the runtime workspace: ${liteparseEntryPath}`,
+	);
 	const extensionPath = resolve(docparserRoot, "extensions", "docparser", "index.ts");
 	assert.ok(existsSync(extensionPath), `Installed pi-docparser extension is missing: ${extensionPath}`);
 	return {
@@ -98,6 +109,8 @@ export function resolveInstalledDocparserPaths(packageRoot = defaultPackageRoot)
 		jitiManifestPath,
 		docparserRoot,
 		extensionPath,
+		liteparseEntryPath,
+		liteparseManifestPath,
 	};
 }
 
@@ -142,6 +155,64 @@ export function assertDocumentScreenshotResult(result) {
 	return result.details.outputDir;
 }
 
+export function createTableHeaderProbePage() {
+	const item = (text, x, y, width = 20) => ({
+		text,
+		x,
+		y,
+		width,
+		height: 6,
+		fontName: "Helvetica",
+		fontSize: 5,
+		fontHeight: 5,
+		fontWeight: 400,
+		words: [],
+	});
+	return {
+		pageNumber: 1,
+		pageWidth: 500,
+		pageHeight: 700,
+		textItems: [
+			item("Model", 50, 100),
+			item("Metric A", 170, 100),
+			item("Metric B", 290, 100),
+			item("Family", 50, 110),
+			item("Detail", 159, 110, 3),
+			item("Score A", 170, 110),
+			item("Score B", 290, 110),
+			item("Alpha", 50, 120),
+			item("X", 159, 120, 3),
+			item("10", 170, 120),
+			item("20", 290, 120),
+			item("Beta", 50, 130),
+			item("Y", 159, 130, 3),
+			item("11", 170, 130),
+			item("21", 290, 130),
+			item("Gamma", 50, 140),
+			item("Z", 159, 140, 3),
+			item("12", 170, 140),
+			item("22", 290, 140),
+		],
+	};
+}
+
+export function assertTableHeaderProbeResult(result) {
+	const markdown = result?.pages?.[0]?.markdown ?? result?.text ?? "";
+	for (const expectedRow of [
+		"| Model |  | Metric A | Metric B |",
+		"| Family | Detail | Score A | Score B |",
+		"| Alpha | X | 10 | 20 |",
+		"| Beta | Y | 11 | 21 |",
+		"| Gamma | Z | 12 | 22 |",
+	]) {
+		assert.ok(
+			markdown.includes(expectedRow),
+			`LiteParse lost an in-table cell from the multi-line header fixture: ${expectedRow}`,
+		);
+	}
+	return markdown;
+}
+
 export async function verifyInstalledDocparser(options = {}) {
 	const paths = resolveInstalledDocparserPaths(options.packageRoot);
 	const root = await mkdtemp(resolve(tmpdir(), "feynman-installed-docparser-"));
@@ -165,6 +236,16 @@ export async function verifyInstalledDocparser(options = {}) {
 		writeFileSync(pdfPath, createMinimalPdf());
 		const jitiModule = await import(pathToFileURL(paths.jitiEntryPath).href);
 		assert.equal(typeof jitiModule.createJiti, "function", "Pi's installed Jiti has no createJiti");
+		const liteparseModule = await import(pathToFileURL(paths.liteparseEntryPath).href);
+		assert.equal(typeof liteparseModule.LiteParse, "function", "Installed LiteParse has no parser");
+		const tableParser = new liteparseModule.LiteParse({
+			ocrEnabled: false,
+			outputFormat: "markdown",
+			quiet: true,
+		});
+		const tableMarkdown = assertTableHeaderProbeResult(
+			tableParser.parsePages([createTableHeaderProbePage()]),
+		);
 		const jiti = jitiModule.createJiti(import.meta.url, { moduleCache: false });
 		const extension = await jiti.import(
 			process.platform === "win32"
@@ -225,10 +306,12 @@ export async function verifyInstalledDocparser(options = {}) {
 			docparser: JSON.parse(
 				readFileSync(resolve(paths.docparserRoot, "package.json"), "utf8"),
 			).version,
+			liteparse: JSON.parse(readFileSync(paths.liteparseManifestPath, "utf8")).version,
 			jiti: jitiManifest.version,
 			pageCount: parseResult.details.pageCount,
 			hits: searchResult.details.hits.length,
 			pngBytes: screenshotResult.details.screenshots[0].bytes,
+			tableColumns: tableMarkdown.split("\n")[0].split("|").length - 2,
 		};
 	} catch (error) {
 		primaryError = error;

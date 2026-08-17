@@ -6,6 +6,17 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.26 - 2026-08-17
+
+### Document research
+
+- Updated the bundled LiteParse runtime to `2.13.1`. Multi-line table headers now keep in-table cells between established columns instead of silently dropping them. The existing parse, search, and screenshot tools keep their current interface.
+
+### Validation
+
+- Added an installed-runtime regression that reproduces the lost table-header cell and checks the corrected Markdown table.
+- Re-ran the installed document parse, search, and screenshot flow against the bundled runtime.
+
 ## v0.3.25 - 2026-08-16
 
 ### Research agents
