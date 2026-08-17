@@ -10,6 +10,10 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./l
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
+	PI_AI_FORWARD_FIX_TARGETS,
+	patchPiAiForwardFixSource,
+} from "./lib/pi-ai-forward-fixes-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
@@ -165,6 +169,12 @@ const githubCopilotOAuthPaths = resolvePiAiRuntimeFiles(
 	"auth",
 	"oauth",
 	"github-copilot.js",
+);
+const piAiForwardFixPaths = PI_AI_FORWARD_FIX_TARGETS.flatMap((relativePath) =>
+	resolvePiAiRuntimeFiles(...relativePath.split("/")).map((entryPath) => ({
+		entryPath,
+		relativePath,
+	}))
 );
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
 const workspaceNestedAgentLoopPaths = resolveWorkspaceNestedPiFiles(
@@ -1007,6 +1017,10 @@ for (const [entryPath, patchSource] of [
 	...githubCopilotOAuthPaths.map((entryPath) => [
 		entryPath,
 		patchPiGithubCopilotOAuthSource,
+	]),
+	...piAiForwardFixPaths.map(({ entryPath, relativePath }) => [
+		entryPath,
+		(source) => patchPiAiForwardFixSource(relativePath, source),
 	]),
 ]) {
 	if (

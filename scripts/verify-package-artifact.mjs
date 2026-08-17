@@ -6,6 +6,10 @@ import {
 	assertPiCodingAgentUndiciShrinkwrapSource,
 	FEYNMAN_UNDICI_VERSION,
 } from "./lib/pi-undici-proxy-patch.mjs";
+import {
+	assertPiAiForwardFixArchive,
+	assertPiAiForwardFixPackageTree,
+} from "./lib/pi-ai-forward-fixes-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
@@ -302,23 +306,7 @@ for (const [target, relativePath] of [
 		assertPiRuntimeCorrectnessPatchSource(readText(path, label), target, label);
 	}
 }
-if (
-	readJson(
-		resolve(
-			packageRoot,
-			"node_modules",
-			"@earendil-works",
-			"pi-coding-agent",
-			"node_modules",
-			"@earendil-works",
-			"pi-ai",
-			"package.json",
-		),
-		"bundled nested Pi AI manifest",
-	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
-) {
-	fail(`bundled nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
-}
+assertPiAiForwardFixPackageTree(packageRoot, readText);
 
 requireMarkers(
 	readText(
@@ -686,6 +674,7 @@ for (const [target, relativePath] of [
 		);
 	}
 }
+assertPiAiForwardFixArchive((entryPath) => readArchivedText(archivePath, entryPath));
 for (const [label, entryPath] of [
 	[
 		"runtime root Pi AgentCore",
@@ -701,14 +690,6 @@ for (const [label, entryPath] of [
 		'["search_web", "web_search"]',
 		"prepareToolCallArguments(tool, effectiveToolCall)",
 	]);
-}
-if (
-	readArchivedJson(
-		archivePath,
-		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json",
-	).version !== PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION
-) {
-	fail(`runtime nested Pi AI is not ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}`);
 }
 for (const name of ["pi-agent-core", "pi-tui"]) {
 	if (

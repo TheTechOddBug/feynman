@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-17 11:09 EDT — pi-provider-forward-fixes-0.3.27
+
+- Objective: Reproduce and carry four research-provider fixes from Pi `main` into the released `0.84.2` runtime, then finish Feynman `0.3.27`.
+- Intake: Open issues and pull requests are empty. Pi commits `af2c352`, `10acee6`, `0e4d495`, and `8720548` are unreleased but repair current Feynman behavior. The example-only `agent_settled` change and unconsumed compaction-failure event remain out of scope. The new `birhantprkc/feynman` fork equals `main`; `NioZow/feynman` still contains only the rejected generic Nix commit.
+- Reproduced: Pi `0.84.2` ignored Google thinking-level maps, dropped Bedrock gateway response headers, exposed three deprecated Xiaomi IDs, omitted three China Z.AI Coding Plan models, and kept reference-priced Z.AI costs at zero.
+- Changed: Added one removable Pi AI forward patch across source, nested, packaged, restored, and runtime-archive paths. Added exact catalog, Google, Vertex, Bedrock, installed-runtime, artifact, and idempotency regressions. Updated release notes and version metadata.
+- Verified locally: Focused runtime tests passed `27/27`; the full suite passed `792/792`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, freshness review, and diff checks passed. Dry and real packs matched at `114,844,777` bytes, `298,899,679` unpacked bytes, and `29,141` files with SHA-256 `2a5705c9f0d89cdf9c499b320388f78584dfb9969bcda3b54ad274ddac64520c`. A clean installed tarball passed stale-Pi repair, artifact, `15`-tool/`9`-command RPC, TypeBox, Google, Vertex, Bedrock, Xiaomi, Z.AI, and document parse/search/screenshot/table gates. State: `unverified` for Daytona, exact-head CI, merge, publication, and post-release identity. Next: commit the exact candidate and finish those gates.
+
 ### 2026-08-17 06:36 EDT — liteparse-node22-0.3.26-release-complete
 
 - Objective: Finish the LiteParse `2.13.1` update and cross-Node runtime repair through exact-head CI, merge, publication, live installers, and terminal intake reconciliation.

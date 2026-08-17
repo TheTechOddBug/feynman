@@ -1,0 +1,208 @@
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import {
+	assertPiAiForwardFixSource,
+	PI_AI_FORWARD_FIX_REQUIRED_VERSION,
+	PI_AI_FORWARD_FIX_TARGETS,
+} from "./pi-ai-forward-fixes-patch.mjs";
+
+export function assertPiAiForwardFixCopies(readSource, surface) {
+	for (const relativePath of PI_AI_FORWARD_FIX_TARGETS) {
+		for (const copy of ["root", "nested"]) {
+			try {
+				assertPiAiForwardFixSource(relativePath, readSource(relativePath, copy));
+			} catch (error) {
+				throw new Error(
+					`${surface} ${copy} Pi AI ${relativePath}: ${error instanceof Error ? error.message : String(error)}`,
+					{ cause: error },
+				);
+			}
+		}
+	}
+}
+
+export function assertPiAiForwardFixPackageTree(packageRoot, readText) {
+	assertPiAiForwardFixCopies(
+		(relativePath, copy) =>
+			readText(
+				resolve(
+					packageRoot,
+					"node_modules",
+					"@earendil-works",
+					...(copy === "nested"
+						? ["pi-coding-agent", "node_modules", "@earendil-works", "pi-ai"]
+						: ["pi-ai"]),
+					...relativePath.split("/"),
+				),
+				`bundled ${copy} Pi AI ${relativePath}`,
+			),
+		"bundled",
+	);
+	const nestedManifest = JSON.parse(
+		readText(
+			resolve(
+				packageRoot,
+				"node_modules",
+				"@earendil-works",
+				"pi-coding-agent",
+				"node_modules",
+				"@earendil-works",
+				"pi-ai",
+				"package.json",
+			),
+			"bundled nested Pi AI manifest",
+		),
+	);
+	assert.equal(nestedManifest.version, PI_AI_FORWARD_FIX_REQUIRED_VERSION);
+}
+
+export function assertPiAiForwardFixArchive(readEntry) {
+	assertPiAiForwardFixCopies(
+		(relativePath, copy) =>
+			readEntry(
+				copy === "nested"
+					? `npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/${relativePath}`
+					: `npm/node_modules/@earendil-works/pi-ai/${relativePath}`,
+			),
+		"runtime archive",
+	);
+	const nestedManifest = JSON.parse(
+		readEntry(
+			"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json",
+		),
+	);
+	assert.equal(nestedManifest.version, PI_AI_FORWARD_FIX_REQUIRED_VERSION);
+}
+
+export async function verifyPiAiForwardFixBehavior(packageRoot) {
+	const piAiRoot = resolve(packageRoot, "node_modules", "@earendil-works", "pi-ai");
+	const nestedPiAiRoot = resolve(
+		packageRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"node_modules",
+		"@earendil-works",
+		"pi-ai",
+	);
+	assertPiAiForwardFixCopies(
+		(relativePath, copy) =>
+			readFileSync(
+				resolve(copy === "root" ? piAiRoot : nestedPiAiRoot, ...relativePath.split("/")),
+				"utf8",
+			),
+		"installed",
+	);
+
+	const googleShared = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "google-shared.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	const googleModel = {
+		id: "gemini-3.7-flash",
+		name: "gemini-3.7-flash",
+		api: "google-generative-ai",
+		provider: "installed-google",
+		baseUrl: "https://example.invalid/v1beta",
+		reasoning: true,
+		thinkingLevelMap: { high: "LOW" },
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128000,
+		maxTokens: 4096,
+	};
+	assert.equal(googleShared.resolveGoogleThinkingLevel(googleModel, "high"), "low");
+
+	const google = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "google-generative-ai.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	let googlePayload;
+	const googleResult = await google.streamSimple(
+		googleModel,
+		{ messages: [{ role: "user", content: "hello", timestamp: 0 }] },
+		{
+			apiKey: "test",
+			reasoning: "high",
+			onPayload: (payload) => {
+				googlePayload = payload;
+				throw new Error("installed Google payload captured");
+			},
+		},
+	).result();
+	assert.match(googleResult.errorMessage ?? "", /installed Google payload captured/);
+	assert.equal(googlePayload?.config?.thinkingConfig?.thinkingLevel, "LOW");
+
+	const providers = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "providers", "all.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	for (const provider of [
+		"xiaomi",
+		"xiaomi-token-plan-cn",
+		"xiaomi-token-plan-ams",
+		"xiaomi-token-plan-sgp",
+	]) {
+		const modelIds = providers.getBuiltinModels(provider).map((model) => model.id);
+		for (const id of ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"]) {
+			assert.equal(modelIds.includes(id), false, `${provider} retained ${id}`);
+		}
+	}
+	assert.deepEqual(providers.getBuiltinModel("zai", "glm-5.2").cost, {
+		input: 1.4,
+		output: 4.4,
+		cacheRead: 0.26,
+		cacheWrite: 0,
+	});
+	for (const id of ["glm-4.6v", "glm-5.1", "glm-5v-turbo"]) {
+		assert.equal(providers.getBuiltinModel("zai-coding-cn", id).id, id);
+	}
+
+	let server;
+	try {
+		const modelId = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+		server = createServer((_request, response) => {
+			response.writeHead(200, {
+				"content-type": "application/vnd.amazon.eventstream",
+				"x-amzn-requestid": "installed-req-123",
+				"x-bifrost-provider": "bedrock",
+				"x-bifrost-resolved-model": modelId,
+			});
+			response.end();
+		});
+		await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+		const address = server.address();
+		assert.ok(address && typeof address !== "string");
+		const bedrock = await import(
+			`${pathToFileURL(resolve(piAiRoot, "dist", "api", "bedrock-converse-stream.js")).href}?installed-forward-fix=${Date.now()}`
+		);
+		const compat = await import(
+			`${pathToFileURL(resolve(piAiRoot, "dist", "compat.js")).href}?installed-forward-fix=${Date.now()}`
+		);
+		const responses = [];
+		const result = await bedrock.stream(
+			{
+				...compat.getModel("amazon-bedrock", modelId),
+				baseUrl: `http://127.0.0.1:${address.port}`,
+			},
+			{ messages: [{ role: "user", content: "hello", timestamp: Date.now() }] },
+			{
+				cacheRetention: "none",
+				env: { AWS_BEDROCK_FORCE_HTTP1: "1", AWS_BEDROCK_SKIP_AUTH: "1" },
+				onResponse: (response) => responses.push(response),
+			},
+		).result();
+		assert.equal(result.stopReason, "error");
+		assert.equal(responses.length, 1);
+		assert.equal(responses[0].headers["x-amzn-requestid"], "installed-req-123");
+		assert.equal(responses[0].headers["x-bifrost-provider"], "bedrock");
+		assert.equal(responses[0].headers["x-bifrost-resolved-model"], modelId);
+	} finally {
+		if (server) {
+			await new Promise((resolveClose, rejectClose) => {
+				server.close((error) => (error ? rejectClose(error) : resolveClose()));
+			});
+		}
+	}
+}
