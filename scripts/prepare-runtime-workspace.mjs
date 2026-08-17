@@ -4,6 +4,10 @@ import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
+	PI_AI_FORWARD_FIX_TARGETS,
+	patchPiAiForwardFixSource,
+} from "./lib/pi-ai-forward-fixes-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
@@ -567,6 +571,17 @@ function patchBundledPiRuntimeCorrectness() {
 		"dist/auth/oauth/github-copilot.js",
 		patchPiGithubCopilotOAuthSource,
 	) || changed;
+	for (const relativePath of PI_AI_FORWARD_FIX_TARGETS) {
+		changed = patchScopedPiWorkspaceFile(
+			"pi-ai",
+			relativePath,
+			(source) => patchPiAiForwardFixSource(relativePath, source),
+		) || changed;
+		changed = patchBundledNestedPiAiFile(
+			relativePath,
+			(source) => patchPiAiForwardFixSource(relativePath, source),
+		) || changed;
+	}
 	return changed;
 }
 

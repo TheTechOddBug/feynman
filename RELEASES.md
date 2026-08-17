@@ -6,6 +6,23 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.27 - 2026-08-17
+
+### Provider reliability
+
+- Google and Vertex models now honor model-specific thinking-level maps. Extended or remapped levels produce the supported provider level and use its matching token budget.
+- Bedrock gateway response callbacks now receive the raw Smithy response headers. Provider routing and request headers no longer disappear before Feynman can record them.
+
+### Model catalogs
+
+- Removed deprecated Xiaomi MiMo model IDs while keeping the current MiMo 2.5 models across direct and token-plan providers.
+- Added the current China Z.AI Coding Plan models, including GLM-4.6V, GLM-5.1, and GLM-5V-Turbo. Matching API-priced models now report their reference costs.
+
+### Validation
+
+- Backported four focused fixes from Pi after `0.84.2` and applied them to root, nested, packaged, and restored runtime copies.
+- Added direct Google, Vertex, Bedrock, Xiaomi, and Z.AI regressions plus installed-package and archive checks.
+
 ## v0.3.26 - 2026-08-17
 
 ### Document research

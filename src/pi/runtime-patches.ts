@@ -6,6 +6,10 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../
 import { patchMcpSdkPackageJsonSource } from "../../scripts/lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mjs";
 import {
+	PI_AI_FORWARD_FIX_TARGETS,
+	patchPiAiForwardFixSource,
+} from "../../scripts/lib/pi-ai-forward-fixes-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	patchPiAgentSessionSource,
 	patchPiGithubCopilotDeviceCodeSource,
@@ -312,6 +316,23 @@ export function patchPiRuntimeNodeModules(
 			patchPiGithubCopilotOAuthSource,
 			bundledPiVersion,
 		) || changed;
+		for (const relativePath of PI_AI_FORWARD_FIX_TARGETS) {
+			changed = patchScopedPiPackageFileIfPresent(
+				nodeModulesPath,
+				"pi-ai",
+				relativePath,
+				(source) => patchPiAiForwardFixSource(relativePath, source),
+				bundledPiVersion,
+			) || changed;
+			changed = patchNestedPiPackageFileIfPresent(
+				nodeModulesPath,
+				"pi-coding-agent",
+				"pi-ai",
+				relativePath,
+				(source) => patchPiAiForwardFixSource(relativePath, source),
+				bundledPiVersion,
+			) || changed;
+		}
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-tui",

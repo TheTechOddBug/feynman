@@ -24,6 +24,7 @@ import {
 	terminateChildProcessTree,
 } from "./lib/child-process-cleanup.mjs";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
+import { verifyPiAiForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
 
 const EXPECTED_FEYNMAN_COMMANDS = Object.freeze([
 	"capabilities",
@@ -764,6 +765,7 @@ async function main() {
 	await verifyWebAccessRegistrationGates();
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
+	await verifyPiAiForwardFixBehavior(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
 		commands: EXPECTED_FEYNMAN_COMMANDS.length,
@@ -775,6 +777,7 @@ async function main() {
 		webAccessRegistrationGates: "passed",
 		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",
+		piAiForwardFixes: "passed",
 	}));
 }
 
