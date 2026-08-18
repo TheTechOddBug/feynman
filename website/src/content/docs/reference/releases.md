@@ -9,6 +9,22 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.28 - 2026-08-18
+
+### Research agents
+
+- Delegated research now treats provider subscription usage-limit errors as retryable. Configured fallback models continue instead of ending the run.
+
+### Model inputs
+
+- Baseten GLM 5.2 and GLM 5.2 Fast now accept image inputs. Paper figures and other attached research images reach these models.
+- Pi's model-data manifest now matches every backported catalog shard and its final model structure.
+
+### Validation
+
+- Backported the two focused upstream corrections across local, packaged, restored, and installed runtime copies.
+- Added executable fallback behavior plus complete catalog hash and structure checks across source, package archives, and installed runtimes.
+
 ## v0.3.27 - 2026-08-17
 
 ### Provider reliability

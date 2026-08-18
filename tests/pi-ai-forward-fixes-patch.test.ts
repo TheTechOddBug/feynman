@@ -89,7 +89,7 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		resolve(appRoot, "scripts", "lib", "pi-ai-forward-fixes-patch.mjs"),
 		"utf8",
 	);
-	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548"]) {
+	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548", "ad58801"]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
 	assert.match(
@@ -209,6 +209,47 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 	for (const id of ["glm-4.6v", "glm-5.1", "glm-5v-turbo"]) {
 		assert.equal(zaiModels[id].id, id);
 	}
+
+	const baseten = patchPiAiForwardFixSource(
+		"dist/providers/data/baseten.json",
+		JSON.stringify({
+			"openai-completions": Object.fromEntries(
+				["zai-org/GLM-5.2", "zai-org/GLM-5.2-Fast"].map((id) => [
+					id,
+					{ id, input: ["text"] },
+				]),
+			),
+		}),
+	);
+	const basetenModels = JSON.parse(baseten)["openai-completions"];
+	for (const id of ["zai-org/GLM-5.2", "zai-org/GLM-5.2-Fast"]) {
+		assert.deepEqual(basetenModels[id].input, ["text", "image"]);
+	}
+
+	const manifest = JSON.parse(
+		patchPiAiForwardFixSource(
+			"dist/providers/data/.manifest.json",
+			JSON.stringify({
+				schemaVersion: 3,
+				generatedAt: "2026-08-14T10:02:30.583Z",
+				structureHash: "stale",
+				files: {
+					"baseten.json": "stale",
+					"xiaomi.json": "stale",
+					"xiaomi-token-plan-cn.json": "stale",
+					"xiaomi-token-plan-ams.json": "stale",
+					"xiaomi-token-plan-sgp.json": "stale",
+					"zai.json": "stale",
+					"zai-coding-cn.json": "stale",
+				},
+			}),
+		),
+	);
+	assert.equal(manifest.structureHash, "a2a167065a0bd00645b34c52292f2f2b468af195d0d58e15382a3e071ebf94dd");
+	assert.equal(
+		manifest.files["baseten.json"],
+		"245c6ef6381f3d8e9d251857e07585db0aeef4156e8d4c31de31aef12444f2e0",
+	);
 });
 
 test("Google providers honor model thinking maps and mapped token budgets", async () => {
@@ -326,5 +367,8 @@ test("patched Xiaomi and China ZAI catalogs expose only current provider models"
 	});
 	for (const id of ["glm-4.6v", "glm-5.1", "glm-5v-turbo"]) {
 		assert.equal(providers.getBuiltinModel("zai-coding-cn", id).id, id);
+	}
+	for (const id of ["zai-org/GLM-5.2", "zai-org/GLM-5.2-Fast"]) {
+		assert.deepEqual(providers.getBuiltinModel("baseten", id).input, ["text", "image"]);
 	}
 });

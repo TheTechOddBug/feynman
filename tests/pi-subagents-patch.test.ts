@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "../scripts/lib/pi-subagents-patch.mjs";
+import {
+	assertPiSubagentUsageLimitFallbackSource,
+} from "../scripts/lib/pi-subagents-verification.mjs";
 
 function assertUserDirLoadsHaveDeclaration(source: string): void {
 	for (const chunk of source.split(/\n(?=export function |function )/)) {
@@ -111,10 +114,42 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 			"src/agents/skills.ts",
 			"src/runs/foreground/chain-clarify.ts",
 			"src/runs/shared/pi-spawn.ts",
+			"src/runs/shared/model-fallback.ts",
 			"src/runs/foreground/subagent-executor.ts",
 			"src/extension/schemas.ts",
 		].filter((entry) => !PI_SUBAGENTS_PATCH_TARGETS.includes(entry)),
 		[],
+	);
+});
+
+test("patchPiSubagentsSource retries provider subscription usage limits", async () => {
+	const input = [
+		"const RETRYABLE_MODEL_FAILURE_PATTERNS = [",
+		"\t/rate\\s*limit/i,",
+		"\t/too many requests/i,",
+		"];",
+	].join("\n");
+	const patched = patchPiSubagentsSource("src/runs/shared/model-fallback.ts", input);
+
+	assert.ok(patched.includes("/usage\\s*limit/i"));
+	assert.equal(patchPiSubagentsSource("src/runs/shared/model-fallback.ts", patched), patched);
+
+	const executable = [
+		patched,
+		"export function isRetryableModelFailure(error) {",
+		"\treturn RETRYABLE_MODEL_FAILURE_PATTERNS.some((pattern) => pattern.test(error));",
+		"}",
+	].join("\n");
+	const patchedModule = await import(`data:text/javascript,${encodeURIComponent(executable)}`);
+	assert.equal(patchedModule.isRetryableModelFailure("The usage limit has been reached"), true);
+	assert.equal(patchedModule.isRetryableModelFailure("ordinary tool failure"), false);
+
+	assert.throws(
+		() => assertPiSubagentUsageLimitFallbackSource(
+			() => `// /usage\\\\s*limit/i\n${input}`,
+			"comment-only pi-subagents",
+		),
+		/does not retry provider usage-limit errors/,
 	);
 });
 
