@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-18 06:14 EDT — research-runtime-forward-fixes-0.3.28-release-complete
+
+- Delivery: PR `#235` head `57eff6a` passed release-candidate validation, all six supported Linux/macOS/Windows consumers, and the Windows native installer in run `32114911699`, then merged as `0f788af`. The tested candidate and merge trees match. The repository has no remaining open issue or pull request, and the release branch was deleted.
+- Review repairs: The adversarial pass found a stale generated Pi model manifest and a comment-only fallback verifier. The first clean Daytona checkout then found the focused test still depended on ignored `.feynman/npm`. The final patch recomputes every model shard and structure hash, executes the installed fallback through Pi's Jiti loader, and keeps the unit regression independent of generated state.
+- Clean proof: Exact candidate `57eff6a` passed `30/30` focused tests, `793/793` full tests, typecheck, build, architecture, website lint/typecheck/build, audits, freshness review, deterministic packs, clean consumer/runtime checks, and document checks locally and in Daytona on Node `25.9.0`. Daytona sandbox `4356ad00-88c8-417c-a4c2-7eb2851fdfb3` was deleted.
+- Release: Publish run `32118601455` passed all source, consumer, native-bundle, npm, GitHub, and published-state jobs. npm latest is `@companion-ai/feynman@0.3.28` with integrity `sha512-sxHx7VsPF+ylJ0mBirzfjhiVnmYP+PgjO9STK9pAzTnEmHtTfjHTpxS7YgKNeNuX4rUEBeif8f9iTxoqUqtagw==`; SLSA provenance resolves to `0f788af`. GitHub tag `v0.3.28` targets the same commit, and all five native asset digests match `SHA256SUMS`.
+- Published proof: A fresh registry consumer passed zero-vulnerability audit, package verification, `15` tools, `9` commands, TypeBox, malformed-agent isolation, Copilot rate limiting, executable runtime-forward checks, and document parse/search/screenshot/table checks. Post-release run `32124489864` passed six published-package jobs and all three live native installers. The homepage, release page, and four installer endpoints return HTTP `200`; the release page serves `v0.3.28`.
+- Intake and preservation: No contributor branch or recent fork contains another exclusive research-loop change; no Dependabot alert or draft advisory remains. General dependency drift is non-security work. The independently dirty nested `website` repository remains preserved at `67186845` with tracked diff SHA-256 `22effe6a377be3da7fa67ece467788327c71a26c77f5c154b5559a68da8f094d`.
+- State: `verified` and released. Next: refresh the same intake surfaces on the next scheduled sweep.
+
 ### 2026-08-18 03:03 EDT — research-runtime-forward-fixes-0.3.28
 
 - Objective: Port two current upstream corrections that affect Feynman's foreground research-agent runtime without adopting adjacent workflow or provider scope.
