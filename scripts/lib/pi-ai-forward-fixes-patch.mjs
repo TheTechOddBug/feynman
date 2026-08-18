@@ -4,9 +4,10 @@
  * - 10acee6045e9025a22dff7e5220ed0d7538f12aa (Bedrock response headers)
  * - 0e4d49541477c4fc6e404f845ad40ed47d157f24 (deprecated Xiaomi models)
  * - 87205484bf749c2140fef5d1bea68995d57e739c (China ZAI catalog)
+ * - ad58801ce793ca4ca2f6fb64b307e9eaffd2c471 (Baseten GLM image inputs)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all four commits.
+ * version that contains all five commits.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -22,6 +23,8 @@ export const PI_AI_FORWARD_FIX_TARGETS = Object.freeze([
 	"dist/providers/data/xiaomi-token-plan-sgp.json",
 	"dist/providers/data/zai.json",
 	"dist/providers/data/zai-coding-cn.json",
+	"dist/providers/data/baseten.json",
+	"dist/providers/data/.manifest.json",
 ]);
 
 export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
@@ -36,6 +39,23 @@ const XIAOMI_DEPRECATED_MODEL_IDS = Object.freeze([
 	"mimo-v2-omni",
 	"mimo-v2-pro",
 ]);
+
+const BASETEN_IMAGE_MODEL_IDS = Object.freeze([
+	"zai-org/GLM-5.2",
+	"zai-org/GLM-5.2-Fast",
+]);
+
+const PATCHED_MODEL_DATA_STRUCTURE_HASH = "a2a167065a0bd00645b34c52292f2f2b468af195d0d58e15382a3e071ebf94dd";
+
+const PATCHED_MODEL_DATA_FILE_HASHES = Object.freeze({
+	"baseten.json": "245c6ef6381f3d8e9d251857e07585db0aeef4156e8d4c31de31aef12444f2e0",
+	"xiaomi.json": "59826b1eba4cc3d2ad2c7af809f72318eedb797412e5ffd988c7ff88e873d6aa",
+	"xiaomi-token-plan-cn.json": "ec410f4271853b3433080a5237b7d361eced8d1a66387f8b10eb4d0ad127cdf5",
+	"xiaomi-token-plan-ams.json": "1173ec57ebd2b67591b60e8968c176714220689a9ddf21c3fbd928ed76f8635b",
+	"xiaomi-token-plan-sgp.json": "4561b64e163d7c1808872c2c313a2a5dc07d8c974d8eacb4398d2be3b7ccc678",
+	"zai.json": "c21ae231e84e0c3a885c9948008b830f9ea82b9ed552fb3daa548791e7f66f31",
+	"zai-coding-cn.json": "1b53f0c7cd10d8f11bd2cfb177a66ba7e782c3798232e3f9dcf51d83ba8dfe11",
+});
 
 const ZAI_REFERENCE_COSTS = Object.freeze({
 	"glm-4.7": Object.freeze({ input: 0.6, output: 2.2, cacheRead: 0.11, cacheWrite: 0 }),
@@ -189,6 +209,43 @@ function assertZaiCatalog(relativePath, catalog) {
 	}
 }
 
+function assertBasetenCatalog(relativePath, catalog) {
+	const models = getOpenAiModels(catalog, relativePath);
+	for (const modelId of BASETEN_IMAGE_MODEL_IDS) {
+		if (!deepEqual(models[modelId]?.input, ["text", "image"])) {
+			throw new Error(`Incomplete Pi AI Baseten catalog patch ${relativePath}: incorrect ${modelId} input`);
+		}
+	}
+}
+
+function assertModelDataManifest(relativePath, manifest) {
+	if (manifest.schemaVersion !== 3) {
+		throw new Error(`Incomplete Pi AI model manifest patch ${relativePath}: incorrect schema version`);
+	}
+	if (manifest.structureHash !== PATCHED_MODEL_DATA_STRUCTURE_HASH) {
+		throw new Error(`Incomplete Pi AI model manifest patch ${relativePath}: incorrect structure hash`);
+	}
+	if (!manifest.files || typeof manifest.files !== "object" || Array.isArray(manifest.files)) {
+		throw new Error(`Incomplete Pi AI model manifest patch ${relativePath}: missing file hashes`);
+	}
+	for (const [filename, expectedHash] of Object.entries(PATCHED_MODEL_DATA_FILE_HASHES)) {
+		if (manifest.files[filename] !== expectedHash) {
+			throw new Error(`Incomplete Pi AI model manifest patch ${relativePath}: incorrect ${filename} hash`);
+		}
+	}
+}
+
+function patchModelDataManifest(relativePath, source) {
+	const manifest = parseCatalog(source, relativePath);
+	manifest.generatedAt = "2026-08-18T06:19:46.000Z";
+	manifest.structureHash = PATCHED_MODEL_DATA_STRUCTURE_HASH;
+	for (const [filename, expectedHash] of Object.entries(PATCHED_MODEL_DATA_FILE_HASHES)) {
+		manifest.files[filename] = expectedHash;
+	}
+	assertModelDataManifest(relativePath, manifest);
+	return JSON.stringify(manifest);
+}
+
 function patchModelCatalog(relativePath, source) {
 	const catalog = parseCatalog(source, relativePath);
 	const models = getOpenAiModels(catalog, relativePath);
@@ -198,6 +255,17 @@ function patchModelCatalog(relativePath, source) {
 			delete models[modelId];
 		}
 		assertXiaomiCatalog(relativePath, catalog);
+		return JSON.stringify(catalog);
+	}
+
+	if (relativePath.endsWith("/baseten.json")) {
+		for (const modelId of BASETEN_IMAGE_MODEL_IDS) {
+			if (!models[modelId]) {
+				throw new Error(`Unsupported Pi ${PI_AI_FORWARD_FIX_REQUIRED_VERSION} ${relativePath}: missing ${modelId}`);
+			}
+			models[modelId].input = ["text", "image"];
+		}
+		assertBasetenCatalog(relativePath, catalog);
 		return JSON.stringify(catalog);
 	}
 
@@ -234,8 +302,16 @@ function assertSourceFragments(source, relativePath, fragments) {
 export function assertPiAiForwardFixSource(relativePath, source) {
 	if (relativePath.includes("/providers/data/")) {
 		const catalog = parseCatalog(source, relativePath);
+		if (relativePath.endsWith("/.manifest.json")) {
+			assertModelDataManifest(relativePath, catalog);
+			return;
+		}
 		if (relativePath.includes("/xiaomi")) {
 			assertXiaomiCatalog(relativePath, catalog);
+			return;
+		}
+		if (relativePath.endsWith("/baseten.json")) {
+			assertBasetenCatalog(relativePath, catalog);
 			return;
 		}
 		assertZaiCatalog(relativePath, catalog);
@@ -427,6 +503,9 @@ export const streamSimple`;
 
 export function patchPiAiForwardFixSource(relativePath, source) {
 	if (relativePath.includes("/providers/data/")) {
+		if (relativePath.endsWith("/.manifest.json")) {
+			return patchModelDataManifest(relativePath, source);
+		}
 		return patchModelCatalog(relativePath, source);
 	}
 	switch (relativePath) {

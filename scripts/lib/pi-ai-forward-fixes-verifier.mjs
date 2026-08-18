@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -9,6 +10,44 @@ import {
 	PI_AI_FORWARD_FIX_REQUIRED_VERSION,
 	PI_AI_FORWARD_FIX_TARGETS,
 } from "./pi-ai-forward-fixes-patch.mjs";
+import {
+	assertPiSubagentPatchedSources,
+	verifyPiSubagentUsageLimitFallbackBehavior,
+} from "./pi-subagents-verification.mjs";
+
+function sortedRecord(entries) {
+	return Object.fromEntries([...entries].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)));
+}
+
+function sha256(source) {
+	return createHash("sha256").update(source).digest("hex");
+}
+
+function assertPiAiModelDataManifest(readSource, copy, surface) {
+	const manifestPath = "dist/providers/data/.manifest.json";
+	const manifest = JSON.parse(readSource(manifestPath, copy));
+	const structure = [];
+	for (const [filename, expectedHash] of Object.entries(manifest.files ?? {})) {
+		const relativePath = `dist/providers/data/${filename}`;
+		const source = readSource(relativePath, copy);
+		assert.equal(
+			sha256(source),
+			expectedHash,
+			`${surface} ${copy} Pi AI model manifest does not match ${filename}`,
+		);
+		const groups = JSON.parse(source);
+		const models = [];
+		for (const [api, values] of Object.entries(groups)) {
+			for (const modelId of Object.keys(values)) models.push([modelId, api]);
+		}
+		structure.push([filename.slice(0, -".json".length), sortedRecord(models)]);
+	}
+	assert.equal(
+		sha256(JSON.stringify(sortedRecord(structure))),
+		manifest.structureHash,
+		`${surface} ${copy} Pi AI model manifest structure hash is stale`,
+	);
+}
 
 export function assertPiAiForwardFixCopies(readSource, surface) {
 	for (const relativePath of PI_AI_FORWARD_FIX_TARGETS) {
@@ -22,6 +61,9 @@ export function assertPiAiForwardFixCopies(readSource, surface) {
 				);
 			}
 		}
+	}
+	for (const copy of ["root", "nested"]) {
+		assertPiAiModelDataManifest(readSource, copy, surface);
 	}
 }
 
@@ -78,7 +120,15 @@ export function assertPiAiForwardFixArchive(readEntry) {
 	assert.equal(nestedManifest.version, PI_AI_FORWARD_FIX_REQUIRED_VERSION);
 }
 
-export async function verifyPiAiForwardFixBehavior(packageRoot) {
+export async function verifyRuntimeForwardFixBehavior(packageRoot) {
+	assertPiSubagentPatchedSources(
+		(relativePath) => readFileSync(
+			resolve(packageRoot, ".feynman", "npm", "node_modules", "pi-subagents", ...relativePath.split("/")),
+			"utf8",
+		),
+		"installed runtime pi-subagents",
+	);
+	await verifyPiSubagentUsageLimitFallbackBehavior(packageRoot);
 	const piAiRoot = resolve(packageRoot, "node_modules", "@earendil-works", "pi-ai");
 	const nestedPiAiRoot = resolve(
 		packageRoot,
@@ -157,6 +207,9 @@ export async function verifyPiAiForwardFixBehavior(packageRoot) {
 	});
 	for (const id of ["glm-4.6v", "glm-5.1", "glm-5v-turbo"]) {
 		assert.equal(providers.getBuiltinModel("zai-coding-cn", id).id, id);
+	}
+	for (const id of ["zai-org/GLM-5.2", "zai-org/GLM-5.2-Fast"]) {
+		assert.deepEqual(providers.getBuiltinModel("baseten", id).input, ["text", "image"]);
 	}
 
 	let server;

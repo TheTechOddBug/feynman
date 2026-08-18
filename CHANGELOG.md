@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-18 03:03 EDT — research-runtime-forward-fixes-0.3.28
+
+- Objective: Port two current upstream corrections that affect Feynman's foreground research-agent runtime without adopting adjacent workflow or provider scope.
+- Intake: Open issues and pull requests are empty. Recent contributor forks add no exclusive research-loop change. Main workflow `32060676201` is green, and npm/GitHub remain `0.3.27` at `d3966b9`. Security alerts and production audits are empty.
+- Reproduced: Bundled `pi-subagents@0.40.0` did not retry `The usage limit has been reached`, although it retried rate-limit and quota failures. Pi `0.84.2` exposed Baseten GLM 5.2 and GLM 5.2 Fast as text-only while the current provider catalog declares text and image inputs.
+- Changed: Forward-ported `pi-subagents` commit `5b4a1dd` and Pi commit `ad58801` through the existing removable runtime patchers. Added focused behavior, root/nested catalog, package-archive, and installed-runtime checks. Updated release notes and version metadata for `0.3.28`.
+- Review repair: An adversarial pass proved the first usage-limit verifier accepted comment-only dead code and found that prior catalog backports left Pi's generated model manifest stale. The verifier now executes the installed TypeScript fallback through Pi's Jiti loader. Every local, nested, archived, and restored catalog copy now verifies all shard hashes and the recomputed model-structure hash.
+- Verified locally: Focused tests passed `30/30`; the full suite passed `793/793`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), source/site/runtime/consumer audits, freshness review, and diff checks passed. Dry and real packs matched within the release budget. A clean installed tarball passed stale-Pi repair, package, `15`-tool/`9`-command RPC, TypeBox, executable runtime-forward-fix, and document parse/search/screenshot/table checks.
+- State: `unverified` for Daytona, exact-head CI, merge, publication, and release identity. Next: commit the exact candidate and finish those release gates.
+
 ### 2026-08-17 15:29 EDT — pi-provider-forward-fixes-0.3.27-release-complete
 
 - Objective: Finish the four Pi provider corrections through exact-head CI, merge, publication, live installers, and terminal intake reconciliation.

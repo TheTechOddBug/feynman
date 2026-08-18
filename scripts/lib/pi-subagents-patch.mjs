@@ -23,6 +23,7 @@ export const PI_SUBAGENTS_PATCH_TARGETS = [
 	"src/agents/skills.ts",
 	"src/runs/foreground/chain-clarify.ts",
 	"src/runs/shared/pi-spawn.ts",
+	"src/runs/shared/model-fallback.ts",
 	"src/runs/foreground/subagent-executor.ts",
 	"src/extension/schemas.ts",
 ];
@@ -345,6 +346,21 @@ export function patchPiSubagentsSource(relativePath, source) {
 				],
 			]);
 			patched = patchCurrentPiSpawnResolver(patched);
+			break;
+		case "model-fallback.ts":
+			patched = applyReplacementGroup(patched, [[
+				[
+					"const RETRYABLE_MODEL_FAILURE_PATTERNS = [",
+					"\t/rate\\s*limit/i,",
+					"\t/too many requests/i,",
+				].join("\n"),
+				[
+					"const RETRYABLE_MODEL_FAILURE_PATTERNS = [",
+					"\t/rate\\s*limit/i,",
+					"\t/usage\\s*limit/i,",
+					"\t/too many requests/i,",
+				].join("\n"),
+			]]);
 			break;
 		case "subagent-executor.ts":
 			{
