@@ -154,6 +154,8 @@ Feynman respects the following environment variables, which take precedence over
 | `AWS_PROFILE` | Preferred AWS profile for Amazon Bedrock |
 | `TAVILY_API_KEY` | Tavily web search API key |
 | `SERPER_API_KEY` | Serper web search API key |
+| `NCBI_API_KEY` | Optional NCBI E-utilities key; raises the paced request budget from 3 to 10 requests per second |
+| `NCBI_MIN_REQUEST_GAP_MS` | Override the minimum delay between NCBI request starts; defaults to 500 ms anonymously and 125 ms with a key |
 | `FEYNMAN_TELEMETRY` | Set to `off` to disable Feynman analytics, logs, and traces |
 | `FEYNMAN_POSTHOG_HOST` | Override the PostHog ingest host |
 | `FEYNMAN_POSTHOG_PROJECT_ID` | Override the PostHog project ID used in telemetry metadata |
