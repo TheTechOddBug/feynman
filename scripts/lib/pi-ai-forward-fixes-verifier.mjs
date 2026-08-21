@@ -172,10 +172,18 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot) {
 	let googlePayload;
 	const googleResult = await google.streamSimple(
 		googleModel,
-		{ messages: [{ role: "user", content: "hello", timestamp: 0 }] },
+		{
+			messages: [{ role: "user", content: "hello", timestamp: 0 }],
+			tools: [{
+				name: "read",
+				description: "Read a file",
+				parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+			}],
+		},
 		{
 			apiKey: "test",
 			reasoning: "high",
+			toolChoice: "none",
 			onPayload: (payload) => {
 				googlePayload = payload;
 				throw new Error("installed Google payload captured");
@@ -184,6 +192,7 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot) {
 	).result();
 	assert.match(googleResult.errorMessage ?? "", /installed Google payload captured/);
 	assert.equal(googlePayload?.config?.thinkingConfig?.thinkingLevel, "LOW");
+	assert.equal(googlePayload?.config?.toolConfig?.functionCallingConfig?.mode, "NONE");
 
 	const providers = await import(
 		`${pathToFileURL(resolve(piAiRoot, "dist", "providers", "all.js")).href}?installed-forward-fix=${Date.now()}`

@@ -14,6 +14,10 @@ import {
 	patchPiAiForwardFixSource,
 } from "./lib/pi-ai-forward-fixes-patch.mjs";
 import {
+	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	patchPiCompactionToolsSource,
+} from "./lib/pi-compaction-tools-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
@@ -176,6 +180,10 @@ const piAiForwardFixPaths = PI_AI_FORWARD_FIX_TARGETS.flatMap((relativePath) =>
 		relativePath,
 	}))
 );
+const compactionToolsPaths = PI_COMPACTION_TOOLS_PATCH_TARGETS.flatMap((relativePath) => [
+	piPackageRoot ? resolve(piPackageRoot, ...relativePath.split("/")) : null,
+	resolveWorkspacePiFile("pi-coding-agent", ...relativePath.split("/")),
+].filter(Boolean).map((entryPath) => ({ entryPath, relativePath })));
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
 const workspaceNestedAgentLoopPaths = resolveWorkspaceNestedPiFiles(
 	workspaceRoot,
@@ -1021,6 +1029,10 @@ for (const [entryPath, patchSource] of [
 	...piAiForwardFixPaths.map(({ entryPath, relativePath }) => [
 		entryPath,
 		(source) => patchPiAiForwardFixSource(relativePath, source),
+	]),
+	...compactionToolsPaths.map(({ entryPath, relativePath }) => [
+		entryPath,
+		(source) => patchPiCompactionToolsSource(relativePath, source),
 	]),
 ]) {
 	if (

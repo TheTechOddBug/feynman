@@ -25,6 +25,7 @@ import {
 } from "./lib/child-process-cleanup.mjs";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { verifyRuntimeForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
+import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
 
 const EXPECTED_FEYNMAN_COMMANDS = Object.freeze([
 	"capabilities",
@@ -766,6 +767,7 @@ async function main() {
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot);
+	await verifyPiCompactionToolsBehavior(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
 		commands: EXPECTED_FEYNMAN_COMMANDS.length,
@@ -778,6 +780,7 @@ async function main() {
 		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",
+		compactionTools: "disabled",
 	}));
 }
 

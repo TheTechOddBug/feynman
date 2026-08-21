@@ -61,11 +61,19 @@ async function captureGooglePayload(
 	let payload: unknown;
 	const result = await provider.streamSimple(
 		model,
-		{ messages: [{ role: "user", content: "Hello", timestamp: 0 }] },
+		{
+			messages: [{ role: "user", content: "Hello", timestamp: 0 }],
+			tools: [{
+				name: "read",
+				description: "Read a file",
+				parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+			}],
+		},
 		{
 			apiKey: "test",
 			reasoning,
 			thinkingBudgets,
+			toolChoice: "none",
 			onPayload: (request: unknown) => {
 				payload = request;
 				throw new Error("payload captured");
@@ -80,6 +88,9 @@ async function captureGooglePayload(
 				thinkingLevel?: string;
 				thinkingBudget?: number;
 			};
+			toolConfig?: {
+				functionCallingConfig?: { mode?: string };
+			};
 		};
 	};
 }
@@ -89,7 +100,7 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		resolve(appRoot, "scripts", "lib", "pi-ai-forward-fixes-patch.mjs"),
 		"utf8",
 	);
-	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548", "ad58801"]) {
+	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548", "ad58801", "e5dde9a"]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
 	assert.match(
@@ -127,6 +138,7 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 			"budgets[effort]",
 			"budgets[effort]",
 			"budgets[effort]",
+			"    const base = buildBaseOptions(model, context, options, apiKey);",
 		].join("\n"),
 	);
 	assert.match(generative, new RegExp(PI_AI_FORWARD_FIX_MARKERS.googleGenerativeAi));
@@ -145,6 +157,7 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 			"customBudgets[effort]",
 			"budgets[effort]",
 			"budgets[effort]",
+			"    const base = buildBaseOptions(model, context, options, undefined);",
 		].join("\n"),
 	);
 	assert.match(vertex, new RegExp(PI_AI_FORWARD_FIX_MARKERS.googleVertex));
@@ -159,6 +172,7 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 			'    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });',
 			"}",
 			"export const streamSimple",
+			"    const base = buildBaseOptions(model, context, options, undefined);",
 		].join("\n"),
 	);
 	assert.match(bedrock, new RegExp(PI_AI_FORWARD_FIX_MARKERS.bedrock));
@@ -278,6 +292,7 @@ test("Google providers honor model thinking maps and mapped token budgets", asyn
 		"high",
 	);
 	assert.equal(generativePayload.config?.thinkingConfig?.thinkingLevel, "LOW");
+	assert.equal(generativePayload.config?.toolConfig?.functionCallingConfig?.mode, "NONE");
 
 	const vertexPayload = await captureGooglePayload(
 		resolve(piAiRoot, "dist", "api", "google-vertex.js"),
@@ -286,6 +301,7 @@ test("Google providers honor model thinking maps and mapped token budgets", asyn
 		{ high: 4321 },
 	);
 	assert.equal(vertexPayload.config?.thinkingConfig?.thinkingBudget, 4321);
+	assert.equal(vertexPayload.config?.toolConfig?.functionCallingConfig?.mode, "NONE");
 });
 
 test("Bedrock forwards raw Smithy response headers to onResponse", async (t) => {

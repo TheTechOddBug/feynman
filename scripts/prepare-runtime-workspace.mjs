@@ -8,6 +8,10 @@ import {
 	patchPiAiForwardFixSource,
 } from "./lib/pi-ai-forward-fixes-patch.mjs";
 import {
+	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	patchPiCompactionToolsSource,
+} from "./lib/pi-compaction-tools-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
@@ -580,6 +584,13 @@ function patchBundledPiRuntimeCorrectness() {
 		changed = patchBundledNestedPiAiFile(
 			relativePath,
 			(source) => patchPiAiForwardFixSource(relativePath, source),
+		) || changed;
+	}
+	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+		changed = patchScopedPiWorkspaceFile(
+			"pi-coding-agent",
+			relativePath,
+			(source) => patchPiCompactionToolsSource(relativePath, source),
 		) || changed;
 	}
 	return changed;
