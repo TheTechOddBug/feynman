@@ -715,7 +715,25 @@ jobs:
           consumer="$RUNNER_TEMP/published-consumer"
           mkdir -p "$consumer"
           (cd "$consumer" && npm init -y >/dev/null)
-          npm install --prefix "$consumer" --omit=dev --no-audit "@companion-ai/feynman@$VERSION"
+          npm_install_error="$RUNNER_TEMP/npm-install-published.err"
+          for attempt in $(seq 1 18); do
+            if npm install --prefix "$consumer" --omit=dev --no-audit \
+              "@companion-ai/feynman@$VERSION" 2>"$npm_install_error"
+            then
+              break
+            fi
+            if ! grep -q 'E404' "$npm_install_error"; then
+              cat "$npm_install_error" >&2
+              exit 1
+            fi
+            if [ "$attempt" -eq 18 ]; then
+              cat "$npm_install_error" >&2
+              echo "npm tarball did not become installable: @companion-ai/feynman@$VERSION" >&2
+              exit 1
+            fi
+            rm -rf "$consumer/node_modules" "$consumer/package-lock.json"
+            sleep 10
+          done
           (
             cd "$consumer"
             npx --yes npm@11.18.0 audit signatures --json --include-attestations > audit-signatures.json

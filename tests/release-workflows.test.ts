@@ -279,7 +279,14 @@ test("version reconciliation and post-publish verification cover all release sur
 		/needs\.version-check\.outputs\.should_publish_npm == 'false' \|\|\s+needs\.publish-npm\.result == 'success'/,
 	);
 	assert.match(publishWorkflow, /gh release download "v\$VERSION"/);
-	assert.match(publishWorkflow, /npm install --prefix "\$consumer".*"@companion-ai\/feynman@\$VERSION"/);
+	assert.match(
+		publishWorkflow,
+		/npm install --prefix "\$consumer" --omit=dev --no-audit \\\s+"@companion-ai\/feynman@\$VERSION"/,
+	);
+	assert.match(verifyPublishedJob[0], /npm_install_error="\$RUNNER_TEMP\/npm-install-published\.err"/);
+	assert.match(verifyPublishedJob[0], /if ! grep -q 'E404' "\$npm_install_error"/);
+	assert.match(verifyPublishedJob[0], /npm tarball did not become installable/);
+	assert.match(verifyPublishedJob[0], /rm -rf "\$consumer\/node_modules" "\$consumer\/package-lock\.json"/);
 	assert.match(publishWorkflow, /unzip -t/);
 	assert.match(publishWorkflow, /targetCommitish/);
 	assert.match(publishWorkflow, /asset\.digest/);
