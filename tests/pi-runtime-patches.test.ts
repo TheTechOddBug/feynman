@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 
 import {
 	PI_WEB_ACCESS_PATCH_TARGETS,
+	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	patchPiWebAccessSources,
 } from "../scripts/lib/pi-web-access-patch.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
@@ -176,12 +177,18 @@ export async function answerPdfQuery(url, query) {
 `;
 
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.24.0");
+const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(import.meta.dirname, "..", "fixtures", "pi-web-access-0.24.0");
 function writePiWebAccessFixture(webRoot: string, version = "0.24.0", patched = false): void {
 	mkdirSync(webRoot, { recursive: true });
 	const sources = new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
 			relativePath,
-			readFileSync(join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`), "utf8"),
+			readFileSync(
+				PI_WEB_ACCESS_FORWARD_FILE_TARGETS.includes(relativePath)
+					? join(PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT, relativePath)
+					: join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`),
+				"utf8",
+			),
 		]),
 	);
 	const fixtureSources = patched ? patchPiWebAccessSources(sources, "test fixture") : sources;
@@ -195,6 +202,18 @@ function writePiWebAccessFixture(webRoot: string, version = "0.24.0", patched = 
 		JSON.stringify({ name: "pi-web-access", version }, null, 2) + "\n",
 		"utf8",
 	);
+}
+
+function writePiWebAccessForwardFixtures(appRoot: string): void {
+	for (const relativePath of PI_WEB_ACCESS_FORWARD_FILE_TARGETS) {
+		const fixturePath = join(appRoot, "fixtures", "pi-web-access-0.24.0", relativePath);
+		mkdirSync(dirname(fixturePath), { recursive: true });
+		writeFileSync(
+			fixturePath,
+			readFileSync(join(PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT, relativePath), "utf8"),
+			"utf8",
+		);
+	}
 }
 
 const SUBAGENT_PI_SPAWN_SOURCE = `
@@ -516,6 +535,22 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.match(readFileSync(piOtelConfigPath, "utf8"), /process\.env\.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \?\?/);
 	assert.match(readFileSync(piOtelConfigPath, "utf8"), /process\.env\.OTEL_EXPORTER_OTLP_TRACES_HEADERS/);
 	assert.match(readFileSync(sessionSearchPath, "utf8"), /process\.env\.FEYNMAN_SESSION_DIR/);
+	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
+});
+
+test("patchPiRuntimeNodeModules adds reviewed forward files to a fresh pi-web-access install", () => {
+	const appRoot = mkdtempSync(join(tmpdir(), "feynman-web-forward-files-"));
+	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
+	const sanitizerPath = join(webRoot, "data-uri-sanitize.ts");
+	writePiWebAccessFixture(webRoot);
+	rmSync(sanitizerPath);
+	writePiWebAccessForwardFixtures(appRoot);
+
+	assert.equal(patchPiRuntimeNodeModules(appRoot), true);
+	assert.equal(
+		readFileSync(sanitizerPath, "utf8"),
+		readFileSync(join(PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT, "data-uri-sanitize.ts"), "utf8"),
+	);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
 
