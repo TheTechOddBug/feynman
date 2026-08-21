@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "../scripts/lib/pi-subagents-patch.mjs";
 import {
+	assertPiSubagentCorrectnessSources,
 	assertPiSubagentUsageLimitFallbackSource,
+	verifyPiSubagentUsageLimitFallbackBehavior,
 } from "../scripts/lib/pi-subagents-verification.mjs";
 
 function assertUserDirLoadsHaveDeclaration(source: string): void {
@@ -115,11 +119,37 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 			"src/runs/foreground/chain-clarify.ts",
 			"src/runs/shared/pi-spawn.ts",
 			"src/runs/shared/model-fallback.ts",
+			"src/runs/foreground/execution.ts",
+			"src/runs/background/subagent-runner.ts",
+			"src/runs/background/chain-root-attachment.ts",
+			"src/runs/background/stale-run-reconciler.ts",
+			"src/runs/background/async-status.ts",
+			"src/shared/types.ts",
+			"src/extension/fanout-child.ts",
+			"src/runs/background/wait-tool.ts",
 			"src/runs/foreground/subagent-executor.ts",
 			"src/extension/schemas.ts",
 		].filter((entry) => !PI_SUBAGENTS_PATCH_TARGETS.includes(entry)),
 		[],
 	);
+});
+
+test("patched installed pi-subagents carries context overflow, backfilled tool completion, and logical failures end to end", async () => {
+	const appRoot = resolve(import.meta.dirname, "..");
+	const subagentsRoot = resolve(
+		appRoot,
+		".feynman",
+		"npm",
+		"node_modules",
+		"pi-subagents",
+	);
+	assert.doesNotThrow(() =>
+		assertPiSubagentCorrectnessSources(
+			(relativePath) => readFileSync(resolve(subagentsRoot, relativePath), "utf8"),
+			"focused installed runtime",
+		),
+	);
+	await verifyPiSubagentUsageLimitFallbackBehavior(appRoot);
 });
 
 test("patchPiSubagentsSource retries provider subscription usage limits", async () => {

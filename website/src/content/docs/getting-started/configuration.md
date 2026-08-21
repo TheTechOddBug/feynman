@@ -105,7 +105,7 @@ Example:
 }
 ```
 
-Gemini Web browser-cookie access is disabled by default. To opt into it, set `"geminiBrowser": true` in `web-search.json`; API-backed search is recommended for `/deepresearch`.
+Gemini Web browser-cookie access is disabled by default. To opt into it, set `"geminiBrowser": true` in `web-search.json`. On Windows, this can read Chrome or Edge `v10` cookies through current-user DPAPI; Chromium `v20` app-bound cookies are unsupported and fail closed. API-backed search is recommended for `/deepresearch`.
 
 PDF extraction uses Datalab when its key is present, then Gemini, then local PDF.js. The local parser remains available without a key.
 

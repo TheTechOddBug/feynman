@@ -1,4 +1,5 @@
 import { patchPiSubagentAgentDiagnostics } from "./pi-subagents-agent-diagnostics-patch.mjs";
+import { patchPiSubagentsCorrectness } from "./pi-subagents-correctness-patch.mjs";
 import { patchPiSubagentPromptMetadata } from "./pi-subagents-prompt-metadata-patch.mjs";
 
 export const PI_SUBAGENTS_PATCH_TARGETS = [
@@ -24,6 +25,14 @@ export const PI_SUBAGENTS_PATCH_TARGETS = [
 	"src/runs/foreground/chain-clarify.ts",
 	"src/runs/shared/pi-spawn.ts",
 	"src/runs/shared/model-fallback.ts",
+	"src/runs/foreground/execution.ts",
+	"src/runs/background/subagent-runner.ts",
+	"src/runs/background/chain-root-attachment.ts",
+	"src/runs/background/stale-run-reconciler.ts",
+	"src/runs/background/async-status.ts",
+	"src/shared/types.ts",
+	"src/extension/fanout-child.ts",
+	"src/runs/background/wait-tool.ts",
 	"src/runs/foreground/subagent-executor.ts",
 	"src/extension/schemas.ts",
 ];
@@ -280,9 +289,12 @@ export function stripPiSubagentBuiltinModelSource(source) {
 
 export function patchPiSubagentsSource(relativePath, source) {
 	const target = relativePath.split("/").pop();
-	let patched = patchPiSubagentPromptMetadata(
+	let patched = patchPiSubagentsCorrectness(
 		relativePath,
-		patchPiSubagentAgentDiagnostics(relativePath, source),
+		patchPiSubagentPromptMetadata(
+			relativePath,
+			patchPiSubagentAgentDiagnostics(relativePath, source),
+		),
 	);
 
 	switch (target) {

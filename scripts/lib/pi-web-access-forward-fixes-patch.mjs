@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+	PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256,
+	patchPiWebAccessWindowsCookiesSource,
+} from "./pi-web-access-windows-cookies-patch.mjs";
 
 // Remove these forward files when the next pi-web-access release contains
-// upstream commit 048700a8ae0da307d3891bfdbc3e54847a0a8635.
+// upstream commits 048700a8ae0da307d3891bfdbc3e54847a0a8635 and
+// ad5f0ca66ef6658c7efa3f12fd0cb9b206f490f6.
 export const PI_WEB_ACCESS_FORWARD_FILE_TARGETS = [
 	"data-uri-sanitize.ts",
 ];
@@ -106,6 +111,32 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		surface,
 		version,
 	);
+
+	const chromeCookiesSource = sources.get("chrome-cookies.ts");
+	const chromeCookiesDigest = createHash("sha256")
+		.update(chromeCookiesSource.replace(/\r\n/g, "\n"))
+		.digest("hex");
+	if (chromeCookiesDigest !== PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256) {
+		throw new Error(
+			`Unsupported pi-web-access ${version} ${surface} chrome-cookies.ts: expected ${PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256}, found ${chromeCookiesDigest}`,
+		);
+	}
+	requireMarkerCounts(chromeCookiesSource, "chrome-cookies.ts", [
+		['const WINDOWS_BROWSER_CONFIGS: BrowserConfig[] = [', 1],
+		['{ name: "Chrome", baseDir: "Google/Chrome/User Data", usesLocalAppData: true }', 1],
+		['{ name: "Edge", baseDir: "Microsoft/Edge/User Data", usesLocalAppData: true }', 1],
+		['const networkCookies = join(profilePath, "Network", "Cookies");', 1],
+		["function decryptWindowsCookieValue(", 1],
+		['encrypted.subarray(0, 3).toString("utf8") === "v20"', 1],
+		["async function readWindowsEncryptionKey(", 1],
+		["Add-Type -AssemblyName System.Security", 1],
+		["[Console]::In.ReadToEnd()", 1],
+		['execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]', 1],
+		['child.stdin.end(protectedData.toString("base64"))', 1],
+	], surface, version);
+	rejectMarkers(chromeCookiesSource, "chrome-cookies.ts", [
+		'currentPlatform === "darwin" ? MACOS_BROWSER_CONFIGS : currentPlatform === "linux" ? LINUX_BROWSER_CONFIGS : []',
+	], surface, version);
 
 	const sanitizerSource = sources.get("data-uri-sanitize.ts");
 	const sanitizerDigest = createHash("sha256")
@@ -346,6 +377,9 @@ function patchSsrfLoopbackSource(source) {
 }
 
 export function patchPiWebAccessForwardFixSource(relativePath, source) {
+	if (relativePath === "chrome-cookies.ts") {
+		return patchPiWebAccessWindowsCookiesSource(source);
+	}
 	if (relativePath === "index.ts") return patchLinuxBrowserLaunchSource(source);
 	if (relativePath === "extract.ts") return patchInlineDataUriSource(source);
 	if (relativePath === "firecrawl.ts") return patchFirecrawlLoopbackSource(source);
