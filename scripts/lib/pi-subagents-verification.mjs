@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
 	chmodSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -519,29 +520,31 @@ async function verifyLogicalToolFailureBehavior(runtimeRoot, jiti) {
 		restoreEnv("PI_SUBAGENT_FANOUT_CHILD", previousFanout);
 	}
 
+	const codingAgentPath = resolve(
+		runtimeRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"dist",
+		"index.js",
+	);
+	const piCompatPath = resolve(
+		runtimeRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-ai",
+		"dist",
+		"compat.js",
+	);
 	const codingAgent = await import(
-		pathToFileURL(
-			resolve(
-				runtimeRoot,
-				"node_modules",
-				"@earendil-works",
-				"pi-coding-agent",
-				"dist",
-				"index.js",
-			),
-		).href
+		existsSync(codingAgentPath)
+			? pathToFileURL(codingAgentPath).href
+			: "@earendil-works/pi-coding-agent"
 	);
 	const piCompat = await import(
-		pathToFileURL(
-			resolve(
-				runtimeRoot,
-				"node_modules",
-				"@earendil-works",
-				"pi-ai",
-				"dist",
-				"compat.js",
-			),
-		).href
+		existsSync(piCompatPath)
+			? pathToFileURL(piCompatPath).href
+			: "@earendil-works/pi-ai/compat"
 	);
 	const root = mkdtempSync(join(tmpdir(), "feynman-subagent-tool-error-"));
 	const faux = piCompat.registerFauxProvider();
