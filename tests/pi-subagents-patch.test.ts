@@ -152,6 +152,16 @@ test("patched installed pi-subagents carries context overflow, backfilled tool c
 	await verifyPiSubagentUsageLimitFallbackBehavior(appRoot);
 });
 
+test("installed pi-subagents verifier launches mock Pi scripts through Node on every platform", () => {
+	const source = readFileSync(
+		resolve(import.meta.dirname, "..", "scripts", "lib", "pi-subagents-verification.mjs"),
+		"utf8",
+	);
+	assert.match(source, /process\.env\.FEYNMAN_PI_CLI_PATH = mockPath/);
+	assert.doesNotMatch(source, /#!\/bin\/sh/);
+	assert.doesNotMatch(source, /process\.env\.PI_SUBAGENT_PI_BINARY =/);
+});
+
 test("patchPiSubagentsSource retries provider subscription usage limits", async () => {
 	const input = [
 		"const RETRYABLE_MODEL_FAILURE_PATTERNS = [",

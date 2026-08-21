@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import {
-	chmodSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
@@ -107,15 +106,25 @@ function restoreEnv(name, value) {
 	else process.env[name] = value;
 }
 
+function installMockPiCli(root, source) {
+	const mockPath = join(root, "mock-pi.mjs");
+	writeFileSync(mockPath, source);
+	const previousBinary = process.env.PI_SUBAGENT_PI_BINARY;
+	const previousCli = process.env.FEYNMAN_PI_CLI_PATH;
+	delete process.env.PI_SUBAGENT_PI_BINARY;
+	process.env.FEYNMAN_PI_CLI_PATH = mockPath;
+	return () => {
+		restoreEnv("PI_SUBAGENT_PI_BINARY", previousBinary);
+		restoreEnv("FEYNMAN_PI_CLI_PATH", previousCli);
+	};
+}
+
 async function verifyContextOverflowBehavior(runtimeRoot, jiti) {
 	const root = mkdtempSync(join(tmpdir(), "feynman-subagent-overflow-"));
 	const queue = join(root, "queue");
-	const bin = join(root, "bin");
 	mkdirSync(queue);
-	mkdirSync(bin);
-	const mockPath = join(root, "mock-pi.mjs");
-	writeFileSync(
-		mockPath,
+	const restoreMockPiCli = installMockPiCli(
+		root,
 		[
 			'import fs from "node:fs";',
 			'import path from "node:path";',
@@ -133,12 +142,6 @@ async function verifyContextOverflowBehavior(runtimeRoot, jiti) {
 			"",
 		].join("\n"),
 	);
-	const piPath = join(bin, "pi");
-	writeFileSync(
-		piPath,
-		`#!/bin/sh\nexec "${process.execPath}" "${mockPath}" "$@"\n`,
-	);
-	chmodSync(piPath, 0o755);
 	const error =
 		"model error: context_length_exceeded: maximum context length is 8192 tokens";
 	const errorMessage = {
@@ -167,11 +170,7 @@ async function verifyContextOverflowBehavior(runtimeRoot, jiti) {
 		JSON.stringify({ output: "MUST_NOT_RUN_FALLBACK" }),
 	);
 	const previousQueue = process.env.FEYNMAN_MOCK_PI_QUEUE;
-	const previousBinary = process.env.PI_SUBAGENT_PI_BINARY;
-	const previousCli = process.env.FEYNMAN_PI_CLI_PATH;
 	process.env.FEYNMAN_MOCK_PI_QUEUE = queue;
-	process.env.PI_SUBAGENT_PI_BINARY = piPath;
-	delete process.env.FEYNMAN_PI_CLI_PATH;
 	try {
 		const execution = await jiti.import(
 			resolve(
@@ -260,19 +259,15 @@ async function verifyContextOverflowBehavior(runtimeRoot, jiti) {
 		);
 	} finally {
 		restoreEnv("FEYNMAN_MOCK_PI_QUEUE", previousQueue);
-		restoreEnv("PI_SUBAGENT_PI_BINARY", previousBinary);
-		restoreEnv("FEYNMAN_PI_CLI_PATH", previousCli);
+		restoreMockPiCli();
 		rmSync(root, { recursive: true, force: true });
 	}
 }
 
 async function verifyBackfilledToolResultBehavior(runtimeRoot, jiti) {
 	const root = mkdtempSync(join(tmpdir(), "feynman-subagent-tool-backfill-"));
-	const bin = join(root, "bin");
-	mkdirSync(bin);
-	const mockPath = join(root, "mock-pi.mjs");
-	writeFileSync(
-		mockPath,
+	const restoreMockPiCli = installMockPiCli(
+		root,
 		[
 			"const events = [",
 			'\t{ type: "tool_execution_start", toolCallId: "bash-1", toolName: "bash", args: { command: "echo PROBE_OK" } },',
@@ -283,16 +278,6 @@ async function verifyBackfilledToolResultBehavior(runtimeRoot, jiti) {
 			"",
 		].join("\n"),
 	);
-	const piPath = join(bin, "pi");
-	writeFileSync(
-		piPath,
-		`#!/bin/sh\nexec "${process.execPath}" "${mockPath}" "$@"\n`,
-	);
-	chmodSync(piPath, 0o755);
-	const previousBinary = process.env.PI_SUBAGENT_PI_BINARY;
-	const previousCli = process.env.FEYNMAN_PI_CLI_PATH;
-	process.env.PI_SUBAGENT_PI_BINARY = piPath;
-	delete process.env.FEYNMAN_PI_CLI_PATH;
 	try {
 		const execution = await jiti.import(
 			resolve(
@@ -334,8 +319,7 @@ async function verifyBackfilledToolResultBehavior(runtimeRoot, jiti) {
 		assert.equal(result.progress?.recentTools?.[0]?.tool, "bash");
 		assert.equal(result.progress?.recentTools?.[0]?.args, "echo PROBE_OK");
 	} finally {
-		restoreEnv("PI_SUBAGENT_PI_BINARY", previousBinary);
-		restoreEnv("FEYNMAN_PI_CLI_PATH", previousCli);
+		restoreMockPiCli();
 		rmSync(root, { recursive: true, force: true });
 	}
 }
@@ -395,16 +379,14 @@ async function verifyLogicalToolFailureBehavior(runtimeRoot, jiti) {
 	assert.notEqual(success.isError, true, "Successful subagent actions must still resolve");
 
 	const parallelRoot = mkdtempSync(join(tmpdir(), "feynman-subagent-parallel-error-"));
-	const parallelBin = join(parallelRoot, "pi");
-	writeFileSync(
-		parallelBin,
-		`#!/bin/sh\nprintf '%s' 'provider error: forced child failure' >&2\nexit 1\n`,
+	const restoreParallelMockPiCli = installMockPiCli(
+		parallelRoot,
+		[
+			'process.stderr.write("provider error: forced child failure");',
+			"process.exit(1);",
+			"",
+		].join("\n"),
 	);
-	chmodSync(parallelBin, 0o755);
-	const previousParallelBinary = process.env.PI_SUBAGENT_PI_BINARY;
-	const previousParallelCli = process.env.FEYNMAN_PI_CLI_PATH;
-	process.env.PI_SUBAGENT_PI_BINARY = parallelBin;
-	delete process.env.FEYNMAN_PI_CLI_PATH;
 	try {
 		const parallelToolContext = { ...toolContext, cwd: parallelRoot };
 		await assert.rejects(
@@ -424,8 +406,7 @@ async function verifyLogicalToolFailureBehavior(runtimeRoot, jiti) {
 			/0\/2 succeeded/,
 		);
 	} finally {
-		restoreEnv("PI_SUBAGENT_PI_BINARY", previousParallelBinary);
-		restoreEnv("FEYNMAN_PI_CLI_PATH", previousParallelCli);
+		restoreParallelMockPiCli();
 		rmSync(parallelRoot, { recursive: true, force: true });
 	}
 
