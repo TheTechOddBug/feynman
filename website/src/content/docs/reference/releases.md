@@ -9,6 +9,24 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.31 - 2026-08-21
+
+### Research agents
+
+- Research subagents now stop after a context-window overflow instead of retrying the same oversized input on fallback models.
+- Completed subagent tools no longer remain marked active when Pi backfills a result without a separate execution-end event.
+- Logical subagent failures now reach the model as failed tool results. The model no longer treats an invalid or failed research-agent action as success.
+
+### Web research
+
+- Opt-in Gemini Web research on Windows can now read Chrome and Edge `v10` cookies through current-user DPAPI.
+- Chromium `v20` app-bound cookies remain blocked and now return a clear diagnostic instead of a false authentication success.
+
+### Validation
+
+- Ported only the focused upstream `pi-subagents` context-overflow, tool-result backfill, and logical-failure corrections into the bundled research-agent runtime.
+- Added exact-source, restored-runtime, installed-package, model-loop, tool-result backfill, logical-failure, and native Windows DPAPI regressions.
+
 ## v0.3.30 - 2026-08-21
 
 ### Web research

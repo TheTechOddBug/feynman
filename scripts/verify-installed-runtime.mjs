@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -478,6 +480,179 @@ export async function verifyWebAccessRegistrationGates() {
 	}
 }
 
+function restoreEnvironmentVariable(name, value) {
+	if (value === undefined) delete process.env[name];
+	else process.env[name] = value;
+}
+
+function encryptWindowsChromiumCookie(value, key, version, hostKey) {
+	const nonce = randomBytes(12);
+	const cipher = createCipheriv("aes-256-gcm", key, nonce);
+	const plaintext = hostKey
+		? Buffer.concat([createHash("sha256").update(hostKey).digest(), Buffer.from(value)])
+		: Buffer.from(value);
+	return Buffer.concat([
+		Buffer.from(version),
+		nonce,
+		cipher.update(plaintext),
+		cipher.final(),
+		cipher.getAuthTag(),
+	]);
+}
+
+function protectWindowsData(value) {
+	const script = [
+		"$ErrorActionPreference='Stop';",
+		"Add-Type -AssemblyName System.Security;",
+		"$encoded=[Console]::In.ReadToEnd();",
+		"$data=[Convert]::FromBase64String($encoded);",
+		"$protected=[Security.Cryptography.ProtectedData]::Protect(",
+		"$data,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser);",
+		"[Console]::Write([Convert]::ToBase64String($protected))",
+	].join("");
+	const encoded = execFileSync(
+		"powershell.exe",
+		[
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			script,
+		],
+		{
+			encoding: "utf8",
+			input: value.toString("base64"),
+			maxBuffer: 1024 * 1024,
+			timeout: 10_000,
+			windowsHide: true,
+		},
+	).trim();
+	const protectedValue = Buffer.from(encoded, "base64");
+	assert.ok(protectedValue.length > 0, "Windows DPAPI returned an empty protected key");
+	return protectedValue;
+}
+
+export async function verifyWindowsWebCookies() {
+	if (process.platform !== "win32") return "skipped";
+
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-windows-cookies-"));
+	const localAppData = resolve(root, "AppData", "Local");
+	const browserRoot = resolve(localAppData, "Google", "Chrome", "User Data");
+	const cookieDatabase = resolve(browserRoot, "Default", "Network", "Cookies");
+	const key = randomBytes(32);
+	const hostKey = ".google.com";
+	const previousEnvironment = new Map(
+		["FEYNMAN_ALLOW_BROWSER_COOKIES", "HOME", "LOCALAPPDATA", "USERPROFILE"].map(
+			(name) => [name, process.env[name]],
+		),
+	);
+	let database;
+	try {
+		const { DatabaseSync } = await import("node:sqlite");
+		mkdirSync(resolve(cookieDatabase, ".."), { recursive: true });
+		database = new DatabaseSync(cookieDatabase);
+		database.exec([
+			"CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER);",
+			"INSERT INTO meta VALUES ('version', 24);",
+			"CREATE TABLE cookies (",
+			"name TEXT, value TEXT, host_key TEXT, path TEXT,",
+			"expires_utc INTEGER, encrypted_value BLOB",
+			");",
+		].join("\n"));
+		const insert = database.prepare(
+			"INSERT INTO cookies VALUES (?, ?, ?, ?, ?, ?)",
+		);
+		insert.run(
+			"__Secure-1PSID",
+			"",
+			hostKey,
+			"/",
+			0,
+			encryptWindowsChromiumCookie("installed-one", key, "v10", hostKey),
+		);
+		insert.run(
+			"__Secure-1PSIDTS",
+			"",
+			hostKey,
+			"/",
+			0,
+			encryptWindowsChromiumCookie("installed-two", key, "v10", hostKey),
+		);
+		database.close();
+		database = undefined;
+		writeFileSync(
+			resolve(browserRoot, "Local State"),
+			JSON.stringify({
+				os_crypt: {
+					encrypted_key: Buffer.concat([
+						Buffer.from("DPAPI"),
+						protectWindowsData(key),
+					]).toString("base64"),
+				},
+			}),
+			"utf8",
+		);
+
+		process.env.FEYNMAN_ALLOW_BROWSER_COOKIES = "1";
+		process.env.HOME = root;
+		process.env.LOCALAPPDATA = localAppData;
+		process.env.USERPROFILE = root;
+
+		const runtimeRoot = resolve(packageRoot, ".feynman", "npm");
+		const runtimeRequire = createRequire(resolve(runtimeRoot, "package.json"));
+		const jitiModule = await import(
+			pathToFileURL(runtimeRequire.resolve("jiti")).href
+		);
+		const jiti = jitiModule.createJiti(import.meta.url, { moduleCache: false });
+		const cookies = await jiti.import(
+			resolve(
+				runtimeRoot,
+				"node_modules",
+				"pi-web-access",
+				"chrome-cookies.ts",
+			),
+		);
+		const decrypted = await cookies.getGoogleCookies({
+			profile: "Default",
+			requiredCookies: ["__Secure-1PSID", "__Secure-1PSIDTS"],
+		});
+		assert.deepEqual(decrypted?.cookies, {
+			"__Secure-1PSID": "installed-one",
+			"__Secure-1PSIDTS": "installed-two",
+		});
+
+		database = new DatabaseSync(cookieDatabase);
+		const update = database.prepare(
+			"UPDATE cookies SET encrypted_value = ? WHERE name = ?",
+		);
+		update.run(
+			encryptWindowsChromiumCookie("blocked-one", key, "v20"),
+			"__Secure-1PSID",
+		);
+		update.run(
+			encryptWindowsChromiumCookie("blocked-two", key, "v20"),
+			"__Secure-1PSIDTS",
+		);
+		database.close();
+		database = undefined;
+		const appBound = await cookies.getGoogleCookies({
+			profile: "Default",
+			requiredCookies: ["__Secure-1PSID", "__Secure-1PSIDTS"],
+		});
+		assert.equal(appBound, null, "Windows app-bound cookies must fail closed");
+		assert.match(
+			cookies.getLastGoogleCookieDiagnostic() ?? "",
+			/v20 app-bound cookies are not supported/,
+		);
+		return "passed";
+	} finally {
+		database?.close();
+		for (const [name, value] of previousEnvironment) {
+			restoreEnvironmentVariable(name, value);
+		}
+		rmSync(root, { recursive: true, force: true });
+	}
+}
+
 export async function verifyInstalledSchemas() {
 	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-schemas-"));
 	const extensionPath = resolve(packageRoot, "extensions", "research-tools.ts");
@@ -764,6 +939,7 @@ export async function verifyGithubCopilotRateLimitLogin() {
 async function main() {
 	await verifyRpcSurface();
 	await verifyWebAccessRegistrationGates();
+	const windowsWebCookies = await verifyWindowsWebCookies();
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot);
@@ -777,6 +953,7 @@ async function main() {
 		typeboxOptionalNull: "omitted",
 		typeboxMalformedArguments: "rejected",
 		webAccessRegistrationGates: "passed",
+		windowsWebCookies,
 		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",

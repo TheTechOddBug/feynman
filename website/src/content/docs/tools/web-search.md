@@ -93,7 +93,7 @@ Set `firecrawlBaseUrl` or `FIRECRAWL_BASE_URL` for self-hosted Firecrawl. The co
 
 To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint.
 
-Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store, so API keys are the recommended route.
+Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store. On Windows, the opt-in path can read Chrome or Edge `v10` cookies through current-user DPAPI. Chromium `v20` app-bound cookies are unsupported and fail closed. API keys remain the recommended route.
 
 Set `enabled` to `false` for one `tools` or `commands` entry to skip that registration after restart. `webSearch.enabled: false` remains a legacy shorthand for disabling `web_search` and `source_check` when no tool-specific override exists. Feynman uses the `web-results` command key because `/search` belongs to research-session search. Set `image.enabled: false` to block direct images, video frames, and thumbnails. Set `pdf.enabled: false` to block PDF extraction.
 

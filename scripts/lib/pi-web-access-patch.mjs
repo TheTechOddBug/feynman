@@ -14,6 +14,7 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"extract.ts",
 	"firecrawl.ts",
 	"ssrf-protection.ts",
+	"chrome-cookies.ts",
 	...PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	"feature-config.ts",
 	"page-query.ts",
