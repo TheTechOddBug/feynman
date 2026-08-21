@@ -41,6 +41,7 @@ import {
 	assertPiWebAccessVersion,
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	patchPiWebAccessSources,
+	syncPiWebAccessForwardFiles,
 } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
@@ -1081,13 +1082,13 @@ patchFilesIfPresent([
 ], patchPiEditorSource);
 
 const piWebAccessRoot = resolve(workspaceRoot, "pi-web-access");
-
 if (existsSync(piWebAccessRoot)) {
 	const manifestPath = resolve(piWebAccessRoot, "package.json");
 	const version = existsSync(manifestPath)
 		? JSON.parse(readFileSync(manifestPath, "utf8")).version
 		: undefined;
 	assertPiWebAccessVersion(version, "embedded runtime workspace");
+	syncPiWebAccessForwardFiles(appRoot, piWebAccessRoot, version);
 	const sources = new Map();
 	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
 		const entryPath = resolve(piWebAccessRoot, relativePath);

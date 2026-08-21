@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import {
 	assertPiWebAccessPatchedSources,
 	assertPiWebAccessVersion,
+	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	PI_WEB_ACCESS_REQUIRED_VERSION,
 	patchPiWebAccessSource,
@@ -19,13 +21,29 @@ const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	"fixtures",
 	"pi-web-access-0.24.0",
 );
+const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(
+	import.meta.dirname,
+	"..",
+	"fixtures",
+	"pi-web-access-0.24.0",
+);
+const PI_WEB_ACCESS_RUNTIME_ROOT = join(
+	import.meta.dirname,
+	"..",
+	".feynman",
+	"npm",
+	"node_modules",
+	"pi-web-access",
+);
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
 	return new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
 			relativePath,
 			readFileSync(
-				join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`),
+				PI_WEB_ACCESS_FORWARD_FILE_TARGETS.includes(relativePath)
+					? join(PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT, relativePath)
+					: join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`),
 				"utf8",
 			),
 		]),
@@ -40,6 +58,7 @@ test("package artifact verification checks every pi-web-access patch target", ()
 
 	assert.match(source, /PI_WEB_ACCESS_PATCH_TARGETS\.map\(\(relativePath\) =>/);
 	assert.match(source, /`npm\/node_modules\/pi-web-access\/\$\{relativePath\}`/);
+	assert.match(source, /assertPiWebAccessPatchedSources/);
 	assert.match(
 		source,
 		/"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);"/,
@@ -189,6 +208,218 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 	assert.match(indexSource, /const MAX_INLINE_CONTENT_CHARS = 200_000;/);
 	assert.match(indexSource, /bocha: isBochaAvailable\(\),/);
 	assert.match(geminiSearchSource, /searchWithBocha\(query, options\)/);
+});
+
+test("exact pi-web-access fixture ports the three focused upstream reliability fixes", () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"forward-fix fixture",
+	);
+	const extractSource = patchedSources.get("extract.ts") ?? "";
+	const indexSource = patchedSources.get("index.ts") ?? "";
+	const firecrawlSource = patchedSources.get("firecrawl.ts") ?? "";
+	const ssrfSource = patchedSources.get("ssrf-protection.ts") ?? "";
+
+	assert.match(extractSource, /sanitizeInlineDataUris/);
+	assert.match(extractSource, /options\?\.mode === "raw"/);
+	assert.match(indexSource, /spawn\("xdg-open", \[url\], \{ detached: true, stdio: "ignore" \}\)/);
+	assert.match(firecrawlSource, /loopbackApiOrigin = isLoopbackApiUrl\(initialUrl\)/);
+	assert.match(firecrawlSource, /redirectUrl\.origin === loopbackApiOrigin/);
+	assert.match(ssrfSource, /allowLoopback\?: boolean/);
+	assert.doesNotMatch(indexSource, /await pi\.exec\("xdg-open"/);
+	assert.doesNotMatch(extractSource, /return Promise\.all\(urls\.map/);
+});
+
+test("runtime readable extraction removes inline data URIs while raw mode preserves the body", () => {
+	const extractUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "extract.ts")).href;
+	const child = spawnSync(
+		process.execPath,
+		["--import", "tsx", "--input-type=module"],
+		{
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			input: `
+				const encoded = Buffer.alloc(256 * 1024, 0xa5).toString("base64");
+				const body = \`Readable before ![large](data:image/png;base64,\${encoded}) after\`;
+				globalThis.fetch = async () => new Response(body, {
+					headers: { "content-type": "text/plain; charset=utf-8" },
+				});
+				const { fetchAllContent } = await import(${JSON.stringify(extractUrl)});
+				const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
+				const [readable] = await fetchAllContent(["https://example.com/readable"], undefined, { lookup });
+				const [raw] = await fetchAllContent(["https://example.com/raw"], undefined, { mode: "raw", lookup });
+				console.log(JSON.stringify({ readable: readable.content, raw: raw.content, body }));
+			`,
+		},
+	);
+	assert.equal(child.status, 0, child.stderr);
+	const output = JSON.parse(child.stdout.trim()) as {
+		readable: string;
+		raw: string;
+		body: string;
+	};
+	assert.match(output.readable, /Readable before/);
+	assert.match(output.readable, /inline data URI omitted/);
+	assert.match(output.readable, /retrieval=not-retained/);
+	assert.doesNotMatch(output.readable, /data:image\/png;base64/i);
+	assert.equal(output.raw, output.body);
+});
+
+test("runtime Firecrawl loopback exception stays scoped to the configured API", () => {
+	const firecrawlUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "firecrawl.ts")).href;
+	const child = spawnSync(
+		process.execPath,
+		["--import", "tsx", "--input-type=module"],
+		{
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			env: {
+				...process.env,
+				FIRECRAWL_BASE_URL: "http://127.0.0.1:3002",
+				FIRECRAWL_API_KEY: "test-only",
+			},
+			input: `
+				const calls = [];
+				globalThis.fetch = async (url) => {
+					calls.push(String(url));
+					return new Response(JSON.stringify({
+						success: true,
+						data: { web: [{ title: "Local", url: "https://example.com/local", description: "local" }] },
+					}), { status: 200 });
+				};
+				const { extractWithFirecrawl, searchWithFirecrawl } = await import(${JSON.stringify(firecrawlUrl)});
+				const search = await searchWithFirecrawl("local firecrawl");
+				let targetError = "";
+				try {
+					await extractWithFirecrawl("http://127.0.0.1/private");
+				} catch (error) {
+					targetError = error instanceof Error ? error.message : String(error);
+				}
+				console.log(JSON.stringify({ calls, search, targetError }));
+			`,
+		},
+	);
+	assert.equal(child.status, 0, child.stderr);
+	const output = JSON.parse(child.stdout.trim()) as {
+		calls: string[];
+		search: { results: Array<{ url: string }> };
+		targetError: string;
+	};
+	assert.deepEqual(output.calls, ["http://127.0.0.1:3002/v2/search"]);
+	assert.deepEqual(output.search.results.map((result) => result.url), ["https://example.com/local"]);
+	assert.match(output.targetError, /Blocked internal address/);
+});
+
+test("runtime Firecrawl loopback redirects stay on the configured API origin", () => {
+	const firecrawlUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "firecrawl.ts")).href;
+	const child = spawnSync(
+		process.execPath,
+		["--import", "tsx", "--input-type=module"],
+		{
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			env: {
+				...process.env,
+				FIRECRAWL_BASE_URL: "http://127.0.0.1:3002",
+				FIRECRAWL_API_KEY: "test-only",
+			},
+			input: `
+				const calls = [];
+				let scenario = "same-origin";
+				globalThis.fetch = async (url) => {
+					const value = String(url);
+					calls.push(value);
+					if (scenario === "same-origin" && value.endsWith("/v2/search")) {
+						return new Response(null, {
+							status: 302,
+							headers: { location: "/v2/search-result" },
+						});
+					}
+					if (scenario === "cross-origin") {
+						return new Response(null, {
+							status: 302,
+							headers: { location: "http://127.0.0.1:3003/private" },
+						});
+					}
+					return new Response(JSON.stringify({
+						success: true,
+						data: { web: [{ title: "Local", url: "https://example.com/local", description: "local" }] },
+					}), { status: 200 });
+				};
+				const { searchWithFirecrawl } = await import(${JSON.stringify(firecrawlUrl)});
+				const search = await searchWithFirecrawl("same origin");
+				scenario = "cross-origin";
+				let redirectError = "";
+				try {
+					await searchWithFirecrawl("cross origin");
+				} catch (error) {
+					redirectError = error instanceof Error ? error.message : String(error);
+				}
+				console.log(JSON.stringify({ calls, search, redirectError }));
+			`,
+		},
+	);
+	assert.equal(child.status, 0, child.stderr);
+	const output = JSON.parse(child.stdout.trim()) as {
+		calls: string[];
+		search: { results: Array<{ url: string }> };
+		redirectError: string;
+	};
+	assert.deepEqual(output.calls, [
+		"http://127.0.0.1:3002/v2/search",
+		"http://127.0.0.1:3002/v2/search-result",
+		"http://127.0.0.1:3002/v2/search",
+	]);
+	assert.deepEqual(output.search.results.map((result) => result.url), ["https://example.com/local"]);
+	assert.match(output.redirectError, /Blocked internal address/);
+});
+
+test("patched Linux browser launcher propagates immediate spawn failures", async () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"Linux launcher behavior fixture",
+	);
+	const indexSource = patchedSources.get("index.ts") ?? "";
+	const functionSource = indexSource.match(
+		/(async function openInBrowser[\s\S]*?\n})\n\ninterface GlimpseWindow/,
+	)?.[1];
+	assert.ok(functionSource, "openInBrowser must remain extractable from the reviewed source");
+
+	const tempRoot = mkdtempSync(join(tmpdir(), "feynman-xdg-open-"));
+	const modulePath = join(tempRoot, "open-in-browser.ts");
+	writeFileSync(
+		modulePath,
+		[
+			'type ExtensionAPI = { exec(name: string, args: string[]): Promise<{ code: number; stderr: string }> };',
+			'const platform = () => "linux";',
+			"class FakeChild {",
+			'\tlisteners = new Map<string, (value: unknown) => void>();',
+			'\tonce(event: string, listener: (value: unknown) => void) {',
+			"\t\tthis.listeners.set(event, listener);",
+			'\t\tif (event === "exit") queueMicrotask(() => this.listeners.get("error")?.(new Error("xdg-open spawn failed")));',
+			"\t\treturn this;",
+			"\t}",
+			"\tunref() {}",
+			"}",
+			"const spawn = () => new FakeChild();",
+			functionSource,
+			"export { openInBrowser };",
+			"",
+		].join("\n"),
+		"utf8",
+	);
+
+	try {
+		const module = await import(`${pathToFileURL(modulePath).href}?test=${Date.now()}`) as {
+			openInBrowser: (pi: unknown, url: string) => Promise<void>;
+		};
+		await assert.rejects(
+			module.openInBrowser({}, "https://example.com"),
+			/xdg-open spawn failed/,
+		);
+	} finally {
+		rmSync(tempRoot, { recursive: true, force: true });
+	}
 });
 
 test("patchPiWebAccessSources repairs partial config-path patch state", () => {

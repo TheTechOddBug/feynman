@@ -1,9 +1,20 @@
 import { createHash } from "node:crypto";
+import {
+	assertPiWebAccessForwardFixSources,
+	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
+	patchPiWebAccessForwardFixSource,
+	syncPiWebAccessForwardFiles,
+} from "./pi-web-access-forward-fixes-patch.mjs";
 
 export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.0";
+export { PI_WEB_ACCESS_FORWARD_FILE_TARGETS, syncPiWebAccessForwardFiles };
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
+	"extract.ts",
+	"firecrawl.ts",
+	"ssrf-protection.ts",
+	...PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	"feature-config.ts",
 	"page-query.ts",
 	"storage.ts",
@@ -60,6 +71,11 @@ function rejectMarkers(source, relativePath, markers, surface) {
 }
 
 export function assertPiWebAccessPatchedSources(sources, surface = "patched source tree") {
+	assertPiWebAccessForwardFixSources(
+		sources,
+		surface,
+		PI_WEB_ACCESS_REQUIRED_VERSION,
+	);
 	for (const relativePath of [
 		"index.ts",
 		"feature-config.ts",
@@ -748,6 +764,10 @@ export function patchPiWebAccessSource(relativePath, source) {
 		patched = patched.split(LEGACY_CONFIG_EXPR).join(PATCHED_CONFIG_EXPR);
 		changed = patched !== source;
 	}
+
+	const forwardPatched = patchPiWebAccessForwardFixSource(relativePath, patched);
+	changed = forwardPatched !== patched || changed;
+	patched = forwardPatched;
 
 	if (relativePath === "index.ts") {
 		for (const [original, replacement] of [

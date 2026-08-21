@@ -24,6 +24,7 @@ export const RUNTIME_INPUT_FILES = Object.freeze([
 	"scripts/lib/pi-extension-loader-patch.mjs",
 	"scripts/lib/pi-tui-patch.mjs",
 	"scripts/lib/pi-web-access-patch.mjs",
+	"scripts/lib/pi-web-access-forward-fixes-patch.mjs",
 	"scripts/lib/pi-subagents-patch.mjs",
 	"scripts/lib/pi-subagents-agent-diagnostics-patch.mjs",
 	"scripts/lib/pi-subagents-agent-discovery-patch.mjs",

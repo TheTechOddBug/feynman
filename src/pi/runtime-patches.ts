@@ -36,7 +36,9 @@ import {
 } from "../../scripts/lib/pi-tui-patch.mjs";
 import {
 	assertPiWebAccessVersion,
+	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	PI_WEB_ACCESS_PATCH_TARGETS,
+	PI_WEB_ACCESS_REQUIRED_VERSION,
 	patchPiWebAccessSources,
 } from "../../scripts/lib/pi-web-access-patch.mjs";
 import { getFeynmanNpmGlobalNodeModulesPath } from "./runtime.js";
@@ -70,7 +72,7 @@ function patchPackageFiles(
 	return changed;
 }
 
-function patchPiWebAccessPackageFiles(nodeModulesPath: string): boolean {
+function patchPiWebAccessPackageFiles(nodeModulesPath: string, appRoot: string): boolean {
 	const packageRoot = resolve(nodeModulesPath, "pi-web-access");
 	if (!existsSync(packageRoot)) {
 		return false;
@@ -80,18 +82,34 @@ function patchPiWebAccessPackageFiles(nodeModulesPath: string): boolean {
 	const sources = new Map<string, string>();
 	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
 		const path = resolve(packageRoot, ...relativePath.split("/"));
-		if (!existsSync(path)) {
+		if (existsSync(path)) {
+			sources.set(relativePath, readFileSync(path, "utf8"));
+			continue;
+		}
+		if (PI_WEB_ACCESS_FORWARD_FILE_TARGETS.includes(relativePath)) {
+			const fixturePath = resolve(
+				appRoot,
+				"fixtures",
+				`pi-web-access-${PI_WEB_ACCESS_REQUIRED_VERSION}`,
+				...relativePath.split("/"),
+			);
+			if (existsSync(fixturePath)) {
+				sources.set(relativePath, readFileSync(fixturePath, "utf8"));
+				continue;
+			}
+			throw new Error(`pi-web-access forward fixture is missing: ${fixturePath}`);
+		} else {
 			throw new Error(`pi-web-access patch target is missing: ${path}`);
 		}
-		sources.set(relativePath, readFileSync(path, "utf8"));
 	}
 
 	const patchedSources = patchPiWebAccessSources(sources, packageRoot);
 	let changed = false;
 	for (const [relativePath, patched] of patchedSources) {
 		const source = sources.get(relativePath);
-		if (patched === source) continue;
-		writeFileSync(resolve(packageRoot, ...relativePath.split("/")), patched, "utf8");
+		const path = resolve(packageRoot, ...relativePath.split("/"));
+		if (patched === source && existsSync(path)) continue;
+		writeFileSync(path, patched, "utf8");
 		changed = true;
 	}
 	return changed;
@@ -439,7 +457,7 @@ export function patchPiRuntimeNodeModules(
 			resolve(nodeModulesPath, "@companion-ai", "alpha-hub", "src", "lib", "index.js"),
 			patchAlphaHubSearchResultsSource,
 		) || changed;
-		changed = patchPiWebAccessPackageFiles(nodeModulesPath) || changed;
+		changed = patchPiWebAccessPackageFiles(nodeModulesPath, appRoot) || changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"pi-subagents",

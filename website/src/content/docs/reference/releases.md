@@ -9,6 +9,19 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.30 - 2026-08-21
+
+### Web research
+
+- Readable page extraction now replaces inline `data:` URI payloads with bounded omission markers before content reaches model context, the fetched-content cache, or session persistence. Raw mode still returns the exact textual response body.
+- Self-hosted Firecrawl API endpoints may use `localhost`, `127.0.0.0/8`, or `::1`. The exception stays limited to the configured API origin, including redirects, and does not permit loopback research targets.
+- Linux curator launches now detach `xdg-open`, so the browser process cannot hold a completed web search open.
+
+### Validation
+
+- Ported three focused post-`0.24.0` fixes from `pi-web-access` while preserving Feynman's exact config path, private cache, session model scope, and existing provider controls.
+- Added executable readable/raw extraction, Firecrawl loopback and redirect isolation, Linux launch-failure, restored-runtime, and installed-package regressions.
+
 ## v0.3.29 - 2026-08-21
 
 ### Biomedical literature

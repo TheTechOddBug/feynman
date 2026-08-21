@@ -35,6 +35,7 @@ import {
 	assertPiWebAccessVersion,
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	patchPiWebAccessSources,
+	syncPiWebAccessForwardFiles,
 } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
@@ -663,6 +664,7 @@ function patchBundledPiWebAccess() {
 		? JSON.parse(readFileSync(manifestPath, "utf8")).version
 		: undefined;
 	assertPiWebAccessVersion(version, "bundled runtime workspace");
+	let changed = syncPiWebAccessForwardFiles(appRoot, piWebAccessRoot, version);
 
 	const sources = new Map();
 	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
@@ -673,7 +675,6 @@ function patchBundledPiWebAccess() {
 		sources.set(relativePath, readFileSync(entryPath, "utf8"));
 	}
 	const patchedSources = patchPiWebAccessSources(sources, "bundled runtime workspace");
-	let changed = false;
 	for (const [relativePath, patched] of patchedSources) {
 		const source = sources.get(relativePath);
 		if (patched === source) continue;

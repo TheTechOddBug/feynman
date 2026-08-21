@@ -89,6 +89,8 @@ For PDF links, `pdf.provider: "auto"` tries Datalab when `DATALAB_API_KEY` or `d
 
 Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust authentication. Bright Data search requires `brightdataSerpZone`; its optional Web Unlocker extraction fallback uses a separate `brightdataUnlockerZone`.
 
+Set `firecrawlBaseUrl` or `FIRECRAWL_BASE_URL` for self-hosted Firecrawl. The configured API may use `localhost`, `127.0.0.0/8`, or `::1`. Loopback redirects must stay on that configured API origin. Submitted fetch and search targets still reject loopback addresses.
+
 To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint.
 
 Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store, so API keys are the recommended route.
@@ -108,6 +110,7 @@ The web search tool supports several capabilities that the researcher agent leve
 - **Recency filtering** -- Filter results by date, useful for fast-moving topics where only recent work matters
 - **Page text retrieval** -- Fetch provider-available page text for the most important results rather than relying only on snippets
 - **Raw HTTP text** -- Use `fetch_content` with `mode: "raw"` to inspect textual API responses, error pages, or other source bytes without article extraction
+- **Bounded readable text** -- Readable extraction replaces inline `data:` URI payloads with explicit omission markers before model or cache storage; raw mode preserves the exact textual body
 - **Page-grounded answers** -- Use `fetch_content` with `mode: "answer"` and a question to answer against one page while retaining the original page text for inspection
 - **Direct images** -- Retrieve PNG, JPEG, WebP, and GIF links as safely bounded inline images
 - **Passage lookup** -- Use `get_search_content` with `findText` and exact, case-insensitive, or fuzzy `findMode` matching to locate a passage in stored content without paging through the entire page
