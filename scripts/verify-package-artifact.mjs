@@ -913,7 +913,6 @@ requireMarkers(
 		"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
 		"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
 		"get scopedModels() { return ctx.scopedModels; }",
-		"modelMatchesScopedModels(model, ctx.scopedModels)",
 		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
 		"summaryGenerationDeadlineMs?: unknown;",
 		"export function getSummaryGenerationDeadlineMs(): number {",
@@ -972,7 +971,7 @@ requireMarkers(
 	webSummaryReviewSource,
 	"runtime pi-web-access summary review model scope",
 	[
-		'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		'import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";',
 		'Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">',
 		"modelMatchesScopedModels(model, ctx.scopedModels)",
 	],

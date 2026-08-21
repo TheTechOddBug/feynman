@@ -59,6 +59,20 @@ test("package artifact verification checks every pi-web-access patch target", ()
 	assert.match(source, /web-search-cache/);
 	assert.match(source, /Image fetching is disabled by image\.enabled/);
 	assert.match(source, /const enabled = pdf\.enabled !== false/);
+	assert.match(
+		source,
+		/findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel/,
+	);
+
+	const indexMarkers = source.match(
+		/requireMarkers\(\s*webSource,\s*"runtime pi-web-access research tools",\s*\[([\s\S]*?)\]\s*,\s*\);/,
+	)?.[1];
+	assert.ok(indexMarkers, "package verifier must inspect pi-web-access index.ts");
+	assert.doesNotMatch(indexMarkers, /modelMatchesScopedModels\(model, ctx\.scopedModels\)/);
+	assert.match(
+		indexMarkers,
+		/modelMatchesScopedModels\(model, summaryContext\.scopedModels\)/,
+	);
 });
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
