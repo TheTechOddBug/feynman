@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-21 03:40 EDT — intake-sweep-0.3.29-post-release
+
+- Intake: Open issues and pull requests are empty. PRs `#239`, `#240`, and `#241` are merged; `#238` and `#236` are closed. The only fork pushed after the prior cutoff is `TheTechOddBug/feynman`, seven commits behind and zero ahead, with no port target.
+- Verification: The exact merged main `a0cf648` passed `806/806` tests, typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root and website production audits, package freshness review, and `git diff --check`.
+- Package proof: Dry and real packs passed. The local pack is `114,861,277` bytes, `298,948,995` unpacked bytes, and `29,147` entries with SHA-256 `3b87a1fffe873d54869caba62df276ea60ab608a418c625bef33f7025667cf2f`. Runtime, source artifact, clean consumer, installed runtime, RPC, TypeBox, provider, and document checks passed with zero vulnerabilities.
+- CI: Run `32456573061` passed the release candidate, Windows native installer, and all six supported-node consumers. Publish run `32450610405`, post-release run `32455455167`, and main reconciliation run `32456612666` passed.
+- Release: npm `@companion-ai/feynman@0.3.29` and GitHub `v0.3.29` remain current. npm integrity is `sha512-BVhN7z4Ed/3G+3IWYiYE4itainD/1Xxl0K98oStdBTdzoMCpKaBdoh8tKgkROjl6yxgyPi4UoGwqIPWX4d4o9Q==`; the tag targets `d8a52f0`, and all five native asset digests match `SHA256SUMS`.
+- Preservation: Root main is clean and synchronized at `a0cf648`. The independently dirty nested website checkout remains untouched. Temporary package consumers, archives, and release downloads were removed; no Feynman worktree or owned process remains. State: `verified` and no action required. Next: refresh the same intake surfaces on the next scheduled sweep.
+
 ### 2026-08-21 02:52 EDT — research-runtime-forward-fixes-0.3.29-release-complete
 
 - Delivery: Contributor PR `#238` was ported with authorship into maintainer PR `#239`, passed run `32444448914`, merged as `dba3f15`, and closed issue `#237`. Release PR `#240` head `30f5a1d` passed run `32447670346` and merged as `d8a52f0`; the tested candidate and merge trees match. The source PR was closed with the superseding receipts, and all release branches and automation worktrees were removed.
