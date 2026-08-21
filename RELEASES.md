@@ -6,7 +6,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
-## v0.3.29 - 2026-08-20
+## v0.3.29 - 2026-08-21
 
 ### Biomedical literature
 

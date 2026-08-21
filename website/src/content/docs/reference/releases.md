@@ -9,7 +9,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.29 - 2026-08-20
+## v0.3.29 - 2026-08-21
 
 ### Biomedical literature
 
