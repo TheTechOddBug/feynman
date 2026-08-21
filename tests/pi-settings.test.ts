@@ -225,7 +225,7 @@ test("bundled settings and package-list defaults use the same current core packa
 		"npm:pi-subagents@0.40.0",
 		"npm:pi-btw@0.4.1",
 		"npm:pi-docparser@4.0.0",
-		"npm:pi-web-access@0.23.0",
+		"npm:pi-web-access@0.24.0",
 		"npm:pi-otel@0.1.0",
 	]);
 });
@@ -280,7 +280,7 @@ test("managed package reconciliation updates stale sources without changing cust
 			custom,
 		]),
 		[
-			"npm:pi-web-access@0.23.0",
+			"npm:pi-web-access@0.24.0",
 			"npm:pi-subagents@0.40.0",
 			custom,
 			"npm:@companion-ai/alpha-hub@0.1.3",
@@ -299,7 +299,7 @@ test("managed package reconciliation updates every previously shipped package pi
 		]),
 		[
 			"npm:pi-subagents@0.40.0",
-			"npm:pi-web-access@0.23.0",
+			"npm:pi-web-access@0.24.0",
 			"npm:@companion-ai/alpha-hub@0.1.3",
 			"npm:pi-btw@0.4.1",
 			"npm:pi-docparser@4.0.0",
@@ -309,7 +309,7 @@ test("managed package reconciliation updates every previously shipped package pi
 	assert.deepEqual(
 		reconcileManagedCorePackageSources(["npm:pi-web-access@0.18.0"]),
 		[
-			"npm:pi-web-access@0.23.0",
+			"npm:pi-web-access@0.24.0",
 			"npm:@companion-ai/alpha-hub@0.1.3",
 			"npm:pi-subagents@0.40.0",
 			"npm:pi-btw@0.4.1",
@@ -320,7 +320,18 @@ test("managed package reconciliation updates every previously shipped package pi
 	assert.deepEqual(
 		reconcileManagedCorePackageSources(["npm:pi-web-access@0.22.0"]),
 		[
-			"npm:pi-web-access@0.23.0",
+			"npm:pi-web-access@0.24.0",
+			"npm:@companion-ai/alpha-hub@0.1.3",
+			"npm:pi-subagents@0.40.0",
+			"npm:pi-btw@0.4.1",
+			"npm:pi-docparser@4.0.0",
+			"npm:pi-otel@0.1.0",
+		],
+	);
+	assert.deepEqual(
+		reconcileManagedCorePackageSources(["npm:pi-web-access@0.23.0"]),
+		[
+			"npm:pi-web-access@0.24.0",
 			"npm:@companion-ai/alpha-hub@0.1.3",
 			"npm:pi-subagents@0.40.0",
 			"npm:pi-btw@0.4.1",
@@ -696,7 +707,7 @@ test("package update sources map core and optional aliases", () => {
 	assert.deepEqual(resolvePackageUpdateSources("pi-subagents"), ["npm:pi-subagents@0.40.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("subagents"), ["npm:pi-subagents@0.40.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("npm:pi-subagents"), ["npm:pi-subagents@0.40.0"]);
-	assert.deepEqual(resolvePackageUpdateSources("pi-web-access"), ["npm:pi-web-access@0.23.0"]);
+	assert.deepEqual(resolvePackageUpdateSources("pi-web-access"), ["npm:pi-web-access@0.24.0"]);
 	assert.deepEqual(resolvePackageUpdateSources("alpha-hub"), ["npm:@companion-ai/alpha-hub@0.1.3"]);
 	assert.deepEqual(resolvePackageUpdateSources("npm:pi-subagents@0.37.2"), ["npm:pi-subagents@0.37.2"]);
 	assert.deepEqual(resolvePackageUpdateSources("hindsight"), ["npm:@luxusai/pi-hindsight"]);

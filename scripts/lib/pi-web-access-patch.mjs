@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.23.0";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.0";
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
@@ -81,9 +81,9 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		[INDEX_CONFIG_PATH_BINDING_PATCHED, 1],
 		[INDEX_CONFIG_WRITE_BLOCK_PATCHED, 1],
 		['import { dirname, join } from "node:path";', 1],
-		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		['import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix } from "./summary-model-scope.ts";', 1],
 		["get scopedModels() { return ctx.scopedModels; }", 3],
-		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
+		["modelMatchesScopedModels(model, ctx.scopedModels)", 0],
 		["modelMatchesScopedModels(model, summaryContext.scopedModels)", 1],
 		["modelMatchesScopedModels(summaryContext.model, summaryContext.scopedModels)", 1],
 		["const SEARCH_CALL_TIMEOUT_MS = 90000;", 1],
@@ -203,7 +203,7 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 
 	const reviewSource = sources.get("summary-review.ts");
 	requireMarkerCounts(reviewSource, "summary-review.ts", [
-		['import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";', 1],
+		['import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";', 1],
 		['Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">', 1],
 		["modelMatchesScopedModels(model, ctx.scopedModels)", 1],
 	], surface);
@@ -820,9 +820,9 @@ export function patchPiWebAccessSource(relativePath, source) {
 		}
 
 		const scopeImportOriginal =
-			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";';
+			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns, splitThinkingSuffix } from "./summary-model-scope.ts";';
 		const scopeImportPatched =
-			'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";';
+			'import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix } from "./summary-model-scope.ts";';
 		if (patched.includes(scopeImportOriginal)) {
 			patched = patched.replace(scopeImportOriginal, scopeImportPatched);
 			changed = true;
@@ -952,9 +952,9 @@ export function patchPiWebAccessSource(relativePath, source) {
 
 	if (relativePath === "summary-review.ts") {
 		const scopeImportOriginal =
-			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";';
+			'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";';
 		const scopeImportPatched =
-			'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";';
+			'import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";';
 		if (patched.includes(scopeImportOriginal)) {
 			patched = patched.replace(scopeImportOriginal, scopeImportPatched);
 			changed = true;

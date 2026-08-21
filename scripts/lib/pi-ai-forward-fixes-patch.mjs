@@ -5,9 +5,10 @@
  * - 0e4d49541477c4fc6e404f845ad40ed47d157f24 (deprecated Xiaomi models)
  * - 87205484bf749c2140fef5d1bea68995d57e739c (China ZAI catalog)
  * - ad58801ce793ca4ca2f6fb64b307e9eaffd2c471 (Baseten GLM image inputs)
+ * - e5dde9a76bfec3c4eff764d1b6db3b60e5dd0b30 (provider-neutral tool choice)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all five commits.
+ * version that contains all six commits.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -17,6 +18,11 @@ export const PI_AI_FORWARD_FIX_TARGETS = Object.freeze([
 	"dist/api/google-shared.js",
 	"dist/api/google-vertex.js",
 	"dist/api/bedrock-converse-stream.js",
+	"dist/api/anthropic-messages.js",
+	"dist/api/azure-openai-responses.js",
+	"dist/api/mistral-conversations.js",
+	"dist/api/openai-codex-responses.js",
+	"dist/api/openai-responses.js",
 	"dist/providers/data/xiaomi.json",
 	"dist/providers/data/xiaomi-token-plan-cn.json",
 	"dist/providers/data/xiaomi-token-plan-ams.json",
@@ -32,6 +38,18 @@ export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	googleShared: "Feynman Pi 0.84.2 forward patch: resolve Google thinking level maps",
 	googleVertex: "Feynman Pi 0.84.2 forward patch: Vertex thinking level maps",
 	bedrock: "Feynman Pi 0.84.2 forward patch: Bedrock Smithy response headers",
+	toolChoice: "Feynman Pi 0.84.2 forward patch: provider-neutral tool choice",
+});
+
+const TOOL_CHOICE_BASE_OPTIONS = Object.freeze({
+	"dist/api/anthropic-messages.js": "    const base = buildBaseOptions(model, context, options, options?.apiKey);",
+	"dist/api/azure-openai-responses.js": "    const base = buildBaseOptions(model, context, options, apiKey);",
+	"dist/api/bedrock-converse-stream.js": "    const base = buildBaseOptions(model, context, options, undefined);",
+	"dist/api/google-generative-ai.js": "    const base = buildBaseOptions(model, context, options, apiKey);",
+	"dist/api/google-vertex.js": "    const base = buildBaseOptions(model, context, options, undefined);",
+	"dist/api/mistral-conversations.js": "    const base = buildBaseOptions(model, context, options, apiKey);",
+	"dist/api/openai-codex-responses.js": "    const base = buildBaseOptions(model, context, options, apiKey);",
+	"dist/api/openai-responses.js": "    const base = buildBaseOptions(model, context, options, options?.apiKey);",
 });
 
 const XIAOMI_DEPRECATED_MODEL_IDS = Object.freeze([
@@ -318,6 +336,14 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 		return;
 	}
 
+	if (relativePath in TOOL_CHOICE_BASE_OPTIONS) {
+		assertSourceFragments(source, relativePath, [
+			PI_AI_FORWARD_FIX_MARKERS.toolChoice,
+			"        ...buildBaseOptions(",
+			"        toolChoice: options?.toolChoice,",
+		]);
+	}
+
 	switch (relativePath) {
 		case "dist/api/google-generative-ai.js":
 			assertSourceFragments(source, relativePath, [
@@ -350,9 +376,45 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				'name: "pi-ai-response-headers"',
 			]);
 			return;
+		case "dist/api/anthropic-messages.js":
+		case "dist/api/azure-openai-responses.js":
+		case "dist/api/mistral-conversations.js":
+		case "dist/api/openai-codex-responses.js":
+		case "dist/api/openai-responses.js":
+			return;
 		default:
 			throw new Error(`Unknown Pi AI forward patch target: ${relativePath}`);
 	}
+}
+
+function patchProviderNeutralToolChoice(relativePath, source) {
+	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.toolChoice)) {
+		assertSourceFragments(source, relativePath, [
+			PI_AI_FORWARD_FIX_MARKERS.toolChoice,
+			"        ...buildBaseOptions(",
+			"        toolChoice: options?.toolChoice,",
+		]);
+		return source;
+	}
+	const original = TOOL_CHOICE_BASE_OPTIONS[relativePath];
+	if (!original) {
+		throw new Error(`Unknown Pi AI provider-neutral tool choice target: ${relativePath}`);
+	}
+	const buildOptions = original.slice(original.indexOf("buildBaseOptions("), -1);
+	const replacement = [
+		`    // ${PI_AI_FORWARD_FIX_MARKERS.toolChoice}`,
+		"    const base = {",
+		`        ...${buildOptions},`,
+		"        toolChoice: options?.toolChoice,",
+		"    };",
+	].join("\n");
+	const patched = replaceRequired(source, original, replacement, `${relativePath} tool choice`);
+	assertSourceFragments(patched, relativePath, [
+		PI_AI_FORWARD_FIX_MARKERS.toolChoice,
+		"        ...buildBaseOptions(",
+		"        toolChoice: options?.toolChoice,",
+	]);
+	return patched;
 }
 
 function patchGoogleShared(source) {
@@ -508,16 +570,30 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 		}
 		return patchModelCatalog(relativePath, source);
 	}
+	let patched = relativePath in TOOL_CHOICE_BASE_OPTIONS
+		? patchProviderNeutralToolChoice(relativePath, source)
+		: source;
 	switch (relativePath) {
 		case "dist/api/google-generative-ai.js":
-			return patchGoogleGenerativeAi(source);
+			patched = patchGoogleGenerativeAi(patched);
+			break;
 		case "dist/api/google-shared.js":
-			return patchGoogleShared(source);
+			return patchGoogleShared(patched);
 		case "dist/api/google-vertex.js":
-			return patchGoogleVertex(source);
+			patched = patchGoogleVertex(patched);
+			break;
 		case "dist/api/bedrock-converse-stream.js":
-			return patchBedrock(source);
+			patched = patchBedrock(patched);
+			break;
+		case "dist/api/anthropic-messages.js":
+		case "dist/api/azure-openai-responses.js":
+		case "dist/api/mistral-conversations.js":
+		case "dist/api/openai-codex-responses.js":
+		case "dist/api/openai-responses.js":
+			break;
 		default:
 			throw new Error(`Unknown Pi AI forward patch target: ${relativePath}`);
 	}
+	assertPiAiForwardFixSource(relativePath, patched);
+	return patched;
 }

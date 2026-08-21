@@ -6,6 +6,26 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.29 - 2026-08-21
+
+### Biomedical literature
+
+- Concurrent PubMed, ClinVar, GEO, and other NCBI requests now share one paced queue. Literature-review turns no longer drop NCBI evidence after a burst of `429 Too Many Requests` responses.
+- `NCBI_API_KEY` now reaches E-utilities while remaining redacted from reported provenance. Keyed requests use the higher NCBI budget, and `NCBI_MIN_REQUEST_GAP_MS` can set a wider delay for shared IP addresses.
+- PubMed request timeouts now cover the response body as well as the initial headers.
+
+### Research runtime
+
+- Summary-only compaction and branch requests now disable tool calls across Pi providers. Feynman also rejects unexpected tool-call responses before they can enter a research summary.
+- Provider-neutral tool choice now reaches Anthropic, Azure OpenAI, Bedrock, Google, Mistral, OpenAI, and Codex requests.
+- Updated `pi-web-access` to `0.24.0` for current provider routing, provider base URLs, redirect credential stripping, and summary-model thinking suffixes. Feynman's private cache, exact config path, model scope, browser-cookie opt-in, and request deadlines remain intact.
+
+### Validation
+
+- Reproduced the anonymous 12-search NCBI burst on `0.3.28` at `0/12`, then verified `12/12` successful calls with pacing.
+- Added executable history, split-turn, and branch-summary guards across source, package archives, and installed runtimes.
+- Matched every patched `pi-web-access@0.24.0` fixture to the published npm package before applying Feynman's maintained patch set.
+
 ## v0.3.28 - 2026-08-18
 
 ### Research agents

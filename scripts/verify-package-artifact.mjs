@@ -10,6 +10,10 @@ import {
 	assertPiAiForwardFixArchive,
 	assertPiAiForwardFixPackageTree,
 } from "./lib/pi-ai-forward-fixes-verifier.mjs";
+import {
+	assertPiCompactionToolsArchive,
+	assertPiCompactionToolsPackageTree,
+} from "./lib/pi-compaction-tools-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
@@ -307,6 +311,7 @@ for (const [target, relativePath] of [
 	}
 }
 assertPiAiForwardFixPackageTree(packageRoot, readText);
+assertPiCompactionToolsPackageTree(packageRoot, readText);
 
 requireMarkers(
 	readText(
@@ -523,8 +528,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.23.0") {
-	fail("committed runtime lock does not pin pi-web-access 0.23.0");
+if (expectedPiWebAccessVersion !== "0.24.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.24.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -675,6 +680,7 @@ for (const [target, relativePath] of [
 	}
 }
 assertPiAiForwardFixArchive((entryPath) => readArchivedText(archivePath, entryPath));
+assertPiCompactionToolsArchive((entryPath) => readArchivedText(archivePath, entryPath));
 for (const [label, entryPath] of [
 	[
 		"runtime root Pi AgentCore",
@@ -907,7 +913,6 @@ requireMarkers(
 		"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();",
 		"const dir = dirname(WEB_SEARCH_CONFIG_PATH);",
 		"get scopedModels() { return ctx.scopedModels; }",
-		"modelMatchesScopedModels(model, ctx.scopedModels)",
 		"modelMatchesScopedModels(model, summaryContext.scopedModels)",
 		"summaryGenerationDeadlineMs?: unknown;",
 		"export function getSummaryGenerationDeadlineMs(): number {",
@@ -966,7 +971,7 @@ requireMarkers(
 	webSummaryReviewSource,
 	"runtime pi-web-access summary review model scope",
 	[
-		'import { findModelWithProviderRouting, modelMatchesScopedModels } from "./summary-model-scope.ts";',
+		'import { findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";',
 		'Pick<ExtensionContext, "model" | "modelRegistry" | "scopedModels" | "cwd" | "isProjectTrusted">',
 		"modelMatchesScopedModels(model, ctx.scopedModels)",
 	],

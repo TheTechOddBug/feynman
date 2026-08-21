@@ -5,6 +5,7 @@ export declare const PI_AI_FORWARD_FIX_MARKERS: Readonly<{
 	googleShared: string;
 	googleVertex: string;
 	bedrock: string;
+	toolChoice: string;
 }>;
 export declare function assertPiAiForwardFixSource(relativePath: string, source: string): void;
 export declare function patchPiAiForwardFixSource(relativePath: string, source: string): string;

@@ -10,6 +10,10 @@ import {
 	patchPiAiForwardFixSource,
 } from "../../scripts/lib/pi-ai-forward-fixes-patch.mjs";
 import {
+	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	patchPiCompactionToolsSource,
+} from "../../scripts/lib/pi-compaction-tools-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	patchPiAgentSessionSource,
 	patchPiGithubCopilotDeviceCodeSource,
@@ -330,6 +334,15 @@ export function patchPiRuntimeNodeModules(
 				"pi-ai",
 				relativePath,
 				(source) => patchPiAiForwardFixSource(relativePath, source),
+				bundledPiVersion,
+			) || changed;
+		}
+		for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+			changed = patchScopedPiPackageFileIfPresent(
+				nodeModulesPath,
+				"pi-coding-agent",
+				relativePath,
+				(source) => patchPiCompactionToolsSource(relativePath, source),
 				bundledPiVersion,
 			) || changed;
 		}

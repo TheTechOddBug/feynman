@@ -17,7 +17,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.23.0",
+	"pi-web-access-0.24.0",
 );
 
 function readPiWebAccessFixtureSources(): Map<string, string> {
@@ -59,6 +59,20 @@ test("package artifact verification checks every pi-web-access patch target", ()
 	assert.match(source, /web-search-cache/);
 	assert.match(source, /Image fetching is disabled by image\.enabled/);
 	assert.match(source, /const enabled = pdf\.enabled !== false/);
+	assert.match(
+		source,
+		/findModelWithProviderRouting, modelMatchesScopedModels, splitThinkingSuffix, type SummaryThinkingLevel/,
+	);
+
+	const indexMarkers = source.match(
+		/requireMarkers\(\s*webSource,\s*"runtime pi-web-access research tools",\s*\[([\s\S]*?)\]\s*,\s*\);/,
+	)?.[1];
+	assert.ok(indexMarkers, "package verifier must inspect pi-web-access index.ts");
+	assert.doesNotMatch(indexMarkers, /modelMatchesScopedModels\(model, ctx\.scopedModels\)/);
+	assert.match(
+		indexMarkers,
+		/modelMatchesScopedModels\(model, summaryContext\.scopedModels\)/,
+	);
 });
 
 test("patchPiWebAccessSource rewrites legacy Pi web-search config paths", () => {
@@ -533,7 +547,7 @@ test("patchPiWebAccessSource uses direct Pi session-scope membership at every ne
 	assert.doesNotMatch(patchedPageQuery, /loadEnabledModelPatterns|modelMatchesEnabledPatterns/);
 
 	const summaryReviewSource = [
-		'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns } from "./summary-model-scope.ts";',
+		'import { findModelWithProviderRouting, loadEnabledModelPatterns, modelMatchesEnabledPatterns, splitThinkingSuffix, type SummaryThinkingLevel } from "./summary-model-scope.ts";',
 		'export type SummaryGenerationContext = Pick<ExtensionContext, "model" | "modelRegistry" | "cwd" | "isProjectTrusted">;',
 		"async function resolve(ctx) {",
 		"\tconst enabledModelPatterns = loadEnabledModelPatterns(ctx);",
@@ -583,11 +597,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.23.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.23.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.24.0", "future"),
-		/expected 0\.23\.0, found 0\.24\.0/,
+		() => assertPiWebAccessVersion("0.25.0", "future"),
+		/expected 0\.24\.0, found 0\.25\.0/,
 	);
 
 	const futureSource = [
@@ -607,7 +621,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.23\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.24\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });
