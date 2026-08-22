@@ -510,7 +510,7 @@ function protectWindowsData(value) {
 	const script = [
 		"$ErrorActionPreference='Stop';",
 		"Add-Type -AssemblyName System.Security;",
-		"$encoded=[Console]::In.ReadToEnd();",
+		"$encoded=$args[0];",
 		"$data=[Convert]::FromBase64String($encoded);",
 		"$protected=[Security.Cryptography.ProtectedData]::Protect(",
 		"$data,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser);",
@@ -523,12 +523,17 @@ function protectWindowsData(value) {
 			"-NonInteractive",
 			"-Command",
 			script,
+			value.toString("base64"),
 		],
 		{
 			encoding: "utf8",
-			input: value.toString("base64"),
 			maxBuffer: 1024 * 1024,
-			timeout: 10_000,
+			// Windows Node 25 consumers can spend more than ten seconds on the
+			// first cold PowerShell/.NET assembly load after large npm installs.
+			// Keep this synthetic fixture key out of synchronous stdin (the path
+			// that timed out) and leave a bounded cold-start budget. The runtime's
+			// actual DPAPI decryptor below still exercises its stdin transport.
+			timeout: 60_000,
 			windowsHide: true,
 		},
 	).trim();

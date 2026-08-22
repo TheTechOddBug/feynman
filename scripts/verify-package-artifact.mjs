@@ -790,26 +790,21 @@ requireMarkers(
 		'const cursor = "\\x1b[7m \\x1b[27m"',
 	],
 );
-requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/@companion-ai/alpha-hub/src/lib/auth.js",
-	),
-	"runtime alpha-hub auth",
-	["https://api.alphaxiv.org/auth", "waitForCallback(server, state)", "OAuth state mismatch"],
-);
-requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/@companion-ai/alpha-hub/src/lib/alphaxiv.js",
-	),
-	"runtime alpha-hub client",
-	[
+for (const [fileName, label, markers] of [
+	["auth.js", "auth", ["https://api.alphaxiv.org/auth", "waitForCallback(server, state)", "OAuth state mismatch"]],
+	["alphaxiv.js", "client", [
 		"async function searchRestFast(",
 		"return await fallbackSearch(",
 		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
-	],
-);
+	]],
+	["index.js", "parser", ["function parseStructuredSearchResults("]],
+]) {
+	requireMarkers(
+		readArchivedText(archivePath, `npm/node_modules/@companion-ai/alpha-hub/src/lib/${fileName}`),
+		`runtime alpha-hub ${label}`,
+		markers,
+	);
+}
 requireMarkers(
 	readArchivedText(
 		archivePath,

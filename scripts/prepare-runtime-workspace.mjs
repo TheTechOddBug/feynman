@@ -42,7 +42,10 @@ import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuil
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
-import { patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
+import {
+	patchAlphaHubSearchResultsSource,
+	patchAlphaHubSearchSource,
+} from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { createDeterministicTarGz } from "./lib/deterministic-archive.mjs";
 import {
@@ -734,26 +737,30 @@ function patchBundledPiSessionSearch() {
 }
 
 function patchBundledAlphaHub() {
-	const authPath = resolve(workspaceNodeModulesDir, "@companion-ai", "alpha-hub", "src", "lib", "auth.js");
-	const alphaxivPath = resolve(workspaceNodeModulesDir, "@companion-ai", "alpha-hub", "src", "lib", "alphaxiv.js");
-	if (!existsSync(authPath) && !existsSync(alphaxivPath)) {
+	const alphaHubLib = resolve(
+		workspaceNodeModulesDir,
+		"@companion-ai",
+		"alpha-hub",
+		"src",
+		"lib",
+	);
+	const patchTargets = [
+		["auth.js", patchAlphaHubAuthSource],
+		["alphaxiv.js", patchAlphaHubSearchSource],
+		["index.js", patchAlphaHubSearchResultsSource],
+	];
+	if (!patchTargets.some(([fileName]) => existsSync(resolve(alphaHubLib, fileName)))) {
 		return false;
 	}
 
 	let changed = false;
-	if (existsSync(authPath)) {
-		const source = readFileSync(authPath, "utf8");
-		const patched = patchAlphaHubAuthSource(source);
+	for (const [fileName, patchSource] of patchTargets) {
+		const filePath = resolve(alphaHubLib, fileName);
+		if (!existsSync(filePath)) continue;
+		const source = readFileSync(filePath, "utf8");
+		const patched = patchSource(source);
 		if (patched !== source) {
-			writeFileSync(authPath, patched, "utf8");
-			changed = true;
-		}
-	}
-	if (existsSync(alphaxivPath)) {
-		const source = readFileSync(alphaxivPath, "utf8");
-		const patched = patchAlphaHubSearchSource(source);
-		if (patched !== source) {
-			writeFileSync(alphaxivPath, patched, "utf8");
+			writeFileSync(filePath, patched, "utf8");
 			changed = true;
 		}
 	}

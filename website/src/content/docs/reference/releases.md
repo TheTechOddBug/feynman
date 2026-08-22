@@ -15,11 +15,12 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 - Existing Pi `auth.json` and dynamic `models-store.json` files now retain administrator-managed modes and ACLs when Feynman updates them. On POSIX systems, newly created state files still use owner-only `0600` permissions.
 - Research subagent guidance now directs explicit model selection through `feynman model list` and tells the parent to use an exact approved `provider/model`. Raw unscoped registry output is not added to the tool.
+- Bundled and restored alphaXiv research runtimes now retain structured search-result parsing after Feynman rebuilds their runtime archive.
 
 ### Validation
 
 - Backported Pi's focused managed-state permission fix from commit `c49906e` and the Feynman-safe guidance portion of pi-subagents commit `62e0934`.
-- Added exact transformation, fail-closed, fresh-file, existing-mode, launch-root, restored-runtime, installed-package, and registered-tool regressions.
+- Added exact transformation, fail-closed, fresh-file, existing-mode, launch-root, restored-runtime, installed-package, registered-tool, and runtime-archive parser regressions.
 
 ## v0.3.33 - 2026-08-22
 
