@@ -323,13 +323,13 @@ test("reconcileManagedCorePackageInstalls repairs stale user installs from the b
 	const appRoot = resolve(root, "app");
 	const managedRoot = resolve(agentDir, "npm");
 	const bundledRoot = resolve(appRoot, ".feynman", "npm");
-	const packageSource = "npm:pi-web-access@0.24.0";
+	const packageSource = "npm:pi-web-access@0.24.1";
 	const customSource = "npm:@samfp/pi-memory@^1.0.0";
 
 	writeSettings(agentDir, { packages: [packageSource, customSource] });
 	createInstalledManagedPackage(agentDir, "pi-web-access", "0.21.0");
 	createInstalledManagedPackage(agentDir, "@samfp/pi-memory", "1.4.0");
-	createInstalledPackage(resolve(bundledRoot, "node_modules", "pi-web-access"), "pi-web-access", "0.24.0");
+	createInstalledPackage(resolve(bundledRoot, "node_modules", "pi-web-access"), "pi-web-access", "0.24.1");
 	mkdirSync(resolve(appRoot, ".feynman"), { recursive: true });
 	writeFileSync(
 		resolve(appRoot, ".feynman", "runtime-package-lock.json"),
@@ -337,8 +337,8 @@ test("reconcileManagedCorePackageInstalls repairs stale user installs from the b
 			name: "feynman-pi-runtime",
 			lockfileVersion: 3,
 			packages: {
-				"": { dependencies: { "pi-web-access": "0.24.0" } },
-				"node_modules/pi-web-access": { version: "0.24.0" },
+				"": { dependencies: { "pi-web-access": "0.24.1" } },
+				"node_modules/pi-web-access": { version: "0.24.1" },
 			},
 		}, null, 2) + "\n",
 	);
@@ -374,7 +374,7 @@ test("reconcileManagedCorePackageInstalls repairs stale user installs from the b
 	assert.equal(existsSync(resolve(managedRoot, "node_modules", "pi-web-access")), false);
 	assert.equal(
 		readInstalledPackageVersion(resolve(root, "npm-global", "lib", "node_modules", "pi-web-access")),
-		"0.24.0",
+		"0.24.1",
 	);
 	assert.equal(
 		readInstalledPackageVersion(resolve(managedRoot, "node_modules", "@samfp", "pi-memory")),
@@ -395,12 +395,12 @@ test("reconcileManagedCorePackageInstalls removes a broken stale managed symlink
 	const appRoot = resolve(root, "app");
 	const managedPackagePath = resolve(agentDir, "npm", "node_modules", "pi-web-access");
 	const bundledPackagePath = resolve(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	const packageSource = "npm:pi-web-access@0.24.0";
+	const packageSource = "npm:pi-web-access@0.24.1";
 
 	writeSettings(agentDir, { packages: [packageSource] });
 	mkdirSync(resolve(managedPackagePath, ".."), { recursive: true });
 	symlinkSync(resolve(root, "missing-pi-web-access"), managedPackagePath, "dir");
-	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.0");
+	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.1");
 	mkdirSync(resolve(appRoot, ".feynman"), { recursive: true });
 	writeFileSync(
 		resolve(appRoot, ".feynman", "runtime-package-lock.json"),
@@ -408,8 +408,8 @@ test("reconcileManagedCorePackageInstalls removes a broken stale managed symlink
 			name: "feynman-pi-runtime",
 			lockfileVersion: 3,
 			packages: {
-				"": { dependencies: { "pi-web-access": "0.24.0" } },
-				"node_modules/pi-web-access": { version: "0.24.0" },
+				"": { dependencies: { "pi-web-access": "0.24.1" } },
+				"node_modules/pi-web-access": { version: "0.24.1" },
 			},
 		}, null, 2) + "\n",
 	);
@@ -418,7 +418,7 @@ test("reconcileManagedCorePackageInstalls removes a broken stale managed symlink
 	assert.equal(existsSync(managedPackagePath), false);
 	assert.equal(
 		readInstalledPackageVersion(resolve(root, "npm-global", "lib", "node_modules", "pi-web-access")),
-		"0.24.0",
+		"0.24.1",
 	);
 });
 
@@ -427,7 +427,7 @@ test("reconcileManagedCorePackageInstalls leaves stale state intact when the bun
 	const agentDir = resolve(root, "agent");
 	const appRoot = resolve(root, "app");
 	const managedPackagePath = resolve(agentDir, "npm", "node_modules", "pi-web-access");
-	const packageSource = "npm:pi-web-access@0.24.0";
+	const packageSource = "npm:pi-web-access@0.24.1";
 
 	writeSettings(agentDir, { packages: [packageSource] });
 	createInstalledManagedPackage(agentDir, "pi-web-access", "0.21.0");
@@ -440,18 +440,18 @@ test("reconcileManagedCorePackageInstalls replaces a stale usable prefix copy", 
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const agentDir = resolve(root, "agent");
 	const appRoot = resolve(root, "app");
-	const packageSource = "npm:pi-web-access@0.24.0";
+	const packageSource = "npm:pi-web-access@0.24.1";
 	const bundledPackagePath = resolve(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const globalPackagePath = resolve(root, "npm-global", "lib", "node_modules", "pi-web-access");
 	const managedPackagePath = resolve(agentDir, "npm", "node_modules", "pi-web-access");
 
 	writeSettings(agentDir, { packages: [packageSource] });
 	createInstalledManagedPackage(agentDir, "pi-web-access", "0.21.0");
-	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.0");
+	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.1");
 	createInstalledPackage(globalPackagePath, "pi-web-access", "0.21.0");
 
 	assert.deepEqual(reconcileManagedCorePackageInstalls(agentDir, appRoot), [packageSource]);
-	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.24.0");
+	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.24.1");
 	assert.equal(existsSync(managedPackagePath), false);
 });
 
@@ -459,19 +459,19 @@ test("reconcileManagedCorePackageInstalls preserves a usable current prefix copy
 	const root = mkdtempSync(join(tmpdir(), "feynman-package-ops-"));
 	const agentDir = resolve(root, "agent");
 	const appRoot = resolve(root, "app");
-	const packageSource = "npm:pi-web-access@0.24.0";
+	const packageSource = "npm:pi-web-access@0.24.1";
 	const bundledPackagePath = resolve(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const globalPackagePath = resolve(root, "npm-global", "lib", "node_modules", "pi-web-access");
 	const managedPackagePath = resolve(agentDir, "npm", "node_modules", "pi-web-access");
 
 	writeSettings(agentDir, { packages: [packageSource] });
 	createInstalledManagedPackage(agentDir, "pi-web-access", "0.21.0");
-	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.0");
-	createInstalledPackage(globalPackagePath, "pi-web-access", "0.24.0");
+	createInstalledPackage(bundledPackagePath, "pi-web-access", "0.24.1");
+	createInstalledPackage(globalPackagePath, "pi-web-access", "0.24.1");
 	writeFileSync(resolve(globalPackagePath, "custom-marker"), "preserve\n", "utf8");
 
 	assert.deepEqual(reconcileManagedCorePackageInstalls(agentDir, appRoot), [packageSource]);
-	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.24.0");
+	assert.equal(readInstalledPackageVersion(globalPackagePath), "0.24.1");
 	assert.equal(readFileSync(resolve(globalPackagePath, "custom-marker"), "utf8"), "preserve\n");
 	assert.equal(existsSync(managedPackagePath), false);
 });

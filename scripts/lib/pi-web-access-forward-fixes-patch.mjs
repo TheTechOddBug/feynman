@@ -6,9 +6,9 @@ import {
 	patchPiWebAccessWindowsCookiesSource,
 } from "./pi-web-access-windows-cookies-patch.mjs";
 
-// Remove these forward files when the next pi-web-access release contains
-// upstream commits 048700a8ae0da307d3891bfdbc3e54847a0a8635 and
-// ad5f0ca66ef6658c7efa3f12fd0cb9b206f490f6.
+// Keep the exact upstream sanitizer in the fixture set so restored and
+// installed runtimes cannot silently omit the file while the remaining
+// Feynman-specific Firecrawl redirect and Windows DPAPI corrections apply.
 export const PI_WEB_ACCESS_FORWARD_FILE_TARGETS = [
 	"data-uri-sanitize.ts",
 ];
@@ -46,6 +46,7 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		"index.ts",
 		"extract.ts",
 		"firecrawl.ts",
+		"gemini-search.ts",
 		"ssrf-protection.ts",
 		...PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	]) {
@@ -60,10 +61,21 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		['const child = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });', 1],
 		["const timer = setTimeout(resolve, 100);", 1],
 		["child.unref();", 1],
+		["export interface ProviderAvailability {", 1],
+		['export type CuratorProvider = Exclude<SearchProvider, "auto">;', 1],
+		["function shouldUseOpenAICodexDefault(", 1],
+		["export function resolveCuratorDefaultProvider(", 1],
+		['if (available.openai) return "openai";', 1],
+		["preferOpenAICodexDefault = false,", 1],
+		["shouldPreferOpenAI(options, preferOpenAICodexDefault)", 1],
 	], surface, version);
 	rejectMarkers(indexSource, "index.ts", [
 		'import { execFileSync } from "node:child_process";',
 		'await pi.exec("xdg-open", [url])',
+		"\ninterface ProviderAvailability {",
+		'\ntype CuratorProvider = Exclude<SearchProvider, "auto">;',
+		"defaultProvider: resolveProvider(provider, availableProviders, options),",
+		"const preferOpenAI = shouldPreferOpenAI(options);",
 	], surface, version);
 
 	const extractSource = sources.get("extract.ts");
@@ -76,6 +88,22 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		extractSource,
 		"extract.ts",
 		['return Promise.all(urls.map((url) => fetchLimit(() => extractContent(url, signal, options))));'],
+		surface,
+		version,
+	);
+
+	const geminiSearchSource = sources.get("gemini-search.ts");
+	requireMarkerCounts(geminiSearchSource, "gemini-search.ts", [
+		["function isOpenAICodexSelected(", 1],
+		["async function tryOpenAIInAuto(", 1],
+		["let triedOpenAI = false;", 1],
+		["if (!options.extensionContext || isOpenAICodexSelected(options.extensionContext)) {", 1],
+		["if (!triedOpenAI) {", 1],
+	], surface, version);
+	rejectMarkers(
+		geminiSearchSource,
+		"gemini-search.ts",
+		["\n\tif (shouldTryOpenAIInAuto(options)) {"],
 		surface,
 		version,
 	);
@@ -133,9 +161,13 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		["[Console]::In.ReadToEnd()", 1],
 		['execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]', 1],
 		['child.stdin.end(protectedData.toString("base64"))', 1],
+		['"CAST((expires_utc / 1000000) AS INTEGER) AS expires_utc"', 1],
+		["function chromeExpiryNowSeconds(): number", 1],
 	], surface, version);
 	rejectMarkers(chromeCookiesSource, "chrome-cookies.ts", [
 		'currentPlatform === "darwin" ? MACOS_BROWSER_CONFIGS : currentPlatform === "linux" ? LINUX_BROWSER_CONFIGS : []',
+		'columns.columns.has("expires_utc") ? "expires_utc" : "0 AS expires_utc"',
+		"function chromeExpiryNowMicros(): number",
 	], surface, version);
 
 	const sanitizerSource = sources.get("data-uri-sanitize.ts");
@@ -249,6 +281,266 @@ function patchLinuxBrowserLaunchSource(source) {
 		.replace(INDEX_OPEN_BROWSER_ORIGINAL, INDEX_OPEN_BROWSER_PATCHED);
 }
 
+function replaceModelAwareSearchHunk(source, original, replacement, relativePath, label) {
+	if (source.includes(replacement)) return source;
+	if (!source.includes(original)) {
+		throw new Error(
+			`Unsupported pi-web-access 0.24.1 ${relativePath}: model-aware search hunk is missing (${label})`,
+		);
+	}
+	return source.replace(original, replacement);
+}
+
+const GEMINI_AUTO_OPENAI_HELPER_ANCHOR = [
+	"function shouldTryOpenAIInAuto(options: SearchOptions): boolean {",
+	"\tif (options.recencyFilter) return false;",
+	'\tif (typeof options.numResults === "number" && Number.isFinite(options.numResults) && Math.floor(options.numResults) !== 5) {',
+	"\t\treturn false;",
+	"\t}",
+	"\treturn true;",
+	"}",
+].join("\n");
+const GEMINI_AUTO_OPENAI_HELPERS = [
+	GEMINI_AUTO_OPENAI_HELPER_ANCHOR,
+	"",
+	"function isOpenAICodexSelected(ctx?: ExtensionContext): boolean {",
+	'\treturn ctx?.model?.provider === "openai-codex";',
+	"}",
+	"",
+	"async function tryOpenAIInAuto(query: string, options: FullSearchOptions, fallbackErrors: string[]): Promise<AttributedSearchResponse | null> {",
+	"\tif (!shouldTryOpenAIInAuto(options)) return null;",
+	"\ttry {",
+	"\t\tif (await isOpenAISearchAvailable(options.extensionContext)) {",
+	"\t\t\tconst result = await searchWithOpenAI(query, options, options.extensionContext);",
+	'\t\t\treturn { ...result, provider: "openai" };',
+	"\t\t}",
+	"\t} catch (err) {",
+	"\t\tif (isAbortError(err)) throw err;",
+	"\t\tfallbackErrors.push(`OpenAI: ${errorMessage(err)}`);",
+	"\t}",
+	"\treturn null;",
+	"}",
+].join("\n");
+const GEMINI_AUTO_OPENAI_ORIGINAL = [
+	"\tif (shouldTryOpenAIInAuto(options)) {",
+	"\t\ttry {",
+	"\t\t\tif (await isOpenAISearchAvailable(options.extensionContext)) {",
+	"\t\t\t\tconst result = await searchWithOpenAI(query, options, options.extensionContext);",
+	'\t\t\t\treturn { ...result, provider: "openai" };',
+	"\t\t\t}",
+	"\t\t} catch (err) {",
+	"\t\t\tif (isAbortError(err)) throw err;",
+	"\t\t\tfallbackErrors.push(`OpenAI: ${errorMessage(err)}`);",
+	"\t\t}",
+	"\t}",
+].join("\n");
+const GEMINI_AUTO_OPENAI_PATCHED = [
+	"\tlet triedOpenAI = false;",
+	"\tif (!options.extensionContext || isOpenAICodexSelected(options.extensionContext)) {",
+	"\t\ttriedOpenAI = true;",
+	"\t\tconst result = await tryOpenAIInAuto(query, options, fallbackErrors);",
+	"\t\tif (result) return result;",
+	"\t}",
+].join("\n");
+const GEMINI_EXA_FALLBACK_ORIGINAL = [
+	"\tif (isExaAvailable()) {",
+	"\t\ttry {",
+	"\t\t\tconst result = await searchWithExa(query, options);",
+	'\t\t\tif (result) return { ...result, provider: "exa" };',
+	"\t\t} catch (err) {",
+	"\t\t\tif (err instanceof CredentialResolutionError || isAbortError(err)) throw err;",
+	"\t\t\tfallbackErrors.push(`Exa: ${errorMessage(err)}`);",
+	"\t\t}",
+	"\t}",
+].join("\n");
+const GEMINI_EXA_FALLBACK_PATCHED = [
+	GEMINI_EXA_FALLBACK_ORIGINAL,
+	"",
+	"\tif (!triedOpenAI) {",
+	"\t\tconst result = await tryOpenAIInAuto(query, options, fallbackErrors);",
+	"\t\tif (result) return result;",
+	"\t}",
+].join("\n");
+
+function patchModelAwareGeminiSearchSource(source) {
+	if (
+		!source.includes(GEMINI_AUTO_OPENAI_HELPER_ANCHOR) &&
+		!source.includes("function isOpenAICodexSelected(")
+	) {
+		return source;
+	}
+	let patched = replaceModelAwareSearchHunk(
+		source,
+		GEMINI_AUTO_OPENAI_HELPER_ANCHOR,
+		GEMINI_AUTO_OPENAI_HELPERS,
+		"gemini-search.ts",
+		"OpenAI helper",
+	);
+	patched = replaceModelAwareSearchHunk(
+		patched,
+		GEMINI_AUTO_OPENAI_ORIGINAL,
+		GEMINI_AUTO_OPENAI_PATCHED,
+		"gemini-search.ts",
+		"Codex-first branch",
+	);
+	return replaceModelAwareSearchHunk(
+		patched,
+		GEMINI_EXA_FALLBACK_ORIGINAL,
+		GEMINI_EXA_FALLBACK_PATCHED,
+		"gemini-search.ts",
+		"Exa-first branch",
+	);
+}
+
+const INDEX_PROVIDER_AVAILABILITY_ORIGINAL = "interface ProviderAvailability {";
+const INDEX_PROVIDER_AVAILABILITY_PATCHED = "export interface ProviderAvailability {";
+const INDEX_CURATOR_PROVIDER_ORIGINAL =
+	'type CuratorProvider = Exclude<SearchProvider, "auto">;';
+const INDEX_CURATOR_PROVIDER_PATCHED =
+	'export type CuratorProvider = Exclude<SearchProvider, "auto">;';
+const INDEX_PREFERENCE_ORIGINAL = [
+	'function shouldPreferOpenAI(options?: Pick<PendingCurate, "numResults" | "recencyFilter">): boolean {',
+	"\tif (!options) return true;",
+	"\tif (options.recencyFilter) return false;",
+	'\tif (typeof options.numResults === "number" && Number.isFinite(options.numResults) && Math.floor(options.numResults) !== 5) {',
+	"\t\treturn false;",
+	"\t}",
+	"\treturn true;",
+	"}",
+].join("\n");
+const INDEX_PREFERENCE_PATCHED = [
+	'function shouldUseOpenAICodexDefault(ctx?: Pick<ExtensionContext, "model">): boolean {',
+	'\treturn ctx?.model?.provider === "openai-codex";',
+	"}",
+	"",
+	'function shouldPreferOpenAI(options: Pick<PendingCurate, "numResults" | "recencyFilter"> | undefined, preferOpenAICodexDefault: boolean): boolean {',
+	"\tif (options?.recencyFilter) return false;",
+	'\tif (typeof options?.numResults === "number" && Number.isFinite(options.numResults) && Math.floor(options.numResults) !== 5) {',
+	"\t\treturn false;",
+	"\t}",
+	"\treturn preferOpenAICodexDefault;",
+	"}",
+].join("\n");
+const INDEX_CURATOR_DEFAULT_ORIGINAL =
+	"\t\tdefaultProvider: resolveProvider(provider, availableProviders, options),";
+const INDEX_CURATOR_DEFAULT_PATCHED =
+	"\t\tdefaultProvider: resolveCuratorDefaultProvider(provider, availableProviders, ctx, options),";
+const INDEX_FIRST_AVAILABLE_ANCHOR =
+	"function firstAvailableProvider(available: ProviderAvailability, preferOpenAI: boolean, fallback: ResolvedSearchProvider): ResolvedSearchProvider {";
+const INDEX_CURATOR_RESOLVER_PATCHED = [
+	"export function resolveCuratorDefaultProvider(",
+	"\tprovider: SearchProviderSelection,",
+	"\tavailable: ProviderAvailability,",
+	'\tctx?: Pick<ExtensionContext, "model">,',
+	'\toptions?: Pick<PendingCurate, "numResults" | "recencyFilter">,',
+	"): CuratorProvider {",
+	"\treturn resolveProvider(provider, available, options, shouldUseOpenAICodexDefault(ctx));",
+	"}",
+	"",
+	INDEX_FIRST_AVAILABLE_ANCHOR,
+].join("\n");
+const INDEX_EXA_FALLBACK_ORIGINAL = [
+	'\tif (available.exa) return "exa";',
+	'\tif (available.brave) return "brave";',
+].join("\n");
+const INDEX_EXA_FALLBACK_PATCHED = [
+	'\tif (available.exa) return "exa";',
+	'\tif (available.openai) return "openai";',
+	'\tif (available.brave) return "brave";',
+].join("\n");
+const INDEX_RESOLVE_PROVIDER_SIGNATURE_ORIGINAL = [
+	"function resolveProvider(",
+	"\tprovider: SearchProviderSelection,",
+	"\tavailable: ProviderAvailability,",
+	'\toptions?: Pick<PendingCurate, "numResults" | "recencyFilter">,',
+	"): CuratorProvider {",
+].join("\n");
+const INDEX_RESOLVE_PROVIDER_SIGNATURE_PATCHED = [
+	"function resolveProvider(",
+	"\tprovider: SearchProviderSelection,",
+	"\tavailable: ProviderAvailability,",
+	'\toptions?: Pick<PendingCurate, "numResults" | "recencyFilter">,',
+	"\tpreferOpenAICodexDefault = false,",
+	"): CuratorProvider {",
+].join("\n");
+const INDEX_PREFER_OPENAI_ORIGINAL =
+	"\tconst preferOpenAI = shouldPreferOpenAI(options);";
+const INDEX_PREFER_OPENAI_PATCHED =
+	"\tconst preferOpenAI = shouldPreferOpenAI(options, preferOpenAICodexDefault);";
+const INDEX_TOOL_DESCRIPTION_ORIGINAL =
+	"Without a configured provider, auto-selects OpenAI when suitable and available, then Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, Gemini API, or Gemini Web. When SearXNG is configured, it is preferred first for local/private search.";
+const INDEX_TOOL_DESCRIPTION_PATCHED =
+	"Without a configured provider, SearXNG is preferred first for local/private search. When the active Pi model is openai-codex, Codex-backed OpenAI search is preferred next. Otherwise Exa is preferred before OpenAI, then Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, Gemini API, or Gemini Web.";
+const INDEX_TOOL_DESCRIPTION_OPT_IN_ORIGINAL =
+	"Without a configured provider, auto-selects OpenAI when suitable and available, then Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, Gemini API, or opt-in Gemini Web. When SearXNG is configured, it is preferred first for local/private search.";
+const INDEX_TOOL_DESCRIPTION_OPT_IN_PATCHED =
+	"Without a configured provider, SearXNG is preferred first for local/private search. When the active Pi model is openai-codex, Codex-backed OpenAI search is preferred next. Otherwise Exa is preferred before OpenAI, then Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Firecrawl, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, Gemini API, or opt-in Gemini Web.";
+
+function patchModelAwareIndexSource(source) {
+	if (
+		!source.includes(INDEX_PROVIDER_AVAILABILITY_ORIGINAL) &&
+		!source.includes(INDEX_PROVIDER_AVAILABILITY_PATCHED)
+	) {
+		return source;
+	}
+	let patched = source;
+	for (const [original, replacement, label] of [
+		[
+			INDEX_PROVIDER_AVAILABILITY_ORIGINAL,
+			INDEX_PROVIDER_AVAILABILITY_PATCHED,
+			"provider availability export",
+		],
+		[
+			INDEX_CURATOR_PROVIDER_ORIGINAL,
+			INDEX_CURATOR_PROVIDER_PATCHED,
+			"curator provider export",
+		],
+		[INDEX_PREFERENCE_ORIGINAL, INDEX_PREFERENCE_PATCHED, "provider preference"],
+		[INDEX_CURATOR_DEFAULT_ORIGINAL, INDEX_CURATOR_DEFAULT_PATCHED, "curator default"],
+		[
+			INDEX_FIRST_AVAILABLE_ANCHOR,
+			INDEX_CURATOR_RESOLVER_PATCHED,
+			"curator resolver",
+		],
+		[INDEX_EXA_FALLBACK_ORIGINAL, INDEX_EXA_FALLBACK_PATCHED, "OpenAI fallback"],
+		[
+			INDEX_RESOLVE_PROVIDER_SIGNATURE_ORIGINAL,
+			INDEX_RESOLVE_PROVIDER_SIGNATURE_PATCHED,
+			"provider resolver signature",
+		],
+		[INDEX_PREFER_OPENAI_ORIGINAL, INDEX_PREFER_OPENAI_PATCHED, "provider resolver preference"],
+	]) {
+		patched = replaceModelAwareSearchHunk(
+			patched,
+			original,
+			replacement,
+			"index.ts",
+			label,
+		);
+	}
+	if (
+		!patched.includes(INDEX_TOOL_DESCRIPTION_PATCHED) &&
+		!patched.includes(INDEX_TOOL_DESCRIPTION_OPT_IN_PATCHED)
+	) {
+		if (patched.includes(INDEX_TOOL_DESCRIPTION_ORIGINAL)) {
+			patched = patched.replace(
+				INDEX_TOOL_DESCRIPTION_ORIGINAL,
+				INDEX_TOOL_DESCRIPTION_PATCHED,
+			);
+		} else if (patched.includes(INDEX_TOOL_DESCRIPTION_OPT_IN_ORIGINAL)) {
+			patched = patched.replace(
+				INDEX_TOOL_DESCRIPTION_OPT_IN_ORIGINAL,
+				INDEX_TOOL_DESCRIPTION_OPT_IN_PATCHED,
+			);
+		} else {
+			throw new Error(
+				"Unsupported pi-web-access 0.24.1 index.ts: model-aware search hunk is missing (tool description)",
+			);
+		}
+	}
+	return patched;
+}
+
 const FIRECRAWL_LOOPBACK_HELPERS = [
 	"function isLoopbackApiUrl(url: URL): boolean {",
 	'\tconst hostname = url.hostname.toLowerCase().replace(/^\\[|\\]$/g, "").replace(/\\.$/, "");',
@@ -280,13 +572,13 @@ function patchFirecrawlLoopbackSource(source) {
 	return patched
 		.replace(
 			[
-				"const allowLoopback = isLoopbackApiUrl(new URL(url));",
-				"let current = await validateRemoteUrl(url, firecrawlApiSsrfOptions(options, allowLoopback));",
+				"\tconst allowLoopback = isLoopbackApiUrl(new URL(url));",
+				"\tlet current = await validateRemoteUrl(url, firecrawlApiSsrfOptions(options, allowLoopback));",
 			].join("\n"),
 			[
-				"const initialUrl = new URL(url);",
-				"const loopbackApiOrigin = isLoopbackApiUrl(initialUrl) ? initialUrl.origin : null;",
-				"let current = await validateRemoteUrl(initialUrl, firecrawlApiSsrfOptions(options, loopbackApiOrigin !== null));",
+				"\tconst initialUrl = new URL(url);",
+				"\tconst loopbackApiOrigin = isLoopbackApiUrl(initialUrl) ? initialUrl.origin : null;",
+				"\tlet current = await validateRemoteUrl(initialUrl, firecrawlApiSsrfOptions(options, loopbackApiOrigin !== null));",
 			].join("\n"),
 		)
 		.replace(
@@ -298,13 +590,13 @@ function patchFirecrawlLoopbackSource(source) {
 			].join("\n"),
 		)
 		.replace(
-			"const next = await validateRemoteUrl(new URL(location, current), firecrawlApiSsrfOptions(options, allowLoopback));",
+			"\t\tconst next = await validateRemoteUrl(new URL(location, current), firecrawlApiSsrfOptions(options, allowLoopback));",
 			[
-				"const redirectUrl = new URL(location, current);",
-				"const next = await validateRemoteUrl(",
-				"\tredirectUrl,",
-				"\tfirecrawlApiSsrfOptions(options, redirectUrl.origin === loopbackApiOrigin),",
-				");",
+				"\t\tconst redirectUrl = new URL(location, current);",
+				"\t\tconst next = await validateRemoteUrl(",
+				"\t\t\tredirectUrl,",
+				"\t\t\tfirecrawlApiSsrfOptions(options, redirectUrl.origin === loopbackApiOrigin),",
+				"\t\t);",
 			].join("\n"),
 		)
 		.replace(
@@ -380,7 +672,12 @@ export function patchPiWebAccessForwardFixSource(relativePath, source) {
 	if (relativePath === "chrome-cookies.ts") {
 		return patchPiWebAccessWindowsCookiesSource(source);
 	}
-	if (relativePath === "index.ts") return patchLinuxBrowserLaunchSource(source);
+	if (relativePath === "index.ts") {
+		return patchLinuxBrowserLaunchSource(patchModelAwareIndexSource(source));
+	}
+	if (relativePath === "gemini-search.ts") {
+		return patchModelAwareGeminiSearchSource(source);
+	}
 	if (relativePath === "extract.ts") return patchInlineDataUriSource(source);
 	if (relativePath === "firecrawl.ts") return patchFirecrawlLoopbackSource(source);
 	if (relativePath === "ssrf-protection.ts") return patchSsrfLoopbackSource(source);

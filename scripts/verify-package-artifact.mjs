@@ -528,8 +528,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.24.0") {
-	fail("committed runtime lock does not pin pi-web-access 0.24.0");
+if (expectedPiWebAccessVersion !== "0.24.1") {
+	fail("committed runtime lock does not pin pi-web-access 0.24.1");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {

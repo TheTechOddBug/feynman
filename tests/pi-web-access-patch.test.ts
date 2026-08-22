@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createCipheriv, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,24 +13,21 @@ import {
 	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	PI_WEB_ACCESS_REQUIRED_VERSION,
+	patchPiWebAccessForwardFixSource,
 	patchPiWebAccessSource,
 	patchPiWebAccessSources,
 } from "../scripts/lib/pi-web-access-patch.mjs";
-import {
-	PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256,
-	patchPiWebAccessWindowsCookiesSource,
-} from "../scripts/lib/pi-web-access-windows-cookies-patch.mjs";
 
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.24.0",
+	"pi-web-access-0.24.1",
 );
 const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"..",
 	"fixtures",
-	"pi-web-access-0.24.0",
+	"pi-web-access-0.24.1",
 );
 const PI_WEB_ACCESS_RUNTIME_ROOT = join(
 	import.meta.dirname,
@@ -245,165 +242,47 @@ test("exact pi-web-access fixture ports the three focused upstream reliability f
 	assert.doesNotMatch(extractSource, /return Promise\.all\(urls\.map/);
 });
 
-test("Windows cookie forward port is exact, digest-gated, and idempotent", () => {
-	const baseline = readFileSync(
-		join(PI_WEB_ACCESS_FIXTURE_ROOT, "chrome-cookies.ts.fixture"),
-		"utf8",
-	);
-	const patched = patchPiWebAccessWindowsCookiesSource(baseline);
-	assert.equal(
-		createHash("sha256").update(patched).digest("hex"),
-		PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256,
-	);
-	assert.equal(patchPiWebAccessWindowsCookiesSource(patched), patched);
-	assert.throws(
-		() => patchPiWebAccessWindowsCookiesSource(`${baseline}\n`),
-		/expected 71ad181b.*3abd4143/,
-	);
-});
-
-function createWindowsCookieFixture(
-	home: string,
-	browser: "Chrome" | "Edge",
-	rows: Array<[string, string, string, string, number]>,
-): void {
-	const base = browser === "Edge"
-		? join(home, "AppData", "Local", "Microsoft", "Edge", "User Data")
-		: join(home, "AppData", "Local", "Google", "Chrome", "User Data");
-	const databasePath = join(base, "Default", "Network", "Cookies");
-	mkdirSync(dirname(databasePath), { recursive: true });
-	const created = spawnSync("python3", ["-c", `
-import json, sqlite3, sys
-c = sqlite3.connect(sys.argv[1])
-c.execute("create table meta (key text, value integer)")
-c.execute("insert into meta values ('version', 24)")
-c.execute("create table cookies (name text, value text, host_key text, encrypted_value blob, expires_utc integer)")
-for row in json.loads(sys.argv[2]):
-    c.execute("insert into cookies values (?, ?, ?, ?, ?)", [row[0], row[1], row[2], bytes.fromhex(row[3]), row[4]])
-c.commit()
-c.close()
-`, databasePath, JSON.stringify(rows)], { encoding: "utf8" });
-	assert.equal(created.status, 0, created.stderr);
-	writeFileSync(
-		join(base, "Local State"),
-		JSON.stringify({
-			os_crypt: {
-				encrypted_key: Buffer.concat([
-					Buffer.from("DPAPI"),
-					Buffer.from("protected"),
-				]).toString("base64"),
-			},
-		}),
-	);
-}
-
-function encryptWindowsCookie(
-	value: string,
-	key: Buffer,
-	version: "v10" | "v20",
-	hostKey?: string,
-): string {
-	const nonce = Buffer.alloc(12, 7);
-	const cipher = createCipheriv("aes-256-gcm", key, nonce);
-	const plaintext = hostKey
-		? Buffer.concat([createHash("sha256").update(hostKey).digest(), Buffer.from(value)])
-		: Buffer.from(value);
-	return Buffer.concat([
-		Buffer.from(version),
-		nonce,
-		cipher.update(plaintext),
-		cipher.final(),
-		cipher.getAuthTag(),
-	]).toString("hex");
-}
-
-function runWindowsCookieProbe(
-	home: string,
-	bin: string,
-	key: Buffer,
-	localAppData: boolean,
-): { result: { cookies: Record<string, string> } | null; diagnostic: string | null } {
-	const powershellPath = join(bin, "powershell.exe");
-	writeFileSync(
-		powershellPath,
-		'#!/bin/sh\nscript=\nwhile [ "$#" -gt 0 ]; do\n\tif [ "$1" = "-Command" ]; then\n\t\tshift\n\t\tscript=${1-}\n\t\tshift\n\t\t[ "$#" -eq 0 ] || exit 2\n\t\tbreak\n\tfi\n\tshift\ndone\ncase "$script" in\n\t*"Add-Type -AssemblyName System.Security"*"[Console]::In.ReadToEnd()"*) ;;\n\t*) exit 3 ;;\nesac\ninput=$(cat)\n[ "$input" = "$DPAPI_PROTECTED" ] || exit 4\nprintf "%s" "$DPAPI_KEY"\n',
-	);
-	chmodSync(powershellPath, 0o755);
-	const chromeCookiesUrl = pathToFileURL(
-		join(PI_WEB_ACCESS_RUNTIME_ROOT, "chrome-cookies.ts"),
-	).href;
-	const env = {
-		...process.env,
-		HOME: home,
-		USERPROFILE: home,
-		PI_ALLOW_BROWSER_COOKIES: "1",
-		PATH: `${bin}:${process.env.PATH ?? ""}`,
-		DPAPI_KEY: key.toString("base64"),
-		DPAPI_PROTECTED: Buffer.from("protected").toString("base64"),
-		TEMP: tmpdir(),
-		TMP: tmpdir(),
-		...(localAppData ? { LOCALAPPDATA: join(home, "AppData", "Local") } : {}),
-	};
-	if (!localAppData) delete env.LOCALAPPDATA;
-	const child = spawnSync(
-		process.execPath,
-		["--import", "tsx", "--input-type=module"],
-		{
-			encoding: "utf8",
-			env,
-			input: `
-				Object.defineProperty(process, "platform", { value: "win32" });
-				const module = await import(${JSON.stringify(chromeCookiesUrl)});
-				const result = await module.getGoogleCookies({
-					requiredCookies: ["__Secure-1PSID", "__Secure-1PSIDTS"],
-				});
-				console.log(JSON.stringify({
-					result,
-					diagnostic: module.getLastGoogleCookieDiagnostic(),
-				}));
-			`,
-		},
-	);
-	assert.equal(child.status, 0, child.stderr);
-	assert.doesNotMatch(child.stderr, new RegExp(key.toString("base64"), "i"));
-	return JSON.parse(child.stdout.trim());
-}
-
-test("runtime Windows Chrome decrypts DPAPI-backed v10 Gemini cookies", () => {
-	const home = mkdtempSync(join(tmpdir(), "feynman-cookie-windows-"));
-	const bin = mkdtempSync(join(tmpdir(), "feynman-cookie-bin-"));
-	try {
-		const key = Buffer.alloc(32, 3);
-		createWindowsCookieFixture(home, "Chrome", [
-			["__Secure-1PSID", "", ".google.com", encryptWindowsCookie("one", key, "v10", ".google.com"), 1],
-			["__Secure-1PSIDTS", "", ".google.com", encryptWindowsCookie("two", key, "v10", ".google.com"), 2],
-		]);
-		assert.deepEqual(
-			runWindowsCookieProbe(home, bin, key, true).result?.cookies,
-			{ "__Secure-1PSIDTS": "two", "__Secure-1PSID": "one" },
+test("model-aware auto routing matches upstream commit 9b1b917 exactly", () => {
+	const expected = new Map([
+		["gemini-search.ts", "a6fde655c24a2889675fc6687844e1f8025ef3275490c127d7dbb42802e928e9"],
+		["index.ts", "745478a6675b1088e92c3c27a31ee15871011103a386df5f22f1cb30b4e13d25"],
+	]);
+	for (const [relativePath, expectedDigest] of expected) {
+		const baseline = readFileSync(
+			join(PI_WEB_ACCESS_FIXTURE_ROOT, `${relativePath}.fixture`),
+			"utf8",
 		);
-	} finally {
-		rmSync(home, { recursive: true, force: true });
-		rmSync(bin, { recursive: true, force: true });
+		const forwarded = patchPiWebAccessForwardFixSource(relativePath, baseline);
+		assert.equal(
+			createHash("sha256").update(forwarded).digest("hex"),
+			expectedDigest,
+			relativePath,
+		);
+		assert.equal(
+			patchPiWebAccessForwardFixSource(relativePath, forwarded),
+			forwarded,
+			`${relativePath} forward port is not idempotent`,
+		);
 	}
 });
 
-test("runtime Windows Edge reports unsupported v20 app-bound Gemini cookies", () => {
-	const home = mkdtempSync(join(tmpdir(), "feynman-cookie-edge-"));
-	const bin = mkdtempSync(join(tmpdir(), "feynman-cookie-bin-"));
-	try {
-		const key = Buffer.alloc(32, 4);
-		createWindowsCookieFixture(home, "Edge", [
-			["__Secure-1PSID", "", ".google.com", encryptWindowsCookie("one", key, "v20"), 1],
-			["__Secure-1PSIDTS", "", ".google.com", encryptWindowsCookie("two", key, "v20"), 2],
-		]);
-		const probe = runWindowsCookieProbe(home, bin, key, false);
-		assert.equal(probe.result, null);
-		assert.match(probe.diagnostic ?? "", /v20 app-bound cookies are not supported/);
-	} finally {
-		rmSync(home, { recursive: true, force: true });
-		rmSync(bin, { recursive: true, force: true });
-	}
+test("exact pi-web-access fixture keeps 0.24.1 retrieval and clone protections", () => {
+	const patchedSources = patchPiWebAccessSources(
+		readPiWebAccessFixtureSources(),
+		"0.24.1 fixture",
+	);
+	const extractSource = patchedSources.get("extract.ts") ?? "";
+	const githubSource = patchedSources.get("github-extract.ts") ?? "";
+	const openaiSource = patchedSources.get("openai-search.ts") ?? "";
+	const pdfSource = patchedSources.get("pdf-extract.ts") ?? "";
+
+	assert.match(extractSource, /OpenAI File Downloader, XaiImageApiFetch\/1\.0/);
+	assert.match(githubSource, /function cloneDestination/);
+	assert.match(githubSource, /createHash\("sha256"\).*JSON\.stringify/);
+	assert.match(openaiSource, /openaiSearchProviders/);
+	assert.match(openaiSource, /for \(const provider of providers\)/);
+	assert.match(pdfSource, /const configuredMaxPages = pdf\.maxPages/);
+	assert.match(pdfSource, /\? pdfConfig\.maxPages/);
 });
 
 test("runtime readable extraction removes inline data URIs while raw mode preserves the body", () => {
@@ -417,14 +296,18 @@ test("runtime readable extraction removes inline data URIs while raw mode preser
 			input: `
 				const encoded = Buffer.alloc(256 * 1024, 0xa5).toString("base64");
 				const body = \`Readable before ![large](data:image/png;base64,\${encoded}) after\`;
-				globalThis.fetch = async () => new Response(body, {
+				let userAgent = "";
+				globalThis.fetch = async (_url, init) => {
+					userAgent = init?.headers?.["User-Agent"] ?? "";
+					return new Response(body, {
 					headers: { "content-type": "text/plain; charset=utf-8" },
-				});
+					});
+				};
 				const { fetchAllContent } = await import(${JSON.stringify(extractUrl)});
 				const lookup = async () => [{ address: "93.184.216.34", family: 4 }];
 				const [readable] = await fetchAllContent(["https://example.com/readable"], undefined, { lookup });
 				const [raw] = await fetchAllContent(["https://example.com/raw"], undefined, { mode: "raw", lookup });
-				console.log(JSON.stringify({ readable: readable.content, raw: raw.content, body }));
+				console.log(JSON.stringify({ readable: readable.content, raw: raw.content, body, userAgent }));
 			`,
 		},
 	);
@@ -433,12 +316,109 @@ test("runtime readable extraction removes inline data URIs while raw mode preser
 		readable: string;
 		raw: string;
 		body: string;
+		userAgent: string;
 	};
 	assert.match(output.readable, /Readable before/);
 	assert.match(output.readable, /inline data URI omitted/);
 	assert.match(output.readable, /retrieval=not-retained/);
 	assert.doesNotMatch(output.readable, /data:image\/png;base64/i);
 	assert.equal(output.raw, output.body);
+	assert.equal(output.userAgent, "OpenAI File Downloader, XaiImageApiFetch/1.0");
+});
+
+test("runtime 0.24.1 normalizes PDF limits and honors OpenAI search provider priority", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-web-0241-config-"));
+	const configPath = join(root, "web-search.json");
+	writeFileSync(
+		configPath,
+		JSON.stringify({
+			pdf: { maxPages: 7.9 },
+			openaiSearchProviders: ["custom-openai", "openai"],
+		}),
+	);
+	const pdfUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "pdf-extract.ts")).href;
+	const openaiUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "openai-search.ts")).href;
+	try {
+		const child = spawnSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module"],
+			{
+				cwd: join(import.meta.dirname, ".."),
+				encoding: "utf8",
+				env: {
+					...process.env,
+					FEYNMAN_WEB_SEARCH_CONFIG: configPath,
+				},
+				input: `
+					const { loadPDFConfig } = await import(${JSON.stringify(pdfUrl)});
+					const { resolveOpenAIAuth } = await import(${JSON.stringify(openaiUrl)});
+					const models = [
+						{ provider: "openai", id: "gpt-5.9" },
+						{ provider: "custom-openai", id: "gpt-5.10" },
+					];
+					const auth = await resolveOpenAIAuth({
+						modelRegistry: {
+							getAll: () => models,
+							getApiKeyAndHeaders: async (model) => ({
+								ok: true,
+								apiKey: \`key-\${model.provider}\`,
+								headers: {},
+							}),
+						},
+					});
+					console.log(JSON.stringify({ pdf: loadPDFConfig(), auth }));
+				`,
+			},
+		);
+		assert.equal(child.status, 0, child.stderr);
+		const output = JSON.parse(child.stdout.trim()) as {
+			pdf: { maxPages: number };
+			auth: { provider: string; apiKey: string; model: string };
+		};
+		assert.equal(output.pdf.maxPages, 7);
+		assert.equal(output.auth.provider, "custom-openai");
+		assert.equal(output.auth.apiKey, "key-custom-openai");
+		assert.equal(output.auth.model, "gpt-5.10");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("runtime 0.24.1 rejects unsafe GitHub clone identities", () => {
+	const githubUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "github-extract.ts")).href;
+	const child = spawnSync(
+		process.execPath,
+		["--import", "tsx", "--input-type=module"],
+		{
+			cwd: join(import.meta.dirname, ".."),
+			encoding: "utf8",
+			input: `
+				const { parseGitHubUrl } = await import(${JSON.stringify(githubUrl)});
+				console.log(JSON.stringify({
+					valid: parseGitHubUrl("https://github.com/companion-inc/feynman"),
+					doubleDashOwner: parseGitHubUrl("https://github.com/bad--owner/repo"),
+					badRepo: parseGitHubUrl("https://github.com/owner/repo%24"),
+					badEncoding: parseGitHubUrl("https://github.com/owner/%E0%A4%A"),
+				}));
+			`,
+		},
+	);
+	assert.equal(child.status, 0, child.stderr);
+	const output = JSON.parse(child.stdout.trim()) as {
+		valid: { owner: string; repo: string } | null;
+		doubleDashOwner: unknown;
+		badRepo: unknown;
+		badEncoding: unknown;
+	};
+	assert.deepEqual(output.valid, {
+		owner: "companion-inc",
+		repo: "feynman",
+		refIsFullSha: false,
+		type: "root",
+	});
+	assert.equal(output.doubleDashOwner, null);
+	assert.equal(output.badRepo, null);
+	assert.equal(output.badEncoding, null);
 });
 
 test("runtime Firecrawl loopback exception stays scoped to the configured API", () => {
@@ -1004,11 +984,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.0");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.0", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.1");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.1", "test"));
 	assert.throws(
 		() => assertPiWebAccessVersion("0.25.0", "future"),
-		/expected 0\.24\.0, found 0\.25\.0/,
+		/expected 0\.24\.1, found 0\.25\.0/,
 	);
 
 	const futureSource = [
@@ -1028,7 +1008,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.24\.0 summary model scope layout/,
+		/Unsupported pi-web-access 0\.24\.1 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });
