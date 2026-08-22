@@ -9,6 +9,7 @@ import {
 	ensureWorkbenchChatSession,
 	listWorkbenchChatSessions,
 	MAX_WORKBENCH_ATTACHMENT_BYTES,
+	normalizeWorkbenchChatMessageInput,
 	readWorkbenchChatAttachmentDownload,
 	removeWorkbenchChatAttachment,
 	steerWorkbenchChatMessage,
@@ -40,7 +41,7 @@ import { buildWorkbenchState, loadWorkbenchModelStatus, readWorkbenchFile, readW
 import { ensureOpenScienceSeedFixtures } from "./seed-fixtures.js";
 import { readWorkbenchSettings, removeWorkbenchSettingsRecord, upsertWorkbenchSettingsRecord, type WorkbenchSettingsCollection, type WorkbenchCustomConnector } from "./settings-store.js";
 import { diffArtifactVersionSnapshot, restoreArtifactVersionSnapshot } from "./artifact-snapshot-actions.js";
-import { hostForUrl, normalizeHost, requestOrigin } from "./server-utils.js";
+import { hostForUrl, logWorkbenchRequestError, normalizeHost, requestCookie, requestOrigin, sendWorkbenchRequestError } from "./server-utils.js";
 import { sendWorkbenchWeb } from "./static-shell.js";
 import { mutateWorkbenchTranscriptAnnotation } from "./transcript-annotations.js";
 import type { WorkbenchArtifactVersion, WorkbenchPlanStepStatus } from "./types.js";
@@ -74,17 +75,6 @@ type ServeWorkbenchOptions = WorkbenchServerOptions & {
 	shouldOpen?: boolean;
 };
 
-function parseCookie(header: string | undefined): Map<string, string> {
-	const cookies = new Map<string, string>();
-	for (const pair of (header ?? "").split(";")) {
-		const [rawName, ...rawValue] = pair.split("=");
-		const name = rawName?.trim();
-		if (!name) continue;
-		cookies.set(name, decodeURIComponent(rawValue.join("=").trim()));
-	}
-	return cookies;
-}
-
 function send(response: ServerResponse, status: number, body: string, headers: Record<string, string> = {}): void {
 	response.writeHead(status, {
 		"cache-control": "no-store",
@@ -108,7 +98,7 @@ function sendStreamEvent(response: ServerResponse, event: WorkbenchChatStreamEve
 function isAuthorized(request: IncomingMessage, url: URL, token: string): boolean {
 	const queryToken = url.searchParams.get("token");
 	const headerToken = request.headers["x-feynman-token"];
-	const cookieToken = parseCookie(request.headers.cookie).get("feynman_workbench");
+	const cookieToken = requestCookie(request.headers.cookie, "feynman_workbench");
 	return queryToken === token || headerToken === token || cookieToken === token;
 }
 
@@ -346,7 +336,7 @@ type WorkbenchRequestHandlerOptions = Required<Pick<WorkbenchServerOptions, "wor
 
 function createRequestHandler(options: WorkbenchRequestHandlerOptions): (request: IncomingMessage, response: ServerResponse) => void {
 	return (request, response) => {
-		void handleWorkbenchRequest(options, request, response);
+		void handleWorkbenchRequest(options, request, response).catch((error) => sendWorkbenchRequestError(response, error));
 	};
 }
 
@@ -384,13 +374,14 @@ async function handleWorkbenchRequest(
 					"</body>",
 				].join(""), { "content-type": "text/html; charset=utf-8" });
 			} catch (error) {
+				logWorkbenchRequestError(error);
 				send(response, 400, [
 					"<!doctype html>",
 					"<meta charset=\"utf-8\">",
 					"<title>Feynman OAuth failed</title>",
 					"<body style=\"font:14px system-ui;background:#0f140d;color:#f1f4e9;padding:24px\">",
 					"<h1>OAuth failed</h1>",
-					`<p>${String(error instanceof Error ? error.message : error).replace(/[<>&]/g, "_")}</p>`,
+					"<p>OAuth connection failed. Return to Feynman and try again.</p>",
 					"</body>",
 				].join(""), { "content-type": "text/html; charset=utf-8" });
 			}
@@ -525,10 +516,17 @@ async function handleWorkbenchRequest(
 
 			if (url.pathname === "/api/chat/message/stream" && request.method === "POST") {
 				const body = expectObject(await readJsonBody(request));
+				const input = normalizeWorkbenchChatMessageInput({
+					id: stringField(body, "sessionId"),
+					projectId: stringField(body, "projectId"),
+					title: stringField(body, "title"),
+					message: stringField(body, "message"),
+					viewportContext: optionalViewportContext(body),
+				});
+				response.setHeader("content-type", "text/event-stream; charset=utf-8");
 				response.writeHead(200, {
 					"cache-control": "no-store",
 					"connection": "keep-alive",
-					"content-type": "text/event-stream; charset=utf-8",
 					...headers,
 				});
 				await streamWorkbenchChatMessage({
@@ -538,13 +536,7 @@ async function handleWorkbenchRequest(
 					feynmanAgentDir: options.feynmanAgentDir,
 					feynmanVersion: options.version,
 					executor: options.promptExecutor,
-				}, {
-					id: stringField(body, "sessionId"),
-					projectId: stringField(body, "projectId"),
-					title: stringField(body, "title"),
-					message: stringField(body, "message"),
-					viewportContext: optionalViewportContext(body),
-				}, (event) => {
+				}, input, (event) => {
 					sendStreamEvent(response, event.type === "done" || event.type === "error"
 						? { ...event, state: buildServedWorkbenchState(options) }
 						: event);
@@ -1110,7 +1102,7 @@ async function handleWorkbenchRequest(
 
 			send(response, 404, "Not found.");
 		} catch (error) {
-			send(response, 500, error instanceof Error ? error.message : String(error));
+			sendWorkbenchRequestError(response, error);
 		}
 }
 

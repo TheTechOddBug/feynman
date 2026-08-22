@@ -12,6 +12,7 @@ const packageManifest = JSON.parse(readFileSync("package.json", "utf8")) as {
 
 test("pull-request release gates validate the merge candidate", () => {
 	assert.match(e2eWorkflow, /pull_request:\s*\n\s+branches: \[main\]/);
+	assert.match(e2eWorkflow, /\npermissions:\s*\n\s+contents: read\s*\n/);
 	assert.doesNotMatch(e2eWorkflow, /github\.event\.pull_request\.head\.sha/);
 	assert.match(e2eWorkflow, /name: Release candidate \(PR\)/);
 	assert.match(e2eWorkflow, /name: Candidate consumer \(\$\{\{ matrix\.os \}\}, Node \$\{\{ matrix\.node \}\}\)/);

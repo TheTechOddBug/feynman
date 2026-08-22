@@ -114,7 +114,7 @@ export type WorkbenchChatStreamEvent =
 	| { type: "delta"; content: string }
 	| { type: "tool"; toolEvent: WorkbenchToolEvent }
 	| { type: "done"; session: WorkbenchChatSession; state?: WorkbenchChatStreamState }
-	| { type: "error"; message: string; session: WorkbenchChatSession; state?: WorkbenchChatStreamState };
+	| { type: "error"; message: string; session?: WorkbenchChatSession; state?: WorkbenchChatStreamState };
 
 export type WorkbenchChatStreamEmitter = (event: WorkbenchChatStreamEvent) => void | Promise<void>;
 
@@ -133,7 +133,7 @@ type EnsureSessionInput = {
 	title: string;
 };
 
-type SubmitMessageInput = EnsureSessionInput & {
+export type SubmitMessageInput = EnsureSessionInput & {
 	message: string;
 	viewportContext?: WorkbenchViewportContext;
 };
@@ -204,6 +204,16 @@ function normalizeMessage(value: string): string {
 		throw new Error("Message is too large for one workbench turn.");
 	}
 	return message;
+}
+
+export function normalizeWorkbenchChatMessageInput(input: SubmitMessageInput): SubmitMessageInput {
+	return {
+		id: normalizeSessionId(input.id),
+		projectId: normalizeProjectId(input.projectId),
+		title: normalizeTitle(input.title),
+		message: normalizeMessage(input.message),
+		...(input.viewportContext ? { viewportContext: input.viewportContext } : {}),
+	};
 }
 
 function chatDir(workingDir: string): string {
@@ -678,8 +688,9 @@ export async function streamWorkbenchChatMessage(
 	input: SubmitMessageInput,
 	emit: WorkbenchChatStreamEmitter,
 ): Promise<WorkbenchChatSession> {
-	const message = normalizeMessage(input.message);
-	let session = ensureWorkbenchChatSession(options, input);
+	const normalizedInput = normalizeWorkbenchChatMessageInput(input);
+	const message = normalizedInput.message;
+	let session = ensureWorkbenchChatSession(options, normalizedInput);
 	const path = chatPath(options.workingDir, session.id);
 	const assistantMessage = createMessage("assistant", "Starting Feynman inside this workspace...", "running", [{
 		id: randomUUID(),
@@ -697,7 +708,7 @@ export async function streamWorkbenchChatMessage(
 	const snapshotBaseline = captureArtifactSnapshotBaseline(options.workingDir);
 
 	try {
-		const request = { ...options, session, message, viewportContext: input.viewportContext };
+		const request = { ...options, session, message, viewportContext: normalizedInput.viewportContext };
 		const result = options.executor
 			? await options.executor(request)
 			: await runFeynmanWorkbenchPromptStream(request, async (update) => {

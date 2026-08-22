@@ -10,7 +10,11 @@ export type WorkbenchChatStreamEvent =
 	| { type: "delta"; content: string }
 	| { type: "tool"; toolEvent: WorkbenchToolEvent }
 	| { type: "done"; session: WorkbenchChatSession; state?: WorkbenchState }
-	| { type: "error"; message: string; session: WorkbenchChatSession; state?: WorkbenchState };
+	| { type: "error"; message: string; session?: WorkbenchChatSession; state?: WorkbenchState };
+
+export function isTerminalChatStreamEvent(event: WorkbenchChatStreamEvent): boolean {
+	return event.type === "done" || event.type === "error";
+}
 
 export function parseStreamChunk(buffer: string, onEvent: (event: WorkbenchChatStreamEvent) => void): string {
 	let cursor = buffer.indexOf("\n\n");

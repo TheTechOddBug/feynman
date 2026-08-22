@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { getWorkbenchDataRoot } from "../src/workbench/data-root.js";
 import { authorizationHeaderForConnector, readWorkbenchOAuthTokens } from "../src/workbench/oauth-store.js";
 import { buildWorkbenchState } from "../src/workbench/scan.js";
 import { startWorkbenchServer } from "../src/workbench/server.js";
@@ -83,6 +84,28 @@ test("workbench connector OAuth start, callback, and disconnect persist local to
 			assert.equal(authorizationUrl.searchParams.get("scope"), "datasets.read");
 			assert.equal(authorizationUrl.searchParams.get("code_challenge_method"), "S256");
 			assert.ok(authorizationUrl.searchParams.get("code_challenge"));
+			const workbenchDataRoot = getWorkbenchDataRoot(root);
+			const pendingStorePath = join(workbenchDataRoot, "oauth-pending.json");
+			if (platform() !== "win32") {
+				assert.equal(statSync(workbenchDataRoot).mode & 0o777, 0o700);
+				assert.equal(statSync(pendingStorePath).mode & 0o777, 0o600);
+			}
+
+			const originalConsoleError = console.error;
+			const diagnostics: string[] = [];
+			console.error = (...values: unknown[]) => diagnostics.push(values.map(String).join(" "));
+			let failedCallback: Response;
+			try {
+				failedCallback = await fetch(`${handle.url}api/connectors/oauth/callback?error=${encodeURIComponent("private-oauth-sentinel/path")}`);
+			} finally {
+				console.error = originalConsoleError;
+			}
+			assert.equal(failedCallback.status, 400);
+			const failedBody = await failedCallback.text();
+			assert.match(failedBody, /OAuth connection failed/);
+			assert.doesNotMatch(failedBody, /private-oauth-sentinel|provider returned|path/);
+			assert.equal(diagnostics.length, 1);
+			assert.doesNotMatch(diagnostics[0] ?? "", /private-oauth-sentinel|provider returned|path/);
 
 			const callback = await fetch(`${handle.url}api/connectors/oauth/callback?state=${encodeURIComponent(startPayload.oauthState)}&code=code-123`);
 			assert.equal(callback.status, 200);
@@ -98,6 +121,13 @@ test("workbench connector OAuth start, callback, and disconnect persist local to
 			assert.ok(auth.tokenRequests[0]!.get("code_verifier"));
 			assert.equal(authorizationHeaderForConnector(root, "lab-oauth").Authorization, "Bearer oauth-access-token");
 			assert.equal(readWorkbenchOAuthTokens(root).tokens[0]?.refreshToken, "oauth-refresh-token");
+			const tokenStorePath = join(workbenchDataRoot, "oauth-tokens.json");
+			if (platform() !== "win32") {
+				assert.equal(statSync(tokenStorePath).mode & 0o777, 0o600);
+				chmodSync(tokenStorePath, 0o644);
+				assert.equal(readWorkbenchOAuthTokens(root).tokens.length, 1);
+				assert.equal(statSync(tokenStorePath).mode & 0o777, 0o600);
+			}
 
 			const state = buildWorkbenchState({ workingDir: root, version: "0.0.0-test" });
 			const connector = state.resources.find((group) => group.id === "connectors")?.resources.find((resource) => resource.settingsRecordId === "lab-oauth");
@@ -136,5 +166,57 @@ test("workbench connector OAuth start, callback, and disconnect persist local to
 	} finally {
 		await auth.close();
 		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("reading a migrated OAuth store restricts the current copy without mutating workspace source permissions", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-workbench-oauth-migration-"));
+	const legacyDirectory = join(root, ".feynman", "workbench");
+	const legacyPath = join(legacyDirectory, "oauth-tokens.json");
+	mkdirSync(legacyDirectory, { recursive: true, mode: 0o755 });
+	writeFileSync(legacyPath, `${JSON.stringify({
+		schema: "feynman.workbenchOAuthTokens.v1",
+		tokens: [{
+			id: "legacy-token",
+			connectorId: "legacy-connector",
+			accessToken: "legacy-access-token",
+			tokenType: "Bearer",
+			createdAt: "2026-08-22T00:00:00.000Z",
+			updatedAt: "2026-08-22T00:00:00.000Z",
+		}],
+		updatedAt: "2026-08-22T00:00:00.000Z",
+	}, null, 2)}\n`, { mode: 0o644 });
+	try {
+		const store = readWorkbenchOAuthTokens(root);
+		assert.equal(store.tokens[0]?.connectorId, "legacy-connector");
+		if (platform() !== "win32") {
+			const currentRoot = getWorkbenchDataRoot(root);
+			assert.equal(statSync(legacyDirectory).mode & 0o777, 0o755);
+			assert.equal(statSync(legacyPath).mode & 0o777, 0o644);
+			assert.equal(statSync(currentRoot).mode & 0o777, 0o700);
+			assert.equal(statSync(join(currentRoot, "oauth-tokens.json")).mode & 0o777, 0o600);
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("OAuth migration rejects workspace-controlled symlinks without changing their targets", {
+	skip: platform() === "win32",
+}, () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-workbench-oauth-symlink-"));
+	const targetRoot = mkdtempSync(join(tmpdir(), "feynman-workbench-oauth-target-"));
+	const targetPath = join(targetRoot, "target.json");
+	const legacyDirectory = join(root, ".feynman", "workbench");
+	const legacyPath = join(legacyDirectory, "oauth-tokens.json");
+	mkdirSync(legacyDirectory, { recursive: true });
+	writeFileSync(targetPath, "{}\n", { mode: 0o644 });
+	symlinkSync(targetPath, legacyPath);
+	try {
+		assert.throws(() => readWorkbenchOAuthTokens(root), /expected root|regular file|symbolic links/);
+		assert.equal(statSync(targetPath).mode & 0o777, 0o644);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+		rmSync(targetRoot, { recursive: true, force: true });
 	}
 });

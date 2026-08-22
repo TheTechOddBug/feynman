@@ -75,6 +75,7 @@ import type {
 	WorkbenchToolEvent,
 } from "./types.js";
 import {
+	isTerminalChatStreamEvent,
 	parseStreamChunk,
 	patchLastAssistant,
 	upsertAssistantTool,
@@ -2446,7 +2447,11 @@ function App() {
 
 	function applyStreamEvent(streamEvent: WorkbenchChatStreamEvent) {
 		if (streamEvent.type === "session" || streamEvent.type === "done" || streamEvent.type === "error") {
-			setSession(streamEvent.session);
+			if (streamEvent.session) setSession(streamEvent.session);
+			else if (streamEvent.type === "error") setSession((current) => current ? {
+				...patchLastAssistant(current, { content: streamEvent.message || "Stream failed", status: "error" }),
+				status: "error",
+			} : current);
 			if ((streamEvent.type === "done" || streamEvent.type === "error") && streamEvent.state) setData(streamEvent.state);
 			if (streamEvent.type === "done") {
 				setBusy(false);
@@ -2565,12 +2570,18 @@ function App() {
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
 			let buffer = "";
+			let receivedTerminalEvent = false;
+			const applyEvent = (streamEvent: WorkbenchChatStreamEvent) => {
+				if (isTerminalChatStreamEvent(streamEvent)) receivedTerminalEvent = true;
+				applyStreamEvent(streamEvent);
+			};
 			for (;;) {
 				const { value, done } = await reader.read();
 				if (done) break;
-				buffer = parseStreamChunk(buffer + decoder.decode(value, { stream: true }), applyStreamEvent);
+				buffer = parseStreamChunk(buffer + decoder.decode(value, { stream: true }), applyEvent);
 			}
-			parseStreamChunk(buffer + decoder.decode(), applyStreamEvent);
+			parseStreamChunk(buffer + decoder.decode(), applyEvent);
+			if (!receivedTerminalEvent) throw new Error("Chat stream ended before completion.");
 			const state = await fetchJson<WorkbenchState>("/api/state");
 			setData(state);
 		} catch (sendError) {

@@ -53,7 +53,7 @@ test("science database tool searches UCSC tracks, chromosome sizes, track rows, 
 				positionMatches: [{
 					matches: [{
 						position: "clinvarMain:ClinVar Main:ClinVar variants",
-						description: "<b>ClinVar</b> variant annotations",
+						description: "<b>ClinVar</b> <em>variant</em> annotations<br/>with p < 0.05. Threshold <LOD measurement> remains relevant <strong",
 						canonical: true,
 					}],
 				}],
@@ -94,7 +94,7 @@ test("science database tool searches UCSC tracks, chromosome sizes, track rows, 
 	const track = await tool?.execute("call-ucsc-track", { source: "ucsc", query: "track:knownGene genome=hg38 chrom=chr17 start=7661779 end=7687546 max=5", limit: 1 });
 	const conservation = await tool?.execute("call-ucsc-conservation", { source: "ucsc", query: "conservation genome=hg38 chrom=chr17 start=7676150 end=7676152", limit: 2 });
 	const chromDetails = chroms?.details as { chromCount: number; results: Array<{ name: string; sizeBp: number }> };
-	const searchDetails = search?.details as { results: Array<{ canonical: boolean; track: string }> };
+	const searchDetails = search?.details as { results: Array<{ canonical: boolean; description?: string; track: string }> };
 	const trackDetails = track?.details as { itemsReturned: number; results: Array<{ geneName: string; name: string }>; trackType: string; truncated: boolean; url: string };
 	const conservationDetails = conservation?.details as { basesCovered: number; coverageFraction: number; mean: number; min: number; max: number; results: Array<{ value: number }> };
 
@@ -102,6 +102,8 @@ test("science database tool searches UCSC tracks, chromosome sizes, track rows, 
 	assert.deepEqual(chromDetails.results[0], { name: "chr17", sizeBp: 83257441 });
 	assert.equal(searchDetails.results[0]?.track, "clinvarMain");
 	assert.equal(searchDetails.results[0]?.canonical, true);
+	assert.equal(searchDetails.results[0]?.description, "ClinVar variant annotations with p < 0.05. Threshold <LOD measurement> remains relevant");
+	assert.doesNotMatch(searchDetails.results[0]?.description ?? "", /<\/?(?:b|br|em|strong)\b/i);
 	assert.equal(trackDetails.trackType, "bigGenePred knownGenePep knownGeneMrna");
 	assert.equal(trackDetails.itemsReturned, 5);
 	assert.equal(trackDetails.truncated, true);
