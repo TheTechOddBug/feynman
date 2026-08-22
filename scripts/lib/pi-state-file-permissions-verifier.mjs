@@ -110,13 +110,38 @@ export async function verifyInstalledPiStateFilePermissions(packageRoot) {
 		"installed Pi",
 	);
 
+	const runtimeArchivePath = resolve(
+		packageRoot,
+		".feynman",
+		"runtime-workspace.tgz",
+	);
+	if (!existsSync(runtimeArchivePath)) {
+		let embeddedRuntimePiRoot;
+		try {
+			embeddedRuntimePiRoot = resolvePiPackageRoot(
+				resolve(packageRoot, ".feynman", "npm", "node_modules"),
+			);
+		} catch (error) {
+			throw new Error(
+				`Installed Feynman is missing both its runtime archive and extracted Pi runtime: ${error.message}`,
+				{ cause: error },
+			);
+		}
+		await verifyPiPackageStateFilePermissions(
+			embeddedRuntimePiRoot,
+			"embedded runtime Pi",
+		);
+		return process.platform === "win32"
+			? "managed-acls-preserved"
+			: "fresh-0600-managed-modes-preserved";
+	}
+
 	const extractionRoot = mkdtempSync(join(tmpdir(), "feynman-restored-runtime-"));
 	try {
 		const extraction = spawnSync(
 			"tar",
-			["-xzf", "runtime-workspace.tgz", "-C", extractionRoot],
+			["-xzf", runtimeArchivePath, "-C", extractionRoot],
 			{
-				cwd: resolve(packageRoot, ".feynman"),
 				encoding: "utf8",
 				stdio: ["ignore", "ignore", "pipe"],
 				timeout: 300_000,

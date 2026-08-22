@@ -7,6 +7,7 @@ import {
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +18,7 @@ import {
 	assertPiStateFilePermissionsPatchSource,
 	patchPiStateFilePermissionsSource,
 } from "../scripts/lib/pi-state-file-permissions-patch.mjs";
+import { verifyInstalledPiStateFilePermissions } from "../scripts/lib/pi-state-file-permissions-verifier.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const piRoot = resolve(
@@ -160,6 +162,31 @@ test("installed state verifier checks Windows ACLs without PowerShell command in
 	assert.match(verifier, /runWindowsCommand\("icacls\.exe", \[/);
 	assert.doesNotMatch(verifier, /powershell\.exe|Get-Acl|Set-Acl/);
 });
+
+test(
+	"installed state verifier accepts the extracted runtime used by native bundles",
+	{ skip: process.platform === "win32" },
+	async () => {
+		const packageRoot = mkdtempSync(join(tmpdir(), "feynman-native-state-verifier-"));
+		try {
+			for (const nodeModulesRoot of [
+				resolve(packageRoot, "node_modules"),
+				resolve(packageRoot, ".feynman", "npm", "node_modules"),
+			]) {
+				const scope = resolve(nodeModulesRoot, "@earendil-works");
+				mkdirSync(scope, { recursive: true });
+				symlinkSync(piRoot, resolve(scope, "pi-coding-agent"), "dir");
+			}
+
+			assert.equal(
+				await verifyInstalledPiStateFilePermissions(packageRoot),
+				"fresh-0600-managed-modes-preserved",
+			);
+		} finally {
+			rmSync(packageRoot, { recursive: true, force: true });
+		}
+	},
+);
 
 test(
 	"patched Pi creates private state files and preserves administrator-managed modes",
