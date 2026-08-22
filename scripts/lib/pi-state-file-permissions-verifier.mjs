@@ -22,34 +22,26 @@ function resolvePiPackageRoot(nodeModulesRoot) {
 	throw new Error(`Installed Pi package is missing under ${nodeModulesRoot}`);
 }
 
-function runPowerShell(script, path) {
+function runWindowsCommand(command, args) {
 	return execFileSync(
-		"powershell.exe",
-		["-NoProfile", "-NonInteractive", "-Command", script, path],
+		command,
+		args,
 		{ encoding: "utf8", windowsHide: true },
 	).trim();
 }
 
 function applyManagedWindowsAcl(path) {
-	runPowerShell(
-		[
-			"$path=$args[0];",
-			"$acl=Get-Acl -LiteralPath $path;",
-			"$acl.SetAccessRuleProtection($true,$false);",
-			"$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name;",
-			"$rule=New-Object System.Security.AccessControl.FileSystemAccessRule($identity,'FullControl','Allow');",
-			"$acl.SetAccessRule($rule);",
-			"Set-Acl -LiteralPath $path -AclObject $acl;",
-		].join(""),
+	const identity = runWindowsCommand("whoami.exe", []);
+	runWindowsCommand("icacls.exe", [
 		path,
-	);
+		"/inheritance:r",
+		"/grant:r",
+		`${identity}:(F)`,
+	]);
 }
 
 function readWindowsAcl(path) {
-	return runPowerShell(
-		"[Console]::Write((Get-Acl -LiteralPath $args[0]).Sddl)",
-		path,
-	);
+	return runWindowsCommand("icacls.exe", [path]);
 }
 
 function prepareManagedFile(path, source, mode) {

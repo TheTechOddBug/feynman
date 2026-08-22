@@ -145,6 +145,22 @@ test("launch-time repair reaches bundled, vendored, global, and agent-managed Pi
 	}
 });
 
+test("installed state verifier checks Windows ACLs without PowerShell command interpolation", () => {
+	const verifier = readFileSync(
+		resolve(
+			process.cwd(),
+			"scripts",
+			"lib",
+			"pi-state-file-permissions-verifier.mjs",
+		),
+		"utf8",
+	);
+
+	assert.match(verifier, /runWindowsCommand\("whoami\.exe", \[\]\)/);
+	assert.match(verifier, /runWindowsCommand\("icacls\.exe", \[/);
+	assert.doesNotMatch(verifier, /powershell\.exe|Get-Acl|Set-Acl/);
+});
+
 test(
 	"patched Pi creates private state files and preserves administrator-managed modes",
 	{ skip: process.platform === "win32" },
