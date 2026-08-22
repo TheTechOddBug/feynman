@@ -140,8 +140,11 @@ export async function verifyInstalledPiStateFilePermissions(packageRoot) {
 	try {
 		const extraction = spawnSync(
 			"tar",
-			["-xzf", runtimeArchivePath, "-C", extractionRoot],
+			["-xzf", "runtime-workspace.tgz", "-C", extractionRoot],
 			{
+				// Keep the archive path relative on Windows. GNU tar treats an
+				// absolute drive-letter path as a remote host specification.
+				cwd: resolve(packageRoot, ".feynman"),
 				encoding: "utf8",
 				stdio: ["ignore", "ignore", "pipe"],
 				timeout: 300_000,

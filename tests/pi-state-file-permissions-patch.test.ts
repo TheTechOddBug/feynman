@@ -161,6 +161,12 @@ test("installed state verifier checks Windows ACLs without PowerShell command in
 	assert.match(verifier, /runWindowsCommand\("whoami\.exe", \[\]\)/);
 	assert.match(verifier, /runWindowsCommand\("icacls\.exe", \[/);
 	assert.doesNotMatch(verifier, /powershell\.exe|Get-Acl|Set-Acl/);
+	assert.match(
+		verifier,
+		/\["-xzf", "runtime-workspace\.tgz", "-C", extractionRoot\]/,
+	);
+	assert.match(verifier, /cwd: resolve\(packageRoot, "\.feynman"\)/);
+	assert.doesNotMatch(verifier, /\["-xzf", runtimeArchivePath/);
 });
 
 test(
