@@ -28,6 +28,7 @@ import {
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { verifyRuntimeForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
+import { verifyInstalledPiStateFilePermissions } from "./lib/pi-state-file-permissions-verifier.mjs";
 import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
 import {
 	verifyGitHubCloneSafety,
@@ -962,6 +963,7 @@ async function main() {
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot);
 	await verifyPiCompactionToolsBehavior(packageRoot);
+	const stateFilePermissions = await verifyInstalledPiStateFilePermissions(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
 		commands: EXPECTED_FEYNMAN_COMMANDS.length,
@@ -979,6 +981,7 @@ async function main() {
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",
 		compactionTools: "disabled",
+		stateFilePermissions,
 	}));
 }
 

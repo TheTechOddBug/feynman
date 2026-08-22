@@ -15,6 +15,7 @@ import {
 	assertPiCompactionToolsPackageTree,
 } from "./lib/pi-compaction-tools-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
+import { assertPiStateFilePermissionsPatchSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
@@ -195,7 +196,7 @@ requireMarkers(
 		"valid-typebox-probe",
 		"null-typebox-probe",
 		"invalid-typebox-probe",
-		"verifyGithubCopilotRateLimitLogin",
+		"verifyGithubCopilotRateLimitLogin", "verifyInstalledPiStateFilePermissions",
 		'githubCopilotRateLimit: "passed"',
 		"terminateChildProcessTree",
 	],
@@ -312,7 +313,13 @@ for (const [target, relativePath] of [
 }
 assertPiAiForwardFixPackageTree(packageRoot, readText);
 assertPiCompactionToolsPackageTree(packageRoot, readText);
-
+assertPiStateFilePermissionsPatchSource(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "auth-storage.js"),
+		"bundled Pi auth storage",
+	),
+	"bundled Pi auth storage",
+);
 requireMarkers(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "model-runtime.js"),
@@ -715,6 +722,13 @@ requireMarkers(
 	),
 	"runtime Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
+);
+assertPiStateFilePermissionsPatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js",
+	),
+	"runtime Pi auth storage",
 );
 assertPiLlamaUsagePatchSource(
 	readArchivedText(

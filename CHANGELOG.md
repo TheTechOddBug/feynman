@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-22 12:12 EDT — pi-runtime-reliability-0.3.34-candidate
+
+- Objective: Port only the new upstream runtime changes that concretely improve Feynman's delegated research reliability without adopting broad workflow, fleet, or raw model-registry surfaces.
+- Intake: Feynman has zero open issues, pull requests, Dependabot alerts, CodeQL alerts, secret-scanning alerts, or draft advisories; only `main` exists on origin. The only fork pushed after the cutoff, `TheTechOddBug/feynman`, is a release mirror with no new contributor patch. npm remains current at Pi `0.84.2`, pi-web-access `0.24.1`, pi-docparser `4.0.0`, fast-xml-parser `5.11.0`, and posthog-node `5.50.0`; the broad pi-subagents `0.54.0` migration remains outside Feynman's pinned foreground-research scope.
+- Candidate: Backport Pi commit `c49906e` so existing `auth.json` and `models-store.json` files retain administrator-managed modes and ACLs while new POSIX files remain `0600`. Port only the safe guidance from pi-subagents commit `62e0934`: tell the parent to choose explicit child models from Feynman's approved `feynman model list` output and use exact `provider/model` selectors. The upstream raw-registry listing is rejected because it bypasses Feynman's model scope and premium policy, accepts ambiguous bare IDs, and truncates results.
+- Removal conditions: Drop the state-file patch after the first supported Pi release containing `c49906e`. Drop the selector guidance only after a compatible pi-subagents release exposes launchable, model-scope-aware selectors that preserve Feynman's premium-model policy.
+- Deferred upstream: Pi PR `#8487` documents a missing `supportsFinishReason` schema member, but executable `0.84.2` probes show the documented provider/model override already reaches runtime. Feynman does not consume the omitted internal type, so the schema-only correction will arrive with the next supported Pi release instead of another maintained patch.
+- Verification: Focused state-file and subagent suites pass, including exact/idempotent/fail-closed transformations, fresh `0600` files, preserved existing `0660`/`0640` modes, all four launch-time package roots, v1 prompt-metadata migration, and installed registered-tool guidance. Typecheck and `git diff --check` pass. State: `unverified` for the cumulative suite, rebuilt runtime archive, deterministic pack/consumer, exact-head Daytona, PR CI, merge, publication, and live release identity. Next: complete those gates and release `0.3.34`.
+
 ### 2026-08-22 07:21 EDT — codeql-security-0.3.33-release-complete
 
 - Delivery: PR `#245` exact head `cd4aa092b6fa0756bd2d1a9ad767451e42beab52` passed CodeQL, Vercel, the release candidate, the Windows installer, and all six Linux/macOS/Windows package consumers, then merged as `0b40f4eff0d2b1fb9f14afe753c5b86993a9c050`. The owning branch was deleted locally and remotely.

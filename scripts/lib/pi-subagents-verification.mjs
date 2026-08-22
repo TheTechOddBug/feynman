@@ -326,6 +326,16 @@ async function verifyBackfilledToolResultBehavior(runtimeRoot, jiti) {
 
 async function verifyLogicalToolFailureBehavior(runtimeRoot, jiti) {
 	let registeredTool;
+	const toolDescriptions = await jiti.import(
+		resolve(runtimeRoot, "node_modules", "pi-subagents", "src", "extension", "tool-description.ts"),
+	);
+	for (const toolDescriptionMode of ["full", "compact"]) {
+		assert.match(
+			toolDescriptions.buildSubagentToolDescription({ toolDescriptionMode }),
+			/feynman model list.*exact approved provider\/model.*Never pass a bare model id or an agent name/s,
+			`Installed pi-subagents ${toolDescriptionMode} description omitted approved model selector guidance`,
+		);
+	}
 	const events = { on: () => () => {}, emit: () => {} };
 	const pi = new Proxy({
 		events,
@@ -344,6 +354,18 @@ async function verifyLogicalToolFailureBehavior(runtimeRoot, jiti) {
 	);
 	extension.default(pi);
 	assert.ok(registeredTool, "Installed pi-subagents did not register subagent");
+	assert.ok(
+		Array.isArray(registeredTool.promptGuidelines),
+		"Installed pi-subagents did not register prompt guidelines",
+	);
+	assert.ok(
+		registeredTool.promptGuidelines.some((line) =>
+			line.includes("feynman model list") &&
+			line.includes("exact approved provider/model") &&
+			line.includes("Never pass a bare model id or an agent name")
+		),
+		"Installed pi-subagents did not register approved model selector guidance",
+	);
 	const sessionManager = new Proxy({
 		getSessionFile: () => null,
 		getSessionId: () => "feynman-logical-error",

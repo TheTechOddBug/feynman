@@ -23,6 +23,7 @@ import {
 import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import {
@@ -642,6 +643,14 @@ function patchBundledPiModelRuntime() {
 	return changed;
 }
 
+function patchBundledPiStateFilePermissions() {
+	return patchScopedPiWorkspaceFile(
+		"pi-coding-agent",
+		"dist/core/auth-storage.js",
+		patchPiStateFilePermissionsSource,
+	);
+}
+
 function patchBundledPiInteractiveTheme() {
 	return patchScopedPiWorkspaceFile("pi-coding-agent", "dist/modes/interactive/theme/theme.js", patchPiInteractiveThemeSource);
 }
@@ -772,6 +781,7 @@ function patchBundledRuntime() {
 	changed = patchBundledPiRuntimeCorrectness() || changed;
 	changed = patchBundledPiLlamaUsage() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
+	changed = patchBundledPiStateFilePermissions() || changed;
 	changed = patchBundledPiModelRuntime() || changed;
 	changed = patchPiBraceExpansionTree(
 		workspaceNodeModulesDir,
