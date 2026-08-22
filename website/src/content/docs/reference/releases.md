@@ -9,6 +9,27 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.33 - 2026-08-22
+
+### Research evidence
+
+- arXiv metadata now accepts only the requested paper's Atom entry plus exact HTTPS arXiv paper and PDF links instead of trusting labels or URL substrings from untrusted responses.
+- Europe PMC full text decodes XML entities exactly once, preserving nested encodings instead of changing their research meaning.
+- UCSC track descriptions now remove nested provider markup while preserving scientific comparisons in research results.
+- Updated `fast-xml-parser` to `5.11.0` for unsafe entity validation, multiple-DOCTYPE rejection, and malformed XML handling.
+
+### Workbench security
+
+- OAuth access tokens, refresh tokens, and pending PKCE state now use atomic writes. On POSIX systems, current and migrated destination stores use `0600` files inside `0700` workspace-state directories; workspace-controlled symlinks are rejected, and legacy workspace sources are never permission-mutated during migration.
+- Unexpected workbench request and OAuth callback failures now return generic responses. Local diagnostics retain only a standard error class and a bounded message fingerprint, not private paths or provider details.
+- Malformed launch cookies stay unauthorized without disrupting the workbench, invalid streaming requests fail before HTTP success, and interrupted streams end with an explicit terminal error instead of silent success.
+- End-to-end release workflows now declare read-only repository permissions explicitly.
+
+### Reliability
+
+- Updated `posthog-node` to `5.50.0`, including fixes for queue flushing, response-body timeouts, compression memory growth, shutdown, and telemetry value serialization.
+- Added executable regressions for XML entities, arXiv link origins, OAuth store permissions, generic server errors, UCSC markup, and workflow permissions.
+
 ## v0.3.32 - 2026-08-21
 
 ### Web research

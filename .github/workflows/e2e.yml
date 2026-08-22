@@ -13,6 +13,9 @@ on:
 env:
   FEYNMAN_VERSION_INPUT: ${{ github.event.inputs.version || 'latest' }}
 
+permissions:
+  contents: read
+
 jobs:
   install-e2e:
     if: github.event_name == 'workflow_dispatch'

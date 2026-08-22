@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, type Stats } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import { migratedWorkbenchDataPath } from "./data-root.js";
+import { getLegacyHomeWorkbenchDataRoot, legacyWorkbenchDataPath, migratedWorkbenchDataPath } from "./data-root.js";
 
 export type WorkbenchOAuthToken = {
 	id: string;
@@ -73,11 +73,22 @@ function nowMs(): number {
 }
 
 function tokenStorePath(workingDir: string): string {
-	return migratedWorkbenchDataPath(workingDir, "oauth-tokens.json");
+	return migratedSensitiveStorePath(workingDir, "oauth-tokens.json");
 }
 
 function pendingStorePath(workingDir: string): string {
-	return migratedWorkbenchDataPath(workingDir, "oauth-pending.json");
+	return migratedSensitiveStorePath(workingDir, "oauth-pending.json");
+}
+
+function migratedSensitiveStorePath(workingDir: string, filename: string): string {
+	const legacyPaths: Array<[string, string, boolean]> = [
+		[join(getLegacyHomeWorkbenchDataRoot(workingDir), filename), dirname(getLegacyHomeWorkbenchDataRoot(workingDir)), true],
+		[legacyWorkbenchDataPath(workingDir, filename), resolve(workingDir), false],
+	];
+	for (const [path, boundary, repairPermissions] of legacyPaths) {
+		secureExistingSensitiveStorePath(path, boundary, repairPermissions);
+	}
+	return migratedWorkbenchDataPath(workingDir, filename);
 }
 
 function recordObject(value: unknown): Record<string, unknown> {
@@ -160,11 +171,77 @@ function normalizeCompleted(record: Record<string, unknown>): WorkbenchOAuthComp
 }
 
 function readJsonFile(path: string): Record<string, unknown> {
+	secureSensitiveStorePath(path);
 	if (!existsSync(path)) return {};
 	try {
 		return recordObject(JSON.parse(readFileSync(path, "utf8")));
 	} catch {
 		return {};
+	}
+}
+
+function secureSensitiveStorePath(path: string): void {
+	const directory = dirname(path);
+	mkdirSync(directory, { recursive: true, mode: 0o700 });
+	chmodSensitivePath(directory, 0o700, "directory");
+	if (existsSync(path)) {
+		chmodSensitivePath(path, 0o600, "file");
+	}
+}
+
+function secureExistingSensitiveStorePath(path: string, boundary: string, repairPermissions: boolean): void {
+	if (!existsSync(path)) return;
+	const canonicalBoundary = realpathSync.native(boundary);
+	const canonicalPath = realpathSync.native(path);
+	const relPath = relative(canonicalBoundary, canonicalPath);
+	if (!relPath || isAbsolute(relPath) || relPath === ".." || relPath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
+		throw new Error("OAuth store path is outside its expected root.");
+	}
+	const directoryPath = dirname(path);
+	const expectedDirectory = lstatSync(directoryPath);
+	const expectedFile = lstatSync(path);
+	for (let directory = dirname(path); directory !== boundary; directory = dirname(directory)) {
+		if (directory === dirname(directory)) throw new Error("OAuth store path is outside its expected root.");
+		if (lstatSync(directory).isSymbolicLink()) throw new Error("OAuth store path must not contain symbolic links.");
+	}
+	if (!repairPermissions) return;
+	chmodSensitivePath(directoryPath, 0o700, "directory", expectedDirectory);
+	chmodSensitivePath(path, 0o600, "file", expectedFile);
+}
+
+function chmodSensitivePath(path: string, mode: number, kind: "directory" | "file", expected = lstatSync(path)): void {
+	const before: Stats = expected;
+	if (kind === "directory" ? !before.isDirectory() : !before.isFile() || before.nlink !== 1) {
+		throw new Error(`OAuth store ${kind} must be a regular ${kind}.`);
+	}
+	if (process.platform === "win32") return;
+	const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | (kind === "directory" ? constants.O_DIRECTORY : 0));
+	try {
+		const opened = fstatSync(descriptor);
+		if (
+			(kind === "directory" ? !opened.isDirectory() : !opened.isFile() || opened.nlink !== 1)
+			|| opened.dev !== before.dev
+			|| opened.ino !== before.ino
+		) throw new Error(`OAuth store ${kind} changed while its permissions were secured.`);
+		fchmodSync(descriptor, mode);
+	} finally {
+		closeSync(descriptor);
+	}
+}
+
+function writeSensitiveJson(path: string, value: unknown): void {
+	secureSensitiveStorePath(path);
+	const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+	try {
+		writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+			encoding: "utf8",
+			flag: "wx",
+			mode: 0o600,
+		});
+		renameSync(temporaryPath, path);
+		chmodSensitivePath(path, 0o600, "file");
+	} finally {
+		rmSync(temporaryPath, { force: true });
 	}
 }
 
@@ -182,8 +259,7 @@ export function readWorkbenchOAuthTokens(workingDir: string): WorkbenchOAuthToke
 function writeWorkbenchOAuthTokens(workingDir: string, tokens: WorkbenchOAuthToken[]): WorkbenchOAuthTokenStore {
 	const path = tokenStorePath(workingDir);
 	const next = { schema: TOKEN_SCHEMA, tokens, updatedAt: nowIso() };
-	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+	writeSensitiveJson(path, next);
 	return next;
 }
 
@@ -219,8 +295,7 @@ function writeWorkbenchOAuthPending(
 		completedStates: completedStates.filter((state) => state.expiresAtMs > cutoff),
 		updatedAt: nowIso(),
 	};
-	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+	writeSensitiveJson(path, next);
 	return next;
 }
 

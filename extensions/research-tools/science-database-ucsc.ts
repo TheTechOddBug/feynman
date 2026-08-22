@@ -170,6 +170,29 @@ async function searchGenomes(params: SearchParams): Promise<Record<string, unkno
 	};
 }
 
+function stripMarkupText(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	const knownMarkupTags = new Set(["a", "abbr", "b", "br", "div", "em", "i", "li", "ol", "p", "span", "strong", "sub", "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "ul"]);
+	let output = "";
+	for (let index = 0; index < value.length; index += 1) {
+		if (value[index] !== "<") {
+			output += value[index];
+			continue;
+		}
+		const candidate = value.slice(index);
+		const completeTag = candidate.match(/^<\/?([A-Za-z][A-Za-z0-9:-]*)(?:\s[^<>]*)?\s*\/?>/);
+		if (completeTag?.[0] && knownMarkupTags.has(completeTag[1].toLowerCase())) {
+			output += " ";
+			index += completeTag[0].length - 1;
+			continue;
+		}
+		const incompleteTag = candidate.match(/^<\/?([A-Za-z][A-Za-z0-9:-]*)(?:\s|$)/);
+		if (incompleteTag?.[1] && knownMarkupTags.has(incompleteTag[1].toLowerCase())) break;
+		output += "<";
+	}
+	return stringValue(output.replace(/\s+/g, " "));
+}
+
 function normalizeTrackSearchMatch(record: Record<string, unknown>): Record<string, unknown> {
 	const position = stringValue(record.position) ?? stringValue(record.posName);
 	const [track, shortLabel, longLabel] = (position ?? "").split(":");
@@ -178,7 +201,7 @@ function normalizeTrackSearchMatch(record: Record<string, unknown>): Record<stri
 		shortLabel: stringValue(shortLabel),
 		longLabel: stringValue(longLabel),
 		position,
-		description: stringValue(record.description)?.replace(/<[^>]+>/g, ""),
+		description: stripMarkupText(stringValue(record.description)),
 		canonical: booleanValue(record.canonical),
 	};
 }

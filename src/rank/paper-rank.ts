@@ -1738,8 +1738,29 @@ export function buildFullTextAccessPlan(paper: PaperRecord, generatedAt?: string
 	};
 }
 
+function arxivAccessUrl(value: string, requestedArxivId?: string): { kind: "abs" | "pdf"; url: URL } | undefined {
+	try {
+		const url = new URL(value);
+		if (
+			url.protocol !== "https:"
+			|| url.port
+			|| url.username
+			|| url.password
+			|| (url.hostname !== "arxiv.org" && url.hostname !== "www.arxiv.org")
+		) return undefined;
+		const match = url.pathname.match(/^\/(abs|pdf)\/(\d{4}\.\d{4,5}(?:v\d+)?)(?:\.pdf)?\/?$/i);
+		if (!match?.[1] || !match[2]) return undefined;
+		const requestedBase = requestedArxivId?.replace(/v\d+$/i, "").toLowerCase();
+		const linkedBase = match[2].replace(/v\d+$/i, "").toLowerCase();
+		if (requestedBase && linkedBase !== requestedBase) return undefined;
+		return { kind: match[1].toLowerCase() as "abs" | "pdf", url };
+	} catch {
+		return undefined;
+	}
+}
+
 function isArxivAccessUrl(value: string): boolean {
-	return /^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\//i.test(value);
+	return Boolean(arxivAccessUrl(value));
 }
 
 export function buildCitationGraph(papers: PaperRecord[]): CitationGraph {
@@ -3731,7 +3752,7 @@ export function extractPaperContentText(content: unknown): string | undefined {
 }
 
 function jatsXmlToText(xml: string): string | undefined {
-	const withoutDoctype = xml.replace(/<!DOCTYPE[\s\S]*?>/gi, " ");
+	const withoutDoctype = stripXmlDoctypes(xml);
 	const withStructure = withoutDoctype
 		.replace(/<title[^>]*>/gi, "\n# ")
 		.replace(/<\/title>/gi, "\n")
@@ -3744,17 +3765,76 @@ function jatsXmlToText(xml: string): string | undefined {
 	return cleanString(
 		withStructure
 			.replace(/<[^>]+>/g, " ")
-			.replace(/&amp;/g, "&")
-			.replace(/&lt;/g, "<")
-			.replace(/&gt;/g, ">")
-			.replace(/&quot;/g, '"')
-			.replace(/&#39;/g, "'")
-			.replace(/&#x([0-9a-f]+);/gi, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-			.replace(/&#([0-9]+);/g, (_match, number: string) => String.fromCodePoint(Number.parseInt(number, 10)))
+			.replace(/&(amp|lt|gt|quot|apos|#39|#x[0-9A-Fa-f]+|#[0-9]+);/g, (match, entity: string) => {
+				if (entity === "amp") return "&";
+				if (entity === "lt") return "<";
+				if (entity === "gt") return ">";
+				if (entity === "quot") return '"';
+				if (entity === "apos" || entity === "#39") return "'";
+				const codePoint = entity.startsWith("#x")
+					? Number.parseInt(entity.slice(2), 16)
+					: Number.parseInt(entity.slice(1), 10);
+				return isXmlCharacter(codePoint)
+					? String.fromCodePoint(codePoint)
+					: match;
+			})
 			.replace(/[ \t]+/g, " ")
 			.replace(/\n\s+/g, "\n")
 			.replace(/\n{3,}/g, "\n\n"),
 	);
+}
+
+function isXmlCharacter(codePoint: number): boolean {
+	return codePoint === 0x9 || codePoint === 0xa || codePoint === 0xd
+		|| (codePoint >= 0x20 && codePoint <= 0xd7ff)
+		|| (codePoint >= 0xe000 && codePoint <= 0xfffd)
+		|| (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+}
+
+function stripXmlDoctypes(xml: string): string {
+	let output = "";
+	let cursor = 0;
+	const pattern = /<!DOCTYPE\b/gi;
+	for (;;) {
+		pattern.lastIndex = cursor;
+		const match = pattern.exec(xml);
+		if (!match) return output + xml.slice(cursor);
+		output += xml.slice(cursor, match.index);
+		let quote = "";
+		let subsetDepth = 0;
+		let index = pattern.lastIndex;
+		for (; index < xml.length; index += 1) {
+			const character = xml[index] ?? "";
+			if (quote) {
+				if (character === quote) quote = "";
+				continue;
+			}
+			if (character === '"' || character === "'") {
+				quote = character;
+				continue;
+			}
+			if (xml.startsWith("<!--", index)) {
+				const commentEnd = xml.indexOf("-->", index + 4);
+				if (commentEnd === -1) return output;
+				index = commentEnd + 2;
+				continue;
+			}
+			if (xml.startsWith("<?", index)) {
+				const instructionEnd = xml.indexOf("?>", index + 2);
+				if (instructionEnd === -1) return output;
+				index = instructionEnd + 1;
+				continue;
+			}
+			if (character === "[") subsetDepth += 1;
+			else if (character === "]" && subsetDepth > 0) subsetDepth -= 1;
+			else if (character === ">" && subsetDepth === 0) {
+				cursor = index + 1;
+				output += " ";
+				break;
+			}
+		}
+		if (index >= xml.length) return output;
+	}
 }
 
 export function extractFullTextSections(text: string | undefined, source = "Full text"): PaperSection[] {
@@ -4538,6 +4618,11 @@ function parseArxivAtomPaper(xml: string, requestedArxivId: string): PaperRecord
 	const feed = parsed && typeof parsed === "object" ? (parsed as JsonRecord).feed : undefined;
 	const entry = firstRecord(feed && typeof feed === "object" ? (feed as JsonRecord).entry : undefined);
 	if (!entry) return undefined;
+	const entryArxivId = extractArxivId(cleanArxivText(entry.id));
+	if (
+		!entryArxivId
+		|| entryArxivId.replace(/v\d+$/i, "").toLowerCase() !== requestedArxivId.replace(/v\d+$/i, "").toLowerCase()
+	) return undefined;
 	const title = cleanArxivText(entry.title) ?? `arXiv ${requestedArxivId}`;
 	const abstract = cleanArxivText(entry.summary);
 	const published = cleanArxivText(entry.published);
@@ -4561,12 +4646,10 @@ function parseArxivAtomPaper(xml: string, requestedArxivId: string): PaperRecord
 	for (const link of toArray(entry.link)) {
 		if (!link || typeof link !== "object") continue;
 		const record = link as JsonRecord;
-		const href = cleanArxivText(record["@_href"]);
-		const linkType = cleanArxivText(record["@_type"])?.toLowerCase();
-		const linkTitle = cleanArxivText(record["@_title"])?.toLowerCase();
-		const rel = cleanArxivText(record["@_rel"])?.toLowerCase();
-		if (linkType === "application/pdf" || linkTitle === "pdf" || href?.includes("/pdf/")) addUrl("pdf", href);
-		else if (rel === "alternate" || href?.includes("/abs/")) addUrl("arxiv", href);
+		const href = safeExternalUrl(cleanArxivText(record["@_href"]));
+		const access = href ? arxivAccessUrl(href, requestedArxivId) : undefined;
+		if (access?.kind === "pdf") addUrl("pdf", access.url.href);
+		else if (access?.kind === "abs") addUrl("arxiv", access.url.href);
 	}
 	addUrl("arxiv", `https://arxiv.org/abs/${requestedArxivId}`);
 	addUrl("pdf", `https://arxiv.org/pdf/${requestedArxivId}`);

@@ -34,6 +34,7 @@ import {
 	primaryArtifactPathForRun,
 } from "../workbench-web/src/files.js";
 import {
+	isTerminalChatStreamEvent,
 	parseStreamChunk,
 	patchLastAssistant,
 	upsertAssistantTool,
@@ -367,6 +368,9 @@ test("React shell stream helpers parse SSE frames and merge assistant tool event
 	assert.equal(events[2]?.type, "done");
 	assert.equal(events[2]?.state?.runs[0]?.artifactCount, 1);
 	assert.equal(remainder, "event: tool");
+	assert.equal(isTerminalChatStreamEvent(events[0] as Parameters<typeof isTerminalChatStreamEvent>[0]), false);
+	assert.equal(isTerminalChatStreamEvent(events[2] as Parameters<typeof isTerminalChatStreamEvent>[0]), true);
+	assert.equal(isTerminalChatStreamEvent({ type: "error", message: "Internal server error." }), true);
 
 	let session = patchLastAssistant(sessionFixture(), { content: "live reply", status: "running" });
 	session = upsertAssistantTool(session, { id: "tool-1", label: "Run python", status: "running" });
