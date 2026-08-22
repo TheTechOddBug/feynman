@@ -9,7 +9,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 function resolvePiPackageRoot(nodeModulesRoot) {
@@ -136,15 +136,19 @@ export async function verifyInstalledPiStateFilePermissions(packageRoot) {
 			: "fresh-0600-managed-modes-preserved";
 	}
 
-	const extractionRoot = mkdtempSync(join(tmpdir(), "feynman-restored-runtime-"));
+	const runtimeArchiveRoot = resolve(packageRoot, ".feynman");
+	const extractionRoot = mkdtempSync(
+		join(runtimeArchiveRoot, ".state-verification-"),
+	);
 	try {
 		const extraction = spawnSync(
 			"tar",
-			["-xzf", "runtime-workspace.tgz", "-C", extractionRoot],
+			["-xzf", "runtime-workspace.tgz", "-C", basename(extractionRoot)],
 			{
-				// Keep the archive path relative on Windows. GNU tar treats an
-				// absolute drive-letter path as a remote host specification.
-				cwd: resolve(packageRoot, ".feynman"),
+				// Keep both paths relative on Windows. GNU tar treats absolute
+				// drive-letter paths as remote host specifications, and the OS temp
+				// directory may be on a different drive from the installed package.
+				cwd: runtimeArchiveRoot,
 				encoding: "utf8",
 				stdio: ["ignore", "ignore", "pipe"],
 				timeout: 300_000,

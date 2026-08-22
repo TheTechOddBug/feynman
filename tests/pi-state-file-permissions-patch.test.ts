@@ -163,10 +163,22 @@ test("installed state verifier checks Windows ACLs without PowerShell command in
 	assert.doesNotMatch(verifier, /powershell\.exe|Get-Acl|Set-Acl/);
 	assert.match(
 		verifier,
+		/\["-xzf", "runtime-workspace\.tgz", "-C", basename\(extractionRoot\)\]/,
+	);
+	assert.match(
+		verifier,
+		/const runtimeArchiveRoot = resolve\(packageRoot, "\.feynman"\)/,
+	);
+	assert.match(
+		verifier,
+		/mkdtempSync\(\s*join\(runtimeArchiveRoot, "\.state-verification-"\)/,
+	);
+	assert.match(verifier, /cwd: runtimeArchiveRoot/);
+	assert.doesNotMatch(verifier, /\["-xzf", runtimeArchivePath/);
+	assert.doesNotMatch(
+		verifier,
 		/\["-xzf", "runtime-workspace\.tgz", "-C", extractionRoot\]/,
 	);
-	assert.match(verifier, /cwd: resolve\(packageRoot, "\.feynman"\)/);
-	assert.doesNotMatch(verifier, /\["-xzf", runtimeArchivePath/);
 });
 
 test(
