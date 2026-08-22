@@ -30,7 +30,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 
 ## Default behavior
 
-The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first, then eligible OpenAI, Exa, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, and Gemini routes in order.
+The default path does not read Chromium or Chrome cookies and does not request macOS Keychain access. With no explicit provider or custom `searchRouting`, `auto` tries configured SearXNG first. When the active model uses `openai-codex`, Codex-backed OpenAI search comes next; otherwise Exa comes before OpenAI. Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, Jina, SERPdive, Kagi, Bocha, Ollama, Perplexity, and Gemini remain later fallbacks.
 
 Configure an explicit API key for Exa, Perplexity, TinyFish, Jina, or Gemini in `~/.feynman/web-search.json` before running source-heavy workflows like `/deepresearch`. Exa's zero-config MCP fallback remains available without a key.
 
@@ -57,10 +57,12 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "kagiApiKey": "kagi-...",
   "bochaApiKey": "sk-bocha-...",
   "ollamaApiKey": "ollama-...",
+  "openaiSearchProviders": ["openai-codex", "openai"],
   "maxInlineContentChars": 30000,
   "pdf": {
     "enabled": true,
     "provider": "auto",
+    "maxPages": 100,
     "datalabMode": "balanced",
     "datalabTimeoutMs": 120000
   },
@@ -85,13 +87,13 @@ Set `provider` and `searchProvider` to `all` to query every eligible provider co
 
 DuckDuckGo is keyless but explicit-only. Select `"duckduckgo"` directly, or add it to `searchRouting.providers`. It does not run in `auto` or `all`.
 
-For PDF links, `pdf.provider: "auto"` tries Datalab when `DATALAB_API_KEY` or `datalabApiKey` is available, then Gemini, then local PDF.js extraction. Set `pdf.provider` to `"datalab"`, `"gemini"`, or `"unpdf"` to select one tier. Datalab is an optional hosted service; the no-key local path remains available.
+For PDF links, `pdf.provider: "auto"` tries Datalab when `DATALAB_API_KEY` or `datalabApiKey` is available, then Gemini, then local PDF.js extraction. Set `pdf.provider` to `"datalab"`, `"gemini"`, or `"unpdf"` to select one tier. `pdf.maxPages` bounds all three tiers and defaults to `100`. Datalab is an optional hosted service; the no-key local path remains available.
 
 Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust authentication. Bright Data search requires `brightdataSerpZone`; its optional Web Unlocker extraction fallback uses a separate `brightdataUnlockerZone`.
 
 Set `firecrawlBaseUrl` or `FIRECRAWL_BASE_URL` for self-hosted Firecrawl. The configured API may use `localhost`, `127.0.0.0/8`, or `::1`. Loopback redirects must stay on that configured API origin. Submitted fetch and search targets still reject loopback addresses.
 
-To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint.
+To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint. `openaiSearchProviders` sets the ordered Pi provider IDs considered for credentials and models; it defaults to `["openai-codex", "openai"]`.
 
 Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store. On Windows, the opt-in path can read Chrome or Edge `v10` cookies through current-user DPAPI. Chromium `v20` app-bound cookies are unsupported and fail closed. API keys remain the recommended route.
 

@@ -28,6 +28,11 @@ import {
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { verifyRuntimeForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
+import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
+import {
+	verifyGitHubCloneSafety,
+	verifyModelAwareSearchRouting,
+} from "./lib/pi-web-access-runtime-verifier.mjs";
 
 const EXPECTED_FEYNMAN_COMMANDS = Object.freeze([
 	"capabilities",
@@ -566,7 +571,7 @@ export async function verifyWindowsWebCookies() {
 			"",
 			hostKey,
 			"/",
-			0,
+			13_500_000_000_000_000n,
 			encryptWindowsChromiumCookie("installed-one", key, "v10", hostKey),
 		);
 		insert.run(
@@ -574,8 +579,16 @@ export async function verifyWindowsWebCookies() {
 			"",
 			hostKey,
 			"/",
-			0,
+			13_500_000_000_000_000n,
 			encryptWindowsChromiumCookie("installed-two", key, "v10", hostKey),
+		);
+		insert.run(
+			"STALE",
+			"expired",
+			hostKey,
+			"/",
+			13_000_000_000_000_000n,
+			Buffer.alloc(0),
 		);
 		database.close();
 		database = undefined;
@@ -611,9 +624,11 @@ export async function verifyWindowsWebCookies() {
 				"chrome-cookies.ts",
 			),
 		);
-		const decrypted = await cookies.getGoogleCookies({
+		const decrypted = await cookies.getBrowserCookiesForHosts({
+			hosts: ["google.com"],
 			profile: "Default",
 			requiredCookies: ["__Secure-1PSID", "__Secure-1PSIDTS"],
+			requestUrl: new URL("https://google.com/"),
 		});
 		assert.deepEqual(decrypted?.cookies, {
 			"__Secure-1PSID": "installed-one",
@@ -939,6 +954,9 @@ export async function verifyGithubCopilotRateLimitLogin() {
 async function main() {
 	await verifyRpcSurface();
 	await verifyWebAccessRegistrationGates();
+	const githubCloneSafety = verifyGitHubCloneSafety(packageRoot);
+	const modelAwareSearchRouting = verifyModelAwareSearchRouting(packageRoot);
+	const pdfPageLimits = await verifyPdfPageLimits(packageRoot);
 	const windowsWebCookies = await verifyWindowsWebCookies();
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
@@ -953,6 +971,9 @@ async function main() {
 		typeboxOptionalNull: "omitted",
 		typeboxMalformedArguments: "rejected",
 		webAccessRegistrationGates: "passed",
+		githubCloneSafety,
+		modelAwareSearchRouting,
+		pdfPageLimits,
 		windowsWebCookies,
 		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",

@@ -9,6 +9,23 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.32 - 2026-08-21
+
+### Web research
+
+- Updated `pi-web-access` to `0.24.1`. Direct page retrieval now uses the upstream compatibility identity so more public sources return readable content.
+- GitHub source retrieval now validates repository identities and isolates clone-cache destinations by digest before cleanup.
+- `pdf.maxPages` can bound Datalab, Gemini, and local PDF extraction. It defaults to `100`.
+- `openaiSearchProviders` can choose the ordered Pi provider list used for OpenAI-compatible `web_search` calls.
+- Automatic search now prefers Codex-backed OpenAI retrieval when the active model is `openai-codex`; other models try Exa before OpenAI.
+- Opt-in Chrome and Edge research on Windows now reads modern large cookie-expiry values safely in addition to using the corrected PowerShell 5.1 DPAPI path.
+
+### Validation
+
+- Matched every patched source fixture to the published `pi-web-access@0.24.1` package and GitHub tag `v0.24.1`.
+- Preserved Feynman's exact config path, private cache, session model scope, Firecrawl loopback redirect confinement, browser-cookie opt-in, request deadlines, and Windows PowerShell 5.1 DPAPI correction.
+- Added executable retrieval-header, GitHub identity, PDF page-limit, model-aware provider-priority, large Windows cookie-expiry, restored-runtime, and installed-package regressions.
+
 ## v0.3.31 - 2026-08-21
 
 ### Research agents

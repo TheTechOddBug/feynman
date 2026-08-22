@@ -93,10 +93,12 @@ Example:
   "jinaApiKey": "jina_...",
   "perplexityApiKey": "pplx-...",
   "geminiApiKey": "AIza...",
+  "openaiSearchProviders": ["openai-codex", "openai"],
   "datalabApiKey": "$DATALAB_API_KEY",
   "pdf": {
     "enabled": true,
     "provider": "auto",
+    "maxPages": 100,
     "datalabMode": "balanced",
     "datalabTimeoutMs": 120000
   },
@@ -107,7 +109,9 @@ Example:
 
 Gemini Web browser-cookie access is disabled by default. To opt into it, set `"geminiBrowser": true` in `web-search.json`. On Windows, this can read Chrome or Edge `v10` cookies through current-user DPAPI; Chromium `v20` app-bound cookies are unsupported and fail closed. API-backed search is recommended for `/deepresearch`.
 
-PDF extraction uses Datalab when its key is present, then Gemini, then local PDF.js. The local parser remains available without a key.
+PDF extraction uses Datalab when its key is present, then Gemini, then local PDF.js. The local parser remains available without a key. `pdf.maxPages` bounds every tier and defaults to `100`.
+
+`openaiSearchProviders` sets the ordered Pi provider IDs considered for OpenAI-compatible `web_search`; it defaults to `["openai-codex", "openai"]`.
 
 Full fetched pages live in `~/.feynman/web-search-cache/` for one hour. Session files store bounded metadata and a cache reference, not page bodies. If `FEYNMAN_WEB_SEARCH_CONFIG` names another config file, Feynman places `web-search-cache/` beside that file.
 

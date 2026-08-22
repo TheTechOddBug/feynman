@@ -6,8 +6,12 @@ import {
 	syncPiWebAccessForwardFiles,
 } from "./pi-web-access-forward-fixes-patch.mjs";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.0";
-export { PI_WEB_ACCESS_FORWARD_FILE_TARGETS, syncPiWebAccessForwardFiles };
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.1";
+export {
+	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
+	patchPiWebAccessForwardFixSource,
+	syncPiWebAccessForwardFiles,
+};
 
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
@@ -27,6 +31,7 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"gemini-web-config.ts",
 	"gemini-web.ts",
 	"github-extract.ts",
+	"openai-search.ts",
 	"perplexity.ts",
 	"pdf-extract.ts",
 	"video-extract.ts",
@@ -278,8 +283,60 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 	], surface);
 
 	const pdfSource = sources.get("pdf-extract.ts");
-	requireMarkerCount(pdfSource, "pdf-extract.ts", PATCHED_PDF_OUTPUT_DIR, 1, surface);
+	requireMarkerCounts(pdfSource, "pdf-extract.ts", [
+		[PATCHED_PDF_OUTPUT_DIR, 1],
+		["\tmaxPages: number;", 1],
+		["const configuredMaxPages = pdf.maxPages;", 1],
+		["\t\t\t? pdfConfig.maxPages", 1],
+		["maxPages: safeMaxPages,", 2],
+		["const pagesToExtract = Math.min(pdf.numPages, safeMaxPages);", 1],
+		["const truncated = pdf.numPages > safeMaxPages;", 1],
+	], surface);
 	rejectMarkers(pdfSource, "pdf-extract.ts", LEGACY_PDF_OUTPUT_DIRS, surface);
+
+	const extractSource = sources.get("extract.ts");
+	requireMarkerCount(
+		extractSource,
+		"extract.ts",
+		'"User-Agent": "OpenAI File Downloader, XaiImageApiFetch/1.0"',
+		1,
+		surface,
+	);
+	rejectMarkers(
+		extractSource,
+		"extract.ts",
+		["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
+		surface,
+	);
+
+	const githubSource = sources.get("github-extract.ts");
+	requireMarkerCounts(githubSource, "github-extract.ts", [
+		['import { createHash } from "node:crypto";', 1],
+		["function cloneDestination(", 1],
+		['createHash("sha256").update(JSON.stringify([owner, repo, ref ?? null])).digest("hex")', 1],
+		['if (dirname(localPath) !== rootPath || !/^[0-9a-f]{64}$/.test(basename(localPath))) return false;', 1],
+		["if (owner.includes(\"--\")) return null;", 1],
+	], surface);
+	rejectMarkers(
+		githubSource,
+		"github-extract.ts",
+		["function cloneDir(", "rmSync(entry.localPath"],
+		surface,
+	);
+
+	const openaiSource = sources.get("openai-search.ts");
+	requireMarkerCounts(openaiSource, "openai-search.ts", [
+		['const DEFAULT_SEARCH_PROVIDERS: readonly string[] = ["openai-codex", "openai"];', 1],
+		["\topenaiSearchProviders?: unknown;", 1],
+		["function resolveConfiguredSearchProviders(", 1],
+		["for (const provider of providers) {", 1],
+	], surface);
+	rejectMarkers(
+		openaiSource,
+		"openai-search.ts",
+		['const SEARCH_PROVIDERS = ["openai-codex", "openai"] as const;'],
+		surface,
+	);
 
 	const utilsSource = sources.get("utils.ts");
 	requireMarkerCount(utilsSource, "utils.ts", PATCHED_CONFIG_PATH_HELPER, 1, surface);
