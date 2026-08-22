@@ -23,6 +23,7 @@ import {
 } from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
 import { patchPiLlamaUsageSource } from "../../scripts/lib/pi-llama-usage-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
+import { patchPiStateFilePermissionsSource } from "../../scripts/lib/pi-state-file-permissions-patch.mjs";
 import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiUndiciProxyTree } from "../../scripts/lib/pi-undici-proxy-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
@@ -421,6 +422,13 @@ export function patchPiRuntimeNodeModules(
 			"pi-coding-agent",
 			"dist/modes/interactive/interactive-mode.js",
 			patchPiInteractiveUpdateNoticeSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			"dist/core/auth-storage.js",
+			patchPiStateFilePermissionsSource,
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(

@@ -15,6 +15,7 @@ import {
 	assertPiCompactionToolsPackageTree,
 } from "./lib/pi-compaction-tools-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
+import { assertPiStateFilePermissionsPatchSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
@@ -195,7 +196,7 @@ requireMarkers(
 		"valid-typebox-probe",
 		"null-typebox-probe",
 		"invalid-typebox-probe",
-		"verifyGithubCopilotRateLimitLogin",
+		"verifyGithubCopilotRateLimitLogin", "verifyInstalledPiStateFilePermissions",
 		'githubCopilotRateLimit: "passed"',
 		"terminateChildProcessTree",
 	],
@@ -312,7 +313,13 @@ for (const [target, relativePath] of [
 }
 assertPiAiForwardFixPackageTree(packageRoot, readText);
 assertPiCompactionToolsPackageTree(packageRoot, readText);
-
+assertPiStateFilePermissionsPatchSource(
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "auth-storage.js"),
+		"bundled Pi auth storage",
+	),
+	"bundled Pi auth storage",
+);
 requireMarkers(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "model-runtime.js"),
@@ -716,6 +723,13 @@ requireMarkers(
 	"runtime Pi ModelRuntime",
 	["function assertHeaderSafeRequestConfig(", "providerOptions.apiKey ?? resolution.auth.apiKey"],
 );
+assertPiStateFilePermissionsPatchSource(
+	readArchivedText(
+		archivePath,
+		"npm/node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js",
+	),
+	"runtime Pi auth storage",
+);
 assertPiLlamaUsagePatchSource(
 	readArchivedText(
 		archivePath,
@@ -776,26 +790,21 @@ requireMarkers(
 		'const cursor = "\\x1b[7m \\x1b[27m"',
 	],
 );
-requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/@companion-ai/alpha-hub/src/lib/auth.js",
-	),
-	"runtime alpha-hub auth",
-	["https://api.alphaxiv.org/auth", "waitForCallback(server, state)", "OAuth state mismatch"],
-);
-requireMarkers(
-	readArchivedText(
-		archivePath,
-		"npm/node_modules/@companion-ai/alpha-hub/src/lib/alphaxiv.js",
-	),
-	"runtime alpha-hub client",
-	[
+for (const [fileName, label, markers] of [
+	["auth.js", "auth", ["https://api.alphaxiv.org/auth", "waitForCallback(server, state)", "OAuth state mismatch"]],
+	["alphaxiv.js", "client", [
 		"async function searchRestFast(",
 		"return await fallbackSearch(",
 		"return await callTool('answer_pdf_queries', { paper: url, queries: [query] });",
-	],
-);
+	]],
+	["index.js", "parser", ["function parseStructuredSearchResults("]],
+]) {
+	requireMarkers(
+		readArchivedText(archivePath, `npm/node_modules/@companion-ai/alpha-hub/src/lib/${fileName}`),
+		`runtime alpha-hub ${label}`,
+		markers,
+	);
+}
 requireMarkers(
 	readArchivedText(
 		archivePath,

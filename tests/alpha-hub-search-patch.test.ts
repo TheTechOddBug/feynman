@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../scripts/lib/alpha-hub-search-patch.mjs";
 
@@ -189,4 +190,23 @@ test("patchAlphaHubSearchResultsSource parses structured JSON search payloads", 
 
 	const twice = patchAlphaHubSearchResultsSource(patched);
 	assert.equal(twice, patched);
+});
+
+test("runtime rebuilds and package verification preserve the structured alphaXiv parser", () => {
+	const runtimeWorkspaceSource = readFileSync("scripts/prepare-runtime-workspace.mjs", "utf8");
+	const packageVerifierSource = readFileSync("scripts/verify-package-artifact.mjs", "utf8");
+
+	assert.match(
+		runtimeWorkspaceSource,
+		/import \{\s*patchAlphaHubSearchResultsSource,\s*patchAlphaHubSearchSource,\s*\} from "\.\/lib\/alpha-hub-search-patch\.mjs"/,
+	);
+	assert.match(
+		runtimeWorkspaceSource,
+		/\["index\.js", patchAlphaHubSearchResultsSource\]/,
+	);
+	assert.match(
+		packageVerifierSource,
+		/\["index\.js", "parser", \["function parseStructuredSearchResults\("\]\]/,
+	);
+	assert.match(packageVerifierSource, /`npm\/node_modules\/@companion-ai\/alpha-hub\/src\/lib\/\$\{fileName\}`/);
 });

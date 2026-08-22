@@ -28,6 +28,7 @@ import {
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { verifyRuntimeForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
+import { verifyInstalledPiStateFilePermissions } from "./lib/pi-state-file-permissions-verifier.mjs";
 import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
 import {
 	verifyGitHubCloneSafety,
@@ -509,7 +510,7 @@ function protectWindowsData(value) {
 	const script = [
 		"$ErrorActionPreference='Stop';",
 		"Add-Type -AssemblyName System.Security;",
-		"$encoded=[Console]::In.ReadToEnd();",
+		"$encoded=$env:FEYNMAN_DPAPI_FIXTURE_INPUT;",
 		"$data=[Convert]::FromBase64String($encoded);",
 		"$protected=[Security.Cryptography.ProtectedData]::Protect(",
 		"$data,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser);",
@@ -525,9 +526,17 @@ function protectWindowsData(value) {
 		],
 		{
 			encoding: "utf8",
-			input: value.toString("base64"),
+			env: {
+				...process.env,
+				FEYNMAN_DPAPI_FIXTURE_INPUT: value.toString("base64"),
+			},
 			maxBuffer: 1024 * 1024,
-			timeout: 10_000,
+			// Windows Node 25 consumers can spend more than ten seconds on the
+			// first cold PowerShell/.NET assembly load after large npm installs.
+			// Keep this synthetic fixture key out of synchronous stdin and the
+			// PowerShell command expression, and leave a bounded cold-start budget.
+			// The runtime's actual DPAPI decryptor below still exercises stdin.
+			timeout: 60_000,
 			windowsHide: true,
 		},
 	).trim();
@@ -962,6 +971,7 @@ async function main() {
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot);
 	await verifyPiCompactionToolsBehavior(packageRoot);
+	const stateFilePermissions = await verifyInstalledPiStateFilePermissions(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
 		commands: EXPECTED_FEYNMAN_COMMANDS.length,
@@ -979,6 +989,7 @@ async function main() {
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",
 		compactionTools: "disabled",
+		stateFilePermissions,
 	}));
 }
 

@@ -101,6 +101,9 @@ test("package artifact verification checks every pi-web-access patch target", ()
 	);
 	assert.match(installedVerifier, /export async function verifyWindowsWebCookies\(\)/);
 	assert.match(installedVerifier, /DataProtectionScope\]::CurrentUser/);
+	assert.match(installedVerifier, /"\$encoded=\$env:FEYNMAN_DPAPI_FIXTURE_INPUT;"/);
+	assert.match(installedVerifier, /FEYNMAN_DPAPI_FIXTURE_INPUT: value\.toString\("base64"\)/);
+	assert.match(installedVerifier, /timeout: 60_000/);
 	assert.match(installedVerifier, /encryptWindowsChromiumCookie\("installed-one", key, "v10", hostKey\)/);
 	assert.match(installedVerifier, /encryptWindowsChromiumCookie\("blocked-one", key, "v20"\)/);
 	assert.match(installedVerifier, /const windowsWebCookies = await verifyWindowsWebCookies\(\);/);

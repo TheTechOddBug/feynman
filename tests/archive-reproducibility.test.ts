@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import {
+	appendFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
+import { gunzipSync } from "node:zlib";
 
 import {
 	createDeterministicTarGz,
@@ -58,6 +70,27 @@ test("archive inputs remain content-sensitive", async () => {
 	appendFileSync(join(tree, "README.md"), "changed\n");
 	await createDeterministicTarGz(tree, second);
 	assert.notEqual(computeFileSha256(first), computeFileSha256(second));
+});
+
+test("tar.gz archives are published only after compression completes", async (context) => {
+	const { root, tree } = fixture();
+	context.after(() => rmSync(root, { recursive: true, force: true }));
+	writeFileSync(join(tree, "large.bin"), randomBytes(8 * 1024 * 1024));
+	const archive = join(root, "published.tar.gz");
+	let completed = false;
+	const creation = createDeterministicTarGz(tree, archive).finally(() => {
+		completed = true;
+	});
+	const observation = (async () => {
+		while (!completed && !existsSync(archive)) {
+			await delay(1);
+		}
+		if (!completed) {
+			assert.doesNotThrow(() => gunzipSync(readFileSync(archive)));
+		}
+	})();
+	await Promise.all([creation, observation]);
+	assert.doesNotThrow(() => gunzipSync(readFileSync(archive)));
 });
 
 test("BSD tar archives exclude host metadata that changes across clean installs", () => {

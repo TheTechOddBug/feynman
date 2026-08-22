@@ -240,13 +240,123 @@ test("patchPiSubagentsSource registers split prompt metadata by default", () => 
 	const patchedDescription = patchPiSubagentsSource("src/extension/tool-description.ts", toolDescription);
 	const patchedIndex = patchPiSubagentsSource("src/extension/index.ts", extensionIndex);
 
-	assert.match(patchedDescription, /feynman-pi-subagents-prompt-metadata-v1/);
+	assert.match(patchedDescription, /feynman-pi-subagents-prompt-metadata-v2/);
 	assert.match(patchedDescription, /Delegate to configured research subagents/);
+	assert.match(patchedDescription, /run `feynman model list` first/);
+	assert.match(patchedDescription, /exact approved provider\/model/);
+	assert.match(patchedDescription, /Never pass a bare model id or an agent name/);
+	assert.equal(
+		patchedDescription.split(
+			"Never pass a bare model id or an agent name as the model.",
+		).length - 1,
+		3,
+	);
 	assert.match(patchedDescription, /buildSubagentToolPromptMetadata/);
 	assert.match(patchedDescription, /if \(config\.toolDescriptionMode === undefined\) return DEFAULT_SUBAGENT_TOOL_DESCRIPTION/);
 	assert.match(patchedIndex, /\.\.\.buildSubagentToolPromptMetadata\(config\)/);
 	assert.equal(patchPiSubagentsSource("src/extension/tool-description.ts", patchedDescription), patchedDescription);
 	assert.equal(patchPiSubagentsSource("src/extension/index.ts", patchedIndex), patchedIndex);
+	const guidance =
+		"When a child needs an explicit model, run `feynman model list` first and copy an exact approved provider/model. Never pass a bare model id or an agent name as the model.";
+	assert.throws(
+		() => patchPiSubagentsSource(
+			"src/extension/tool-description.ts",
+			patchedDescription.replace(guidance, "Malformed selector guidance."),
+		),
+		/expected 1 prompt model selector guidance copy, found 0/,
+	);
+	assert.throws(
+		() => patchPiSubagentsSource(
+			"src/extension/tool-description.ts",
+			patchedDescription.replace(guidance, `${guidance} ${guidance}`),
+		),
+		/expected 1 prompt model selector guidance copy, found 2/,
+	);
+	assert.throws(
+		() => patchPiSubagentsSource(
+			"src/extension/tool-description.ts",
+			`${patchedDescription}\n// feynman-pi-subagents-prompt-metadata-v1`,
+		),
+		/expected 0 stale v1 patch markers, found 1/,
+	);
+	const descriptionGuidance = `\n\n• ${guidance.replaceAll("`", "\\`")}`;
+	const compactStart = patchedDescription.indexOf(
+		"export const COMPACT_SUBAGENT_TOOL_DESCRIPTION",
+	);
+	const compactGuidance = patchedDescription.indexOf(
+		descriptionGuidance,
+		compactStart,
+	);
+	const withoutCompactGuidance =
+		patchedDescription.slice(0, compactGuidance) +
+		patchedDescription.slice(compactGuidance + descriptionGuidance.length);
+	const fullEnd = withoutCompactGuidance.indexOf(
+		"`;",
+		withoutCompactGuidance.indexOf("export const FULL_SUBAGENT_TOOL_DESCRIPTION"),
+	);
+	const relocatedGuidance =
+		withoutCompactGuidance.slice(0, fullEnd) +
+		descriptionGuidance +
+		withoutCompactGuidance.slice(fullEnd);
+	assert.throws(
+		() => patchPiSubagentsSource(
+			"src/extension/tool-description.ts",
+			relocatedGuidance,
+		),
+		/FULL_SUBAGENT_TOOL_DESCRIPTION model selector guidance copy/,
+	);
+});
+
+test("patchPiSubagentsSource upgrades v1 prompt metadata with approved model guidance", () => {
+	const guidance =
+		"When a child needs an explicit model, run `feynman model list` first and copy an exact approved provider/model. Never pass a bare model id or an agent name as the model.";
+	const descriptionGuidance = guidance.replaceAll("`", "\\`");
+	const currentRuntime = readFileSync(
+		resolve(
+			process.cwd(),
+			".feynman",
+			"npm",
+			"node_modules",
+			"pi-subagents",
+			"src",
+			"extension",
+			"tool-description.ts",
+		),
+		"utf8",
+	).replace(
+		"feynman-pi-subagents-prompt-metadata-v2",
+		"feynman-pi-subagents-prompt-metadata-v1",
+	).replace(
+		`\t${JSON.stringify(guidance)},\n`,
+		"",
+	).replaceAll(
+		`\n\n• ${descriptionGuidance}`,
+		"",
+	);
+
+	const patched = patchPiSubagentsSource(
+		"src/extension/tool-description.ts",
+		currentRuntime,
+	);
+
+	assert.match(patched, /feynman-pi-subagents-prompt-metadata-v2/);
+	assert.doesNotMatch(patched, /feynman-pi-subagents-prompt-metadata-v1/);
+	assert.match(patched, /run `feynman model list` first/);
+	assert.equal(
+		patched.split("Never pass a bare model id or an agent name as the model.").length - 1,
+		3,
+	);
+	assert.equal(
+		patchPiSubagentsSource("src/extension/tool-description.ts", patched),
+		patched,
+	);
+	assert.throws(
+		() => patchPiSubagentsSource(
+			"src/extension/tool-description.ts",
+			`${currentRuntime}\n// feynman-pi-subagents-prompt-metadata-v1`,
+		),
+		/expected 1 v1 patch marker, found 2/,
+	);
 });
 
 test("patchPiSubagentsSource is idempotent", () => {

@@ -1,9 +1,51 @@
 export const PI_SUBAGENTS_PROMPT_METADATA_UPSTREAM_FIX =
 	"https://github.com/nicobailon/pi-subagents/commit/27784eed57dd62021a7add4990ac2dada6690baa";
+export const PI_SUBAGENTS_MODEL_SELECTOR_GUIDANCE_UPSTREAM_FIX =
+	"https://github.com/nicobailon/pi-subagents/commit/62e0934c93c26c532a4aa76af4e72100f8aed965";
+// Remove only after a compatible pi-subagents release exposes launchable,
+// model-scope-aware selectors that preserve Feynman's premium-model policy.
 export const PI_SUBAGENTS_PROMPT_METADATA_PATCH_MARKER =
-	"feynman-pi-subagents-prompt-metadata-v1";
+	"feynman-pi-subagents-prompt-metadata-v2";
 
 const PATCH_MARKER = PI_SUBAGENTS_PROMPT_METADATA_PATCH_MARKER;
+const PRIOR_PATCH_MARKER = "feynman-pi-subagents-prompt-metadata-v1";
+const MODEL_SELECTOR_GUIDANCE_TEXT =
+	"When a child needs an explicit model, run `feynman model list` first and copy an exact approved provider/model. Never pass a bare model id or an agent name as the model.";
+const MODEL_SELECTOR_GUIDANCE =
+	`\t${JSON.stringify(MODEL_SELECTOR_GUIDANCE_TEXT)},`;
+const MODEL_SELECTOR_DESCRIPTION_GUIDANCE =
+	MODEL_SELECTOR_GUIDANCE_TEXT.replaceAll("`", "\\`");
+
+function countOccurrences(source, marker) {
+	return source.split(marker).length - 1;
+}
+
+function requireCount(source, marker, expected, label) {
+	const actual = countOccurrences(source, marker);
+	if (actual !== expected) {
+		throw new Error(
+			`Cannot apply ${PATCH_MARKER}: expected ${expected} ${label}, found ${actual}.`,
+		);
+	}
+}
+
+function assertPatchedToolDescription(source) {
+	requireCount(source, PATCH_MARKER, 1, "v2 patch marker");
+	requireCount(source, PRIOR_PATCH_MARKER, 0, "stale v1 patch markers");
+	requireCount(source, MODEL_SELECTOR_GUIDANCE_TEXT, 1, "prompt model selector guidance copy");
+	for (const exportName of [
+		"FULL_SUBAGENT_TOOL_DESCRIPTION",
+		"COMPACT_SUBAGENT_TOOL_DESCRIPTION",
+	]) {
+		const { description } = findDescription(source, exportName);
+		requireCount(
+			description,
+			MODEL_SELECTOR_DESCRIPTION_GUIDANCE,
+			1,
+			`${exportName} model selector guidance copy`,
+		);
+	}
+}
 
 function replaceRequired(source, original, replacement, label) {
 	if (!source.includes(original)) {
@@ -12,9 +54,56 @@ function replaceRequired(source, original, replacement, label) {
 	return source.replace(original, replacement);
 }
 
+function findDescription(source, exportName) {
+	const startMarker = `export const ${exportName} = \``;
+	requireCount(source, startMarker, 1, `${exportName} declarations`);
+	const start = source.indexOf(startMarker) + startMarker.length;
+	const end = source.indexOf("`;", start);
+	if (end < 0) {
+		throw new Error(`Cannot apply ${PATCH_MARKER}: missing ${exportName} terminator.`);
+	}
+	return { description: source.slice(start, end), end };
+}
+
+function appendDescriptionGuidance(source, exportName) {
+	const { description, end } = findDescription(source, exportName);
+	if (description.includes(MODEL_SELECTOR_GUIDANCE_TEXT)) {
+		throw new Error(`Cannot apply ${PATCH_MARKER}: ${exportName} already contains model selector guidance.`);
+	}
+	return `${source.slice(0, end)}\n\n• ${MODEL_SELECTOR_DESCRIPTION_GUIDANCE}${source.slice(end)}`;
+}
+
+function addModelSelectorGuidance(source) {
+	let patched = replaceRequired(
+		source,
+		[
+			'\t"Keep one subagent writer per cwd or worktree. Use fresh read-only reviewers, then let the parent synthesize and apply fixes.",',
+			'\t"Ordinary subagent children do not delegate. Use the pi-subagents skill for advanced execution, control, and safety details.",',
+		].join("\n"),
+		[
+			'\t"Keep one subagent writer per cwd or worktree. Use fresh read-only reviewers, then let the parent synthesize and apply fixes.",',
+			MODEL_SELECTOR_GUIDANCE,
+			'\t"Ordinary subagent children do not delegate. Use the pi-subagents skill for advanced execution, control, and safety details.",',
+		].join("\n"),
+		"model selector prompt guidance",
+	);
+	patched = appendDescriptionGuidance(patched, "FULL_SUBAGENT_TOOL_DESCRIPTION");
+	patched = appendDescriptionGuidance(patched, "COMPACT_SUBAGENT_TOOL_DESCRIPTION");
+	return patched;
+}
+
 function patchToolDescription(source) {
 	if (source.includes(PATCH_MARKER)) {
+		assertPatchedToolDescription(source);
 		return source;
+	}
+	if (source.includes(PRIOR_PATCH_MARKER)) {
+		requireCount(source, PRIOR_PATCH_MARKER, 1, "v1 patch marker");
+		const patched = addModelSelectorGuidance(
+			source.replace(PRIOR_PATCH_MARKER, PATCH_MARKER),
+		);
+		assertPatchedToolDescription(patched);
+		return patched;
 	}
 
 	let patched = replaceRequired(
@@ -93,6 +182,8 @@ function patchToolDescription(source) {
 		"default split-metadata description",
 	);
 
+	patched = addModelSelectorGuidance(patched);
+	assertPatchedToolDescription(patched);
 	return patched;
 }
 
@@ -156,6 +247,9 @@ export function assertPiSubagentPromptMetadataSources(readSource, label = "pi-su
 		const source = readSource(relativePath);
 		if (typeof source !== "string") {
 			throw new Error(`${label} is missing ${relativePath}`);
+		}
+		if (relativePath === "src/extension/tool-description.ts") {
+			assertPatchedToolDescription(source);
 		}
 		for (const marker of markers) {
 			if (!source.includes(marker)) {

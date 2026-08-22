@@ -24,6 +24,7 @@ import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
 import {
@@ -115,13 +116,13 @@ function resolveWorkspaceNestedPiFiles(workspaceRoot, nestedPackageName, ...segm
 if (!piPackageRoot) {
 	console.warn("[feynman] pi-coding-agent not found, skipping Pi patches");
 }
-
 const packageJsonPath = piPackageRoot ? resolve(piPackageRoot, "package.json") : null;
 const cliPath = piPackageRoot ? resolve(piPackageRoot, "dist", "cli.js") : null;
 const bunCliPath = piPackageRoot ? resolve(piPackageRoot, "dist", "bun", "cli.js") : null;
 const interactiveModePath = piPackageRoot ? resolve(piPackageRoot, "dist", "modes", "interactive", "interactive-mode.js") : null;
 const interactiveThemePath = piPackageRoot ? resolve(piPackageRoot, "dist", "modes", "interactive", "theme", "theme.js") : null;
 const extensionLoaderPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "extensions", "loader.js") : null;
+const authStoragePath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "auth-storage.js") : null;
 const modelRegistryPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-registry.js") : null;
 const modelRuntimePath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "model-runtime.js") : null;
 const agentSessionPath = piPackageRoot ? resolve(piPackageRoot, "dist", "core", "agent-session.js") : null;
@@ -197,7 +198,6 @@ function assertPiPackageVersion(packageRoot, surface) {
 	const version = JSON.parse(readFileSync(resolve(packageRoot, "package.json"), "utf8")).version;
 	assertPiRuntimeCorrectnessVersion(version, surface);
 }
-
 function shouldPatchPiRuntimeCorrectnessFile(entryPath) {
 	let current = dirname(entryPath);
 	while (current !== dirname(current)) {
@@ -955,7 +955,6 @@ if (interactiveModePath && existsSync(interactiveModePath)) {
 		);
 	}
 }
-
 for (const loaderPath of [extensionLoaderPath, workspaceExtensionLoaderPath].filter(Boolean)) {
 	if (!existsSync(loaderPath)) {
 		continue;
@@ -967,10 +966,11 @@ for (const loaderPath of [extensionLoaderPath, workspaceExtensionLoaderPath].fil
 		writeFileSync(loaderPath, patched, "utf8");
 	}
 }
-
-
 const workspaceModelRegistryPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-registry.js");
 const workspaceModelRuntimePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-runtime.js");
+const workspaceAuthStoragePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "auth-storage.js");
+assertPiPackageVersion(dirname(resolveWorkspacePiFile("pi-coding-agent", "package.json")), "vendored pi-coding-agent");
+patchFilesIfPresent([authStoragePath, workspaceAuthStoragePath], patchPiStateFilePermissionsSource);
 for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegistryPath, workspaceModelRuntimePath].filter(Boolean)) {
 	if (!existsSync(entryPath)) continue;
 	const source = readFileSync(entryPath, "utf8");
