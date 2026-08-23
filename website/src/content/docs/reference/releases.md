@@ -9,6 +9,17 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.36 - 2026-08-23
+
+### Research runtime
+
+- Cross-platform runtime repair now allows up to fifteen minutes for the exact locked npm restore. This keeps slow Windows and Node 25 clean installs from terminating a valid research-runtime rebuild at the previous five-minute process limit.
+
+### Validation
+
+- Reproduced the published `0.3.35` failure on Windows with Node 25 after npm exhausted the five-minute child-process budget, while the same package passed the other five Node/OS consumers and all three native installers.
+- Added an exact timeout regression and retained fail-closed lock, package-graph, and post-install verification.
+
 ## v0.3.35 - 2026-08-22
 
 ### Research runtime

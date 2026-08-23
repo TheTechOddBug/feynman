@@ -16,6 +16,8 @@ const FILTERED_INSTALL_OUTPUT_PATTERNS = [
 	/^run `npm fund` for details$/i,
 ];
 
+export const RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS = 15 * 60_000;
+
 function getPathWithCurrentNode(pathValue = process.env.PATH ?? "") {
 	const nodeDir = dirname(process.execPath);
 	const parts = pathValue.split(delimiter).filter(Boolean);
@@ -170,7 +172,7 @@ export function installRuntimeWorkspaceFromPackageLock(
 			cwd: workspaceDir,
 			shell: invocation.shell,
 			stdio: ["ignore", "pipe", "pipe"],
-			timeout: 300000,
+			timeout: RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS,
 			env: {
 				...process.env,
 				PATH: getPathWithCurrentNode(),

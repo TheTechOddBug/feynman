@@ -16,6 +16,7 @@ import {
 import {
 	buildSourceRuntimeArchive,
 	installRuntimeWorkspaceFromPackageLock,
+	RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS,
 } from "../scripts/lib/runtime-workspace-install.mjs";
 
 test("source checkout builds the exact authenticated runtime archive", () => {
@@ -218,6 +219,7 @@ test("installed package cannot rebuild missing or damaged runtime archives", () 
 });
 
 test("package-manager fallback uses npm ci and rejects lock mutation", () => {
+	assert.equal(RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS, 15 * 60_000);
 	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-exact-lock-"));
 	const lockPath = join(root, "package-lock.json");
 	const lockSource =
@@ -244,6 +246,10 @@ test("package-manager fallback uses npm ci and rejects lock mutation", () => {
 					assert.equal(options.env.NPM_CONFIG_LOCATION, "project");
 					assert.equal(options.env.npm_config_dry_run, "false");
 					assert.equal(options.env.NPM_CONFIG_DRY_RUN, "false");
+					assert.equal(
+						options.timeout,
+						RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS,
+					);
 					mkdirSync(join(root, "node_modules"));
 					return {
 						status: 0,
