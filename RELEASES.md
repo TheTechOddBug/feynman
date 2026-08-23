@@ -15,9 +15,13 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 - Research prompts beginning with `-` now pass safely through Pi's standard `--` end-of-options delimiter instead of being mistaken for runtime options.
 - Updated `pi-web-access` to `0.24.2`. Automatic search prefers Codex-backed OpenAI search when the active model is `openai-codex`, keeps Exa first for other models, and reads Windows Chromium cookie expiries without overflowing JavaScript numbers.
 
+### Workbench security
+
+- Updated Ketcher to `3.17.2`, which renders monomer labels from opened chemistry artifacts as text instead of interpolating them as HTML.
+
 ### Validation
 
-- Added atomic restore, completion-marker, package-lock-graph, missing-transitive-file, exact-lock fallback, pre-publication patch, crash-backup, stale-lock, stale-stage cleanup, Windows npm-link, terminated-process, child-model verification, dash-leading prompt, exact `pi-web-access@0.24.2` source, model-routing, and Windows-cookie regressions.
+- Added atomic restore, completion-marker, package-lock-graph, missing-transitive-file, exact-lock fallback, pre-publication patch, crash-backup, stale-lock, stale-stage cleanup, Windows npm-link, terminated-process, child-model verification, dash-leading prompt, exact `pi-web-access@0.24.2` source, model-routing, Windows-cookie, and Ketcher monomer-label regressions.
 
 ## v0.3.34 - 2026-08-22
 

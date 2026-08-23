@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-22 22:36 EDT — ketcher-monomer-xss-0.3.35
+
+- Objective: Close the remaining chemistry-artifact security gap in the `0.3.35` release candidate rather than treating a clean production audit as complete package intake.
+- Verified upstream: Ketcher release `v3.17.1` identifies the monomer-label KET-file XSS, and its sole comparison commit `37b6fc4` replaces HTML interpolation with a D3 `.text(this.monomer.label)` sink. The exact `ketcher-core@3.17.2` npm artifact retains that fix at git head `8f4687f`; the prior `3.15.0` artifact does not contain the corrected `foreignObject` path.
+- Changed: Pinned `ketcher-core`, `ketcher-react`, and `ketcher-standalone` to `3.17.2`, refreshed the exact lock, added an installed-source regression, and updated root and website release notes.
+- CI repair: Clean Linux run `32612978719` exposed a fixture-only platform omission: the native-runtime fixture did not record `glibc` or `musl`, while the production completion verifier correctly requires that identity for Linux package graphs. The fixture now derives the current Linux libc exactly as the runtime builder does.
+- Verification: The complete local suite passes `900/900`; the Ketcher and native-runtime regressions pass `6/6`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site audits, freshness review, and `git diff --check` pass. The earlier non-Ketcher workbench user-agent HTTP `500` did not reproduce in the full rerun or three focused executions. State: `unverified` until package/consumer proof, Daytona, successor CI, merge, and publication. Next: persist and prove the exact successor through clean package and platform matrices.
+
 ### 2026-08-22 22:16 EDT — runtime-extraction-integrity-0.3.35-ci-repair
 
 - Reproduced: PR `#247` run `32611290931` failed because a clean checkout tracks the exact runtime lock but intentionally ignores the generated runtime archive and digest; `npm test` tried authenticated restore before any source-only archive build. The Windows native job also rejected an incomplete legacy Pi package.

@@ -6,6 +6,41 @@ import test from "node:test";
 
 import { testableChemistrySketcher } from "../extensions/research-tools/chemistry-sketcher.js";
 
+test("bundled Ketcher treats untrusted monomer labels as text", () => {
+	for (const packageName of [
+		"ketcher-core",
+		"ketcher-react",
+		"ketcher-standalone",
+	]) {
+		const packageJson = JSON.parse(
+			readFileSync(
+				join(process.cwd(), "node_modules", packageName, "package.json"),
+				"utf8",
+			),
+		);
+		assert.equal(packageJson.version, "3.17.2", packageName);
+	}
+
+	const ketcherCore = readFileSync(
+		join(
+			process.cwd(),
+			"node_modules",
+			"ketcher-core",
+			"dist",
+			"index.modern.js",
+		),
+		"utf8",
+	);
+	assert.match(
+		ketcherCore,
+		/foreignObject\.append\('xhtml:div'\)[^;]+\.text\(this\.monomer\.label\)/,
+	);
+	assert.doesNotMatch(
+		ketcherCore,
+		/\.html\([^;]{0,1000}this\.monomer\.label/,
+	);
+});
+
 test("chemistry sketcher creates Feynman-owned SMILES artifacts", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-chemistry-sketcher-"));
 	try {

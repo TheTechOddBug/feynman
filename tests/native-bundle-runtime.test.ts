@@ -50,6 +50,15 @@ async function createNativeRuntimeFixture({ launchable = false } = {}) {
 	const archivePath = join(feynmanDir, "runtime-workspace.tgz");
 	const digestPath = join(feynmanDir, "runtime-workspace.sha256");
 	const packageSpecs = ["runtime-package@1.0.0"];
+	const runtimeReport = process.report?.getReport?.() as
+		| { header?: { glibcVersionRuntime?: string } }
+		| undefined;
+	const libc =
+		process.platform === "linux"
+			? runtimeReport?.header?.glibcVersionRuntime
+				? "glibc"
+				: "musl"
+			: undefined;
 
 	mkdirSync(runtimePackageDir, { recursive: true });
 	writeFileSync(
@@ -91,6 +100,7 @@ async function createNativeRuntimeFixture({ launchable = false } = {}) {
 			nodeAbi: process.versions.modules,
 			platform: process.platform,
 			arch: process.arch,
+			libc,
 			pruneVersion: 8,
 			runtimeTreeHash: computeRuntimeTreeHash(sourceWorkspaceDir),
 		}, null, 2)}\n`,
