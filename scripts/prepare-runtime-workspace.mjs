@@ -1,10 +1,11 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
 	assertPiCliArgsVersion,
+	ensureLegacyPiRuntimeAliases,
 	patchPiCliArgsSource,
 } from "./lib/pi-cli-args-patch.mjs";
 import {
@@ -124,12 +125,6 @@ const PINNED_RUNTIME_PACKAGES = [
 	"typebox",
 	"undici",
 ];
-const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
-	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
-	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
-	"@mariozechner/pi-coding-agent": "@earendil-works/pi-coding-agent",
-	"@mariozechner/pi-tui": "@earendil-works/pi-tui",
-};
 const NATIVE_PACKAGE_SPECS = new Set([
 	"@kaiserlich-dev/pi-session-search",
 ]);
@@ -369,38 +364,8 @@ function pruneWorkspace() {
 	}
 }
 
-function linkDirectory(linkPath, targetPath) {
-	try {
-		if (existsSync(linkPath) && lstatSync(linkPath).isSymbolicLink()) {
-			if (resolve(dirname(linkPath), readlinkSync(linkPath)) === targetPath) {
-				return;
-			}
-			rmSync(linkPath, { force: true });
-		}
-	} catch {}
-
-	if (existsSync(linkPath)) {
-		return;
-	}
-
-	mkdirSync(dirname(linkPath), { recursive: true });
-	try {
-		symlinkSync(relative(dirname(linkPath), targetPath), linkPath, process.platform === "win32" ? "junction" : "dir");
-	} catch {
-		if (!existsSync(linkPath)) {
-			cpSync(targetPath, linkPath, { recursive: true });
-		}
-	}
-}
-
 function linkLegacyPiRuntimeAliases() {
-	for (const [legacyName, currentName] of Object.entries(LEGACY_PI_RUNTIME_PACKAGE_ALIASES)) {
-		const currentPath = resolve(workspaceNodeModulesDir, currentName);
-		if (!existsSync(currentPath)) {
-			continue;
-		}
-		linkDirectory(resolve(workspaceNodeModulesDir, legacyName), currentPath);
-	}
+	return ensureLegacyPiRuntimeAliases(workspaceNodeModulesDir);
 }
 
 function patchBundledPiSubagents() {

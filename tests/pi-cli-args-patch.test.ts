@@ -3,16 +3,19 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readlinkSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 import {
 	assertPiCliArgsPatchSource,
 	assertPiCliArgsVersion,
+	ensureLegacyPiRuntimeAliases,
 	patchPiCliArgsSource,
 } from "../scripts/lib/pi-cli-args-patch.mjs";
 import { buildPiArgs } from "../src/pi/runtime.js";
@@ -64,6 +67,71 @@ const REVIEWED_ARGS_FIXTURE = `export function parseArgs(args) {
     return result;
 }
 `;
+
+test("legacy Pi runtime aliases use rename-stable relative directory links", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-pi-alias-repair-"));
+	const nodeModulesRoot = join(root, "node_modules");
+	const currentRoot = join(
+		nodeModulesRoot,
+		"@earendil-works",
+		"pi-coding-agent",
+	);
+	const legacyRoot = join(
+		nodeModulesRoot,
+		"@mariozechner",
+		"pi-coding-agent",
+	);
+	const manifest = `${JSON.stringify({
+		name: "@earendil-works/pi-coding-agent",
+		version: "0.84.2",
+	})}\n`;
+	try {
+		mkdirSync(currentRoot, { recursive: true });
+		writeFileSync(join(currentRoot, "package.json"), manifest);
+
+		assert.equal(ensureLegacyPiRuntimeAliases(nodeModulesRoot), 1);
+		assert.equal(readFileSync(join(legacyRoot, "package.json"), "utf8"), manifest);
+		assert.equal(
+			resolve(dirname(legacyRoot), readlinkSync(legacyRoot)),
+			currentRoot,
+		);
+		assert.equal(ensureLegacyPiRuntimeAliases(nodeModulesRoot), 0);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("legacy Pi runtime alias repair refuses an unexpected link target", () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-pi-alias-target-"));
+	const nodeModulesRoot = join(root, "node_modules");
+	const currentRoot = join(
+		nodeModulesRoot,
+		"@earendil-works",
+		"pi-coding-agent",
+	);
+	const legacyRoot = join(
+		nodeModulesRoot,
+		"@mariozechner",
+		"pi-coding-agent",
+	);
+	try {
+		mkdirSync(currentRoot, { recursive: true });
+		writeFileSync(
+			join(currentRoot, "package.json"),
+			'{"name":"@earendil-works/pi-coding-agent","version":"0.84.2"}\n',
+		);
+		mkdirSync(resolve(legacyRoot, ".."), { recursive: true });
+		symlinkSync("../unexpected-package", legacyRoot, "dir");
+
+		assert.throws(
+			() => ensureLegacyPiRuntimeAliases(nodeModulesRoot),
+			/unexpected target/,
+		);
+		assert.equal(readlinkSync(legacyRoot), "../unexpected-package");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
 
 function relocateExactPatchLoopIntoComment(source: string): string {
 	const marker =
@@ -482,7 +550,7 @@ test("production and preparation scripts preflight Pi parsers before patch write
 	assert.ok(firstPostSetupPatch > workspacePreflight);
 	assert.match(
 		installedPatcher,
-		/validateWorkspace: \(stagedWorkspaceDir\) => \{[\s\S]*preflightPiCliArgsPackageRoots\([\s\S]*return workspaceMatchesRuntime\(/,
+		/validateWorkspace: \(stagedWorkspaceDir\) => \{[\s\S]*ensureLegacyPiRuntimeAliases\([\s\S]*preflightPiCliArgsPackageRoots\([\s\S]*return workspaceMatchesRuntime\(/,
 	);
 	assert.match(
 		installedPatcher,

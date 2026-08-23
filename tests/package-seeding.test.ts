@@ -185,7 +185,7 @@ test("prepare runtime workspace links legacy Pi aliases instead of installing du
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
 
 	assert.match(runtimeWorkspaceSource, /function linkLegacyPiRuntimeAliases/);
-	assert.match(runtimeWorkspaceSource, /symlinkSync\(relative\(dirname\(linkPath\), targetPath\), linkPath/);
+	assert.match(runtimeWorkspaceSource, /ensureLegacyPiRuntimeAliases\(workspaceNodeModulesDir\)/);
 	assert.doesNotMatch(runtimeWorkspaceSource, /packageSpecs\.push\(`\$\{legacyName\}@npm:/);
 });
 

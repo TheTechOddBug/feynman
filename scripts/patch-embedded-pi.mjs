@@ -10,6 +10,7 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./l
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
+	ensureLegacyPiRuntimeAliases,
 	patchPiCliArgsSource,
 	preflightPiCliArgsPackageRoot,
 } from "./lib/pi-cli-args-patch.mjs";
@@ -520,6 +521,12 @@ function restorePackagedWorkspace(
 		workspaceDir,
 		platform: process.platform,
 		validateWorkspace: (stagedWorkspaceDir) => {
+			// Git for Windows tar can recreate a portable directory symlink as a
+			// non-traversable file link. Repair only the known Pi compatibility
+			// aliases inside staging before any parser or runtime validation.
+			ensureLegacyPiRuntimeAliases(
+				resolve(stagedWorkspaceDir, "node_modules"),
+			);
 			preflightPiCliArgsPackageRoots(
 				listPiCliArgsPackageRoots(
 					resolve(stagedWorkspaceDir, "node_modules"),

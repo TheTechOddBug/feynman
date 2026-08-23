@@ -4,6 +4,12 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-22 23:00 EDT — runtime-extraction-integrity-0.3.35-windows-alias
+
+- Reproduced: PR `#247` run `32613452545` passed source and website validation but the Windows native build failed while restoring the authenticated runtime. Git for Windows tar recreated the portable `@mariozechner/pi-coding-agent` directory alias as a link that `lstat` could verify but Node could not traverse to `package.json` or `dist/cli/args.js`.
+- Fixed: Known legacy Pi compatibility aliases are now created through one fail-closed helper, checked against the canonical package manifest, and repaired inside the transactional restore stage before parser and package-graph validation. The repair uses a relative directory symlink so the later staging rename cannot strand an absolute junction; files are copied only when the platform cannot create that link.
+- Verification: The repaired tree passes `902/902` tests, typecheck, build, architecture, website lint/typecheck/build (`34` pages), zero-vulnerability root/site production audits, freshness review, and `git diff --check`; the prior package, clean-consumer, Daytona, source CI, website CI, and CodeQL checks also remain green. State: `unverified` until exact successor Windows CI, merge, publication, and live `0.3.35` proof. Next: push the repair and prove the successor matrix.
+
 ### 2026-08-22 22:36 EDT — ketcher-monomer-xss-0.3.35
 
 - Objective: Close the remaining chemistry-artifact security gap in the `0.3.35` release candidate rather than treating a clean production audit as complete package intake.

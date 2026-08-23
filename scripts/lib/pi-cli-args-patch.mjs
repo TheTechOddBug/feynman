@@ -1,5 +1,14 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+	cpSync,
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readFileSync,
+	readlinkSync,
+	symlinkSync,
+	unlinkSync,
+} from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 
 export const PI_CLI_ARGS_REQUIRED_VERSION = "0.84.2";
 export const PI_CLI_ARGS_UPSTREAM_FIX =
@@ -32,6 +41,84 @@ const PATCH_BRANCH = `${PATCH_MARKER}
             break;
         }
 ${PATCHED_ANCHOR}`;
+
+export const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = Object.freeze({
+	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
+	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
+	"@mariozechner/pi-coding-agent": "@earendil-works/pi-coding-agent",
+	"@mariozechner/pi-tui": "@earendil-works/pi-tui",
+});
+
+function readPackageManifestSource(packageRoot) {
+	try {
+		return readFileSync(resolve(packageRoot, "package.json"), "utf8");
+	} catch {
+		return undefined;
+	}
+}
+
+function lstatIfPresent(path) {
+	try {
+		return lstatSync(path);
+	} catch {
+		return undefined;
+	}
+}
+
+export function ensureLegacyPiRuntimeAliases(nodeModulesRoot) {
+	let repaired = 0;
+	for (const [legacyName, currentName] of Object.entries(
+		LEGACY_PI_RUNTIME_PACKAGE_ALIASES,
+	)) {
+		const currentPath = resolve(nodeModulesRoot, currentName);
+		const currentManifest = readPackageManifestSource(currentPath);
+		if (currentManifest === undefined) continue;
+
+		const legacyPath = resolve(nodeModulesRoot, legacyName);
+		if (readPackageManifestSource(legacyPath) === currentManifest) continue;
+
+		const existingStat = lstatIfPresent(legacyPath);
+		if (existingStat) {
+			if (!existingStat.isSymbolicLink()) {
+				throw new Error(
+					`Refusing to replace an unexpected legacy Pi runtime package at ${legacyPath}`,
+				);
+			}
+			if (
+				resolve(dirname(legacyPath), readlinkSync(legacyPath)) !==
+				currentPath
+			) {
+				throw new Error(
+					`Refusing to replace a legacy Pi runtime alias with an unexpected target: ${legacyPath}`,
+				);
+			}
+			unlinkSync(legacyPath);
+		}
+		mkdirSync(dirname(legacyPath), { recursive: true });
+		try {
+			// A relative directory symlink remains valid when the transactionally
+			// staged runtime is renamed into place. In particular, do not create
+			// an absolute Windows junction that still targets the staging path.
+			symlinkSync(
+				relative(dirname(legacyPath), currentPath),
+				legacyPath,
+				"dir",
+			);
+		} catch {
+			if (lstatIfPresent(legacyPath)?.isSymbolicLink()) {
+				unlinkSync(legacyPath);
+			}
+			cpSync(currentPath, legacyPath, { recursive: true });
+		}
+		if (readPackageManifestSource(legacyPath) !== currentManifest) {
+			throw new Error(
+				`Feynman could not create the legacy Pi runtime alias ${legacyName}`,
+			);
+		}
+		repaired += 1;
+	}
+	return repaired;
+}
 
 function countOccurrences(source, value) {
 	return source.split(value).length - 1;
