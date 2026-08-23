@@ -5,6 +5,7 @@ import { delimiter, dirname, resolve } from "node:path";
 import { resolveAdjacentNpmCommand } from "./npm-command.mjs";
 import {
 	computeFileSha256,
+	verifyFileSha256,
 } from "./runtime-workspace-integrity.mjs";
 
 const FILTERED_INSTALL_OUTPUT_PATTERNS = [
@@ -59,6 +60,69 @@ function writeChildOutput(result) {
 	}
 }
 
+export function buildSourceRuntimeArchive(
+	appRoot,
+	{
+		force = false,
+		heartbeat = () => {},
+		spawn = spawnSync,
+	} = {},
+) {
+	const feynmanDir = resolve(appRoot, ".feynman");
+	const archivePath = resolve(feynmanDir, "runtime-workspace.tgz");
+	const digestPath = resolve(feynmanDir, "runtime-workspace.sha256");
+	if (
+		!existsSync(resolve(appRoot, ".git")) ||
+		!existsSync(resolve(feynmanDir, "runtime-package-lock.json"))
+	) {
+		return false;
+	}
+	if (
+		!force &&
+		existsSync(archivePath) &&
+		existsSync(digestPath) &&
+		verifyFileSha256(archivePath, digestPath)
+	) {
+		return false;
+	}
+
+	const env = {
+		...process.env,
+		PATH: getPathWithCurrentNode(),
+		npm_config_global: "false",
+		NPM_CONFIG_GLOBAL: "false",
+		npm_config_location: "project",
+		NPM_CONFIG_LOCATION: "project",
+	};
+	delete env.FEYNMAN_RUNTIME_WORKSPACE_TARGET;
+	heartbeat();
+	const result = spawn(
+		process.execPath,
+		[resolve(appRoot, "scripts", "prepare-runtime-workspace.mjs"), "--rebuild"],
+		{
+			cwd: appRoot,
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: 300000,
+			env,
+		},
+	);
+	heartbeat();
+	for (const stream of [result.stdout, result.stderr]) {
+		if (stream?.length) process.stderr.write(stream);
+	}
+	if (result.status !== 0) {
+		process.stderr.write(
+			"[feynman] failed to build the tracked source runtime archive.\n",
+		);
+		return false;
+	}
+	return (
+		existsSync(archivePath) &&
+		existsSync(digestPath) &&
+		verifyFileSha256(archivePath, digestPath)
+	);
+}
+
 export function installRuntimeWorkspaceFromPackageLock(
 	workspaceDir,
 	{
@@ -97,6 +161,7 @@ export function installRuntimeWorkspaceFromPackageLock(
 			"--prefer-offline",
 			"--no-audit",
 			"--no-fund",
+			"--no-dry-run",
 			"--legacy-peer-deps",
 			"--loglevel",
 			"error",
@@ -109,6 +174,12 @@ export function installRuntimeWorkspaceFromPackageLock(
 			env: {
 				...process.env,
 				PATH: getPathWithCurrentNode(),
+				npm_config_global: "false",
+				NPM_CONFIG_GLOBAL: "false",
+				npm_config_location: "project",
+				NPM_CONFIG_LOCATION: "project",
+				npm_config_dry_run: "false",
+				NPM_CONFIG_DRY_RUN: "false",
 				npm_config_userconfig: resolve(workspaceDir, ".npmrc"),
 				NPM_CONFIG_USERCONFIG: resolve(workspaceDir, ".npmrc"),
 			},
@@ -125,6 +196,12 @@ export function installRuntimeWorkspaceFromPackageLock(
 	if (computeFileSha256(packageLockPath) !== packageLockSha256) {
 		process.stderr.write(
 			"[feynman] npm changed the bundled package lock during exact restoration.\n",
+		);
+		return false;
+	}
+	if (!existsSync(resolve(workspaceDir, "node_modules"))) {
+		process.stderr.write(
+			"[feynman] npm did not install the bundled package lock.\n",
 		);
 		return false;
 	}

@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-22 22:16 EDT — runtime-extraction-integrity-0.3.35-ci-repair
+
+- Reproduced: PR `#247` run `32611290931` failed because a clean checkout tracks the exact runtime lock but intentionally ignores the generated runtime archive and digest; `npm test` tried authenticated restore before any source-only archive build. The Windows native job also rejected an incomplete legacy Pi package.
+- Fixed: Source checkouts can rebuild a missing, incomplete, or mismatched archive/digest pair from the committed runtime lock with project-local npm semantics, while installed packages still fail closed. Exact-lock fallback disables inherited npm dry-run/global modes and requires a real `node_modules` result. Archive restore now reads and hashes one immutable compressed snapshot, then derives the tree and fallback seed from those same authenticated bytes so path replacement cannot mix trusted metadata with attacker-controlled lock or npm configuration. Invalid live workspaces remain ineligible as executable fallback seeds, and child provider/model identity comparisons preserve whitespace as an integrity failure.
+- Verified: Focused runtime restore/install/integrity, package-seeding, subagent, and architecture suites pass `88/88`; the final full suite passes `899/899`. Typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, source and installed artifact/runtime/document checks, local/global CLI smokes, and `git diff --check` pass. Dry and real packs match at `114,947,177` bytes and `29,170` files; the exact tarball SHA-256 is `ed0b648ed38fdab3abc69dc13d7a23cdae3412640a8d54725d56d3876060f13c`.
+- State: `unverified` for committed clean-checkout and Daytona proof, successor PR CI, merge, publication, and live `0.3.35` identity. Next: commit the exact tree and prove that successor through clean source, Daytona, and GitHub matrices.
+
 ### 2026-08-22 18:22 EDT — runtime-extraction-integrity-0.3.35-candidate
 
 - Objective: Reconcile the independent published-package verification after `0.3.34` and repair any release-boundary defect rather than relying on green CI alone.

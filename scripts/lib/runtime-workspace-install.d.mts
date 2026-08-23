@@ -1,3 +1,24 @@
+export declare function buildSourceRuntimeArchive(
+	appRoot: string,
+	options?: {
+		force?: boolean;
+		heartbeat?: () => void;
+		spawn?: (
+			command: string,
+			args: string[],
+			options: {
+				cwd: string;
+				stdio: ["ignore", "pipe", "pipe"];
+				timeout: number;
+				env: NodeJS.ProcessEnv;
+			},
+		) => {
+			status?: number | null;
+			stdout?: Buffer | string | null;
+			stderr?: Buffer | string | null;
+		};
+	},
+): boolean;
 export declare function installRuntimeWorkspaceFromPackageLock(
 	workspaceDir: string,
 	options?: {

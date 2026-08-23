@@ -263,6 +263,10 @@ function childNpmInstallEnv() {
 		// publish artifact can be validated without poisoning the archive.
 		npm_config_dry_run: "false",
 		NPM_CONFIG_DRY_RUN: "false",
+		npm_config_global: "false",
+		NPM_CONFIG_GLOBAL: "false",
+		npm_config_location: "project",
+		NPM_CONFIG_LOCATION: "project",
 		npm_config_userconfig: workspaceNpmConfigPath,
 		NPM_CONFIG_USERCONFIG: workspaceNpmConfigPath,
 	};

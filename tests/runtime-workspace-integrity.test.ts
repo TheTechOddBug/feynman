@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import {
+	captureRuntimeArchiveSnapshot,
 	computeRuntimeArchiveTreeHash,
 	computeRuntimeInputHash,
 	computeRuntimeTreeHash,
@@ -403,6 +404,29 @@ test("runtime archive entries are read without an external tar executable", asyn
 	} finally {
 		process.env.PATH = originalPath;
 	}
+});
+
+test("authenticated archive snapshots never reread a replaced path", async () => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-runtime-snapshot-"));
+	const trusted = join(root, "trusted", "npm");
+	const replacement = join(root, "replacement", "npm");
+	const archivePath = join(root, "runtime-workspace.tgz");
+	const replacementPath = join(root, "replacement.tgz");
+	mkdirSync(trusted, { recursive: true });
+	mkdirSync(replacement, { recursive: true });
+	writeFileSync(join(trusted, "package-lock.json"), '{"trusted":true}\n');
+	writeFileSync(join(replacement, "package-lock.json"), '{"trusted":false}\n');
+	await createDeterministicTarGz(trusted, archivePath);
+	await createDeterministicTarGz(replacement, replacementPath);
+	const expectedSha256 = writeFileSha256(archivePath, join(root, "runtime-workspace.sha256"));
+	const snapshot = captureRuntimeArchiveSnapshot(archivePath, expectedSha256);
+	writeFileSync(archivePath, readFileSync(replacementPath));
+	assert.equal(snapshot.readEntry("npm/package-lock.json"), '{"trusted":true}\n');
+	assert.throws(
+		() => captureRuntimeArchiveSnapshot(archivePath, expectedSha256),
+		/SHA-256 integrity/,
+	);
+	rmSync(root, { recursive: true, force: true });
 });
 
 test("runtime input hashes are independent of the checkout root", () => {

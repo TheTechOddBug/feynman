@@ -445,16 +445,8 @@ function verifyModelIdentityComparisonBehavior(fallback) {
 	);
 	assert.match(verify("opencode-go/ox-alpha-free", "other", "ox-alpha-free") ?? "", /model_verification_failed/);
 	assert.match(verify("opencode-go/ox-alpha-free", "opencode-go", "other") ?? "", /model_verification_failed/);
-	assert.match(
-		verify("opencode-go/ox-alpha-free", " opencode-go", "ox-alpha-free") ?? "",
-		/model_verification_failed/,
-		"Leading provider whitespace must not be normalized away",
-	);
-	assert.match(
-		verify("opencode-go/ox-alpha-free", "opencode-go", "ox-alpha-free ") ?? "",
-		/model_verification_failed/,
-		"Trailing model whitespace must not be normalized away",
-	);
+	assert.match(verify("opencode-go/ox-alpha-free", " opencode-go", "ox-alpha-free") ?? "", /model_verification_failed/);
+	assert.match(verify("opencode-go/ox-alpha-free", "opencode-go", "ox-alpha-free ") ?? "", /model_verification_failed/);
 	assert.match(verify("opencode-go/shared-id", "other", "shared-id") ?? "", /model_verification_failed/);
 	assert.match(verify("opencode-go/ox-alpha-free", undefined, "ox-alpha-free") ?? "", /<missing-provider>/);
 	assert.match(verify("opencode-go/ox-alpha-free", "opencode-go", undefined) ?? "", /<missing-model>/);
@@ -552,16 +544,10 @@ async function verifyForegroundModelIdentityBehavior(runtimeRoot, jiti) {
 		assert.equal(countMockPiCalls(callsPath), callsBeforeMismatch + 1, "Foreground mismatch launched a fallback");
 		assert.equal(existsSync(delayedMarkerPath), false, "Foreground child continued after message_start mismatch");
 
-		writeFileSync(
-			scenarioPath,
-			JSON.stringify({
-				events: [assistantEvent("message_start", " opencode-go", "ox-alpha-free", "")],
-			}),
-		);
-		const whitespaceMismatch = await run(
-			"configured-model-whitespace-mismatch",
-			"opencode-go/ox-alpha-free",
-		);
+		writeFileSync(scenarioPath, JSON.stringify({
+			events: [assistantEvent("message_start", " opencode-go", "ox-alpha-free", "")],
+		}));
+		const whitespaceMismatch = await run("configured-model-whitespace-mismatch", "opencode-go/ox-alpha-free");
 		assertRequestedModelFailure(whitespaceMismatch, "opencode-go/ox-alpha-free");
 		assert.match(whitespaceMismatch.error ?? "", /reported ' opencode-go\/ox-alpha-free'/);
 

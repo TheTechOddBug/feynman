@@ -488,6 +488,10 @@ test("production and preparation scripts preflight Pi parsers before patch write
 		installedPatcher,
 		/patchFilesIfPresent\(piCliArgsPaths, patchPiCliArgsSource\)/,
 	);
+	assert.match(
+		installedPatcher,
+		/if \(!uniqueRoots\.has\(identity\)\) \{\s*uniqueRoots\.set\(identity, packageRoot\);\s*\}/,
+	);
 
 	const preparation = readFileSync(
 		resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"),

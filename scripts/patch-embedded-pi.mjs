@@ -38,6 +38,7 @@ import {
 } from "./lib/pi-tui-patch.mjs";
 import { computeRuntimeTreeHash } from "./lib/runtime-workspace-integrity.mjs";
 import {
+	buildSourceRuntimeArchive,
 	installRuntimeWorkspaceFromPackageLock,
 	patchStagedRuntimeWorkspace,
 } from "./lib/runtime-workspace-install.mjs";
@@ -344,7 +345,12 @@ function preflightPiCliArgsPackageRoots(packageRoots) {
 		try {
 			identity = realpathSync(packageRoot);
 		} catch {}
-		uniqueRoots.set(identity, packageRoot);
+		// Prefer the canonical scoped package over a later legacy alias. Windows
+		// tar may recreate that alias as a junction whose real path is healthy
+		// even when traversing the alias path does not expose every file yet.
+		if (!uniqueRoots.has(identity)) {
+			uniqueRoots.set(identity, packageRoot);
+		}
 	}
 	const argsPaths = [];
 	for (const packageRoot of uniqueRoots.values()) {
@@ -597,16 +603,46 @@ function ensurePackageWorkspaceUnlocked(heartbeat) {
 		ensureBundledPackageLinks(supportedPackageSpecs);
 		return;
 	}
-	const packagedRestore = restorePackagedWorkspace(
-		packageSpecs,
-		supportedPackageSpecs,
-		heartbeat,
-	);
+	let packagedRestore;
+	try {
+		packagedRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
+		);
+	} catch (error) {
+		if (!buildSourceRuntimeArchive(appRoot, { force: true, heartbeat })) {
+			throw error;
+		}
+		packagedRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
+		);
+	}
 	if (packagedRestore.restored && workspaceMatchesRuntime(supportedPackageSpecs)) {
 		ensureBundledPackageLinks(supportedPackageSpecs);
 		return;
 	}
-	const installSeed = packagedRestore.installSeed;
+	let installSeed = packagedRestore.installSeed;
+	if (
+		!installSeed &&
+		buildSourceRuntimeArchive(appRoot, { force: true, heartbeat })
+	) {
+		const sourceRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
+		);
+		if (
+			sourceRestore.restored &&
+			workspaceMatchesRuntime(supportedPackageSpecs)
+		) {
+			ensureBundledPackageLinks(supportedPackageSpecs);
+			return;
+		}
+		installSeed = sourceRestore.installSeed;
+	}
 	if (!installSeed) {
 		throw new Error(
 			"Feynman could not read an authenticated package-lock restore seed.",

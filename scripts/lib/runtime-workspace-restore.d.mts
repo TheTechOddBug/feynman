@@ -1,3 +1,5 @@
+import type { RuntimeArchiveSnapshot } from "./runtime-workspace-integrity.mjs";
+
 export interface RuntimeWorkspaceInstallSeed {
 	packageSpecs: string[];
 	packageJsonSource: string;
@@ -82,7 +84,10 @@ export declare function restoreRuntimeWorkspaceFromArchive(options: {
 	archivePath: string;
 	digestPath: string;
 	workspaceDir: string;
-	onAuthenticatedArchive?: (snapshotPath: string) => void;
+	onAuthenticatedArchive?: (
+		snapshotPath: string,
+		snapshot: RuntimeArchiveSnapshot,
+	) => void;
 	heartbeat?: () => void;
 	platform?: string;
 	spawn?: (

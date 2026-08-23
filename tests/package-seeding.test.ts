@@ -86,9 +86,10 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
+	assert.match(installedRuntimeSource, /buildSourceRuntimeArchive/);
 	assert.match(installedRuntimeSource, /installRuntimeWorkspaceFromPackageLock/);
 	assert.match(installedRuntimeSource, /patchStagedRuntimeWorkspace/);
-	assert.match(installedRuntimeSource, /const installSeed = packagedRestore\.installSeed;/);
+	assert.match(installedRuntimeSource, /let installSeed = packagedRestore\.installSeed;/);
 	assert.doesNotMatch(
 		installedRuntimeSource,
 		/readRuntimeWorkspaceInstallSeedFromDirectory|existingInstallSeed/,

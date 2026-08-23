@@ -15,13 +15,12 @@ import {
 import { basename, dirname, relative, resolve } from "node:path";
 
 import {
-	captureRuntimeArchiveTree,
+	captureRuntimeArchiveSnapshot,
 	computeFileSha256,
 	computeRuntimeTreeHash,
 	mergeRuntimePackageSpecs,
 	packagedWorkspaceExtractionSucceeded,
 	parseExactRuntimePackageSpec,
-	readArchiveEntry,
 	runtimeArchiveExtractionMatches,
 	runtimeManifestPackagesMatch,
 	runtimeWorkspacePackageGraphMatches,
@@ -312,16 +311,21 @@ export function readRuntimeWorkspaceInstallSeed(
 	archivePath,
 	configuredPackageSpecs = [],
 ) {
-	const manifestSource = readArchiveEntry(
-		archivePath,
-		"npm/.runtime-manifest.json",
+	const archiveSnapshot = captureRuntimeArchiveSnapshot(archivePath);
+	return readRuntimeWorkspaceInstallSeedFromReader(
+		archiveSnapshot.readEntry,
+		configuredPackageSpecs,
 	);
-	const packageJsonSource = readArchiveEntry(archivePath, "npm/package.json");
-	const packageLockSource = readArchiveEntry(
-		archivePath,
-		"npm/package-lock.json",
-	);
-	const npmConfigSource = readArchiveEntry(archivePath, "npm/.npmrc");
+}
+
+function readRuntimeWorkspaceInstallSeedFromReader(
+	readEntry,
+	configuredPackageSpecs = [],
+) {
+	const manifestSource = readEntry("npm/.runtime-manifest.json");
+	const packageJsonSource = readEntry("npm/package.json");
+	const packageLockSource = readEntry("npm/package-lock.json");
+	const npmConfigSource = readEntry("npm/.npmrc");
 	if (
 		manifestSource === undefined ||
 		packageJsonSource === undefined ||
@@ -799,7 +803,11 @@ export function restoreRuntimeWorkspaceFromArchive({
 					"Bundled runtime archive changed while it was being authenticated",
 				);
 			}
-			onAuthenticatedArchive(snapshotPath);
+			const archiveSnapshot = captureRuntimeArchiveSnapshot(
+				snapshotPath,
+				expectedArchiveSha256,
+			);
+			onAuthenticatedArchive(snapshotPath, archiveSnapshot);
 			if (!fileMatchesSha256(snapshotPath, expectedArchiveSha256)) {
 				return false;
 			}
@@ -808,15 +816,13 @@ export function restoreRuntimeWorkspaceFromArchive({
 			// Reopening the package path at each phase would allow a concurrent
 			// replacement to mix authenticated metadata with different payloads.
 			heartbeat();
-			const archiveTree = captureRuntimeArchiveTree(snapshotPath);
+			const archiveTree = archiveSnapshot.archiveTree;
 			const archiveTreeHash = archiveTree.runtimeTreeHash;
 			heartbeat();
-			const archivedManifestSource = readArchiveEntry(
-				snapshotPath,
+			const archivedManifestSource = archiveSnapshot.readEntry(
 				"npm/.runtime-manifest.json",
 			);
-			const archivedPackageLockSource = readArchiveEntry(
-				snapshotPath,
+			const archivedPackageLockSource = archiveSnapshot.readEntry(
 				"npm/package-lock.json",
 			);
 			if (
@@ -916,9 +922,9 @@ export function restoreRuntimeWorkspaceFromArchiveWithSeed({
 	let installSeed;
 	const restored = restoreRuntimeWorkspaceFromArchive({
 		...options,
-		onAuthenticatedArchive(snapshotPath) {
-			installSeed = readRuntimeWorkspaceInstallSeed(
-				snapshotPath,
+		onAuthenticatedArchive(_snapshotPath, archiveSnapshot) {
+			installSeed = readRuntimeWorkspaceInstallSeedFromReader(
+				archiveSnapshot.readEntry,
 				configuredPackageSpecs,
 			);
 		},

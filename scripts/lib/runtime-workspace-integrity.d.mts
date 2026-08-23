@@ -74,6 +74,15 @@ export declare function readArchiveEntry(
 	archivePath: string,
 	entryPath: string,
 ): string | undefined;
+export interface RuntimeArchiveSnapshot {
+	readonly sha256: string;
+	readonly archiveTree: RuntimeArchiveTree;
+	readEntry(entryPath: string): string | undefined;
+}
+export declare function captureRuntimeArchiveSnapshot(
+	archivePath: string,
+	expectedSha256?: string,
+): RuntimeArchiveSnapshot;
 
 export declare function runtimeArchiveMatches(options: {
 	archivePath: string;

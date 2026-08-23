@@ -311,8 +311,8 @@ export function computeRuntimeTreeHash(rootPath) {
 	return hash.digest("hex");
 }
 
-function readRuntimeArchiveTreeEntries(archivePath) {
-	const tarball = gunzipSync(readFileSync(archivePath));
+function readRuntimeArchiveTreeEntriesFromSource(archiveSource) {
+	const tarball = gunzipSync(archiveSource);
 	const entries = [];
 	let offset = 0;
 	let globalPax = {};
@@ -469,6 +469,10 @@ function readRuntimeArchiveTreeEntries(archivePath) {
 	return normalizedEntries;
 }
 
+function readRuntimeArchiveTreeEntries(archivePath) {
+	return readRuntimeArchiveTreeEntriesFromSource(readFileSync(archivePath));
+}
+
 function hashRuntimeTreeEntries(entries) {
 	const hash = createHash("sha256");
 	for (const entry of entries) {
@@ -487,6 +491,16 @@ function hashRuntimeTreeEntries(entries) {
 export function captureRuntimeArchiveTree(archivePath) {
 	const entries = readRuntimeArchiveTreeEntries(archivePath).map((entry) =>
 		Object.freeze({ ...entry })
+	);
+	return Object.freeze({
+		entries: Object.freeze(entries),
+		runtimeTreeHash: hashRuntimeTreeEntries(entries),
+	});
+}
+
+function captureRuntimeArchiveTreeFromSource(archiveSource) {
+	const entries = readRuntimeArchiveTreeEntriesFromSource(archiveSource).map(
+		(entry) => Object.freeze({ ...entry }),
 	);
 	return Object.freeze({
 		entries: Object.freeze(entries),
@@ -613,8 +627,8 @@ export function filesMatch(leftPath, rightPath) {
 	return readFileSync(leftPath).equals(readFileSync(rightPath));
 }
 
-export function readArchiveEntry(archivePath, entryPath) {
-	const tarball = gunzipSync(readFileSync(archivePath));
+function readArchiveEntryFromSource(archiveSource, entryPath) {
+	const tarball = gunzipSync(archiveSource);
 	const requestedPath = entryPath.replace(/^\.\//, "").replace(/\/$/, "");
 	const entries = new Map();
 	let offset = 0;
@@ -697,6 +711,26 @@ export function readArchiveEntry(archivePath, entryPath) {
 		return resolveEntry(entry.target, new Set([...seen, path]));
 	};
 	return resolveEntry(requestedPath)?.toString("utf8");
+}
+
+export function readArchiveEntry(archivePath, entryPath) {
+	return readArchiveEntryFromSource(readFileSync(archivePath), entryPath);
+}
+
+export function captureRuntimeArchiveSnapshot(archivePath, expectedSha256) {
+	const archiveSource = readFileSync(archivePath);
+	const sha256 = createHash("sha256").update(archiveSource).digest("hex");
+	if (expectedSha256 !== undefined && sha256 !== expectedSha256) {
+		throw new Error("Runtime archive snapshot failed its SHA-256 integrity check");
+	}
+	const archiveTree = captureRuntimeArchiveTreeFromSource(archiveSource);
+	return Object.freeze({
+		sha256,
+		archiveTree,
+		readEntry(entryPath) {
+			return readArchiveEntryFromSource(archiveSource, entryPath);
+		},
+	});
 }
 
 export function runtimeArchiveMatches({
