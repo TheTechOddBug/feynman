@@ -3,7 +3,15 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { verifyFileSha256 } from "./lib/runtime-workspace-integrity.mjs";
+import {
+	computeRuntimeArchiveTreeHash,
+	computeRuntimeTreeHash,
+	verifyFileSha256,
+} from "./lib/runtime-workspace-integrity.mjs";
+import {
+	getRuntimeWorkspaceCompletionPath,
+	runtimeWorkspaceCompletionMatches,
+} from "./lib/runtime-workspace-restore.mjs";
 import {
 	createDeterministicTarGz,
 	createDeterministicZip,
@@ -390,6 +398,56 @@ async function packBundle(bundleRoot, target, outDir) {
 	return await createDeterministicTarGz(bundleRoot, archivePath);
 }
 
+export function finalizeNativeRuntimeWorkspace(appDir) {
+	const appFeynmanDir = resolve(appDir, ".feynman");
+	const workspaceDir = resolve(appFeynmanDir, "npm");
+	const archivePath = resolve(appFeynmanDir, "runtime-workspace.tgz");
+	const digestPath = resolve(appFeynmanDir, "runtime-workspace.sha256");
+	const completionPath = getRuntimeWorkspaceCompletionPath(workspaceDir);
+
+	if (!verifyFileSha256(archivePath, digestPath)) {
+		throw new Error(
+			"Native runtime finalization requires an authenticated runtime archive",
+		);
+	}
+	const archiveCompletion = JSON.parse(readFileSync(completionPath, "utf8"));
+	if (archiveCompletion.source !== "archive") {
+		throw new Error(
+			`Native runtime finalization will not bless ${archiveCompletion.source ?? "unknown"} completion state`,
+		);
+	}
+	if (
+		!runtimeWorkspaceCompletionMatches(workspaceDir, {
+			archivePath,
+			digestPath,
+		})
+	) {
+		throw new Error(
+			"Native runtime finalization requires a valid archive-backed completion",
+		);
+	}
+
+	if (
+		archiveCompletion.archiveTreeHash !==
+		computeRuntimeArchiveTreeHash(archivePath)
+	) {
+		throw new Error(
+			"Native runtime finalization detected an unverified archive tree",
+		);
+	}
+	const runtimeTreeHash = computeRuntimeTreeHash(workspaceDir);
+	if (archiveCompletion.runtimeTreeHash !== runtimeTreeHash) {
+		throw new Error(
+			"Native runtime finalization detected changes after archive verification",
+		);
+	}
+
+	// Retain the authenticated archive and digest beside the extracted runtime.
+	// Native launches normally accept the completed live workspace, while a
+	// damaged manifest, lock, or payload can still be repaired offline from the
+	// immutable release seed instead of trusting the damaged live tree.
+}
+
 async function main() {
 	const target = detectTarget();
 	const stagingRoot = mkdtempSync(join(tmpdir(), "feynman-native-"));
@@ -417,8 +475,7 @@ async function main() {
 		run(process.execPath, [resolve(appDir, "scripts", "patch-embedded-pi.mjs")], { cwd: appDir });
 		run(process.execPath, [resolve(appDir, "scripts", "verify-package-artifact.mjs"), appDir], { cwd: appDir });
 		run("npm", ["audit", "--omit=dev", "--no-fund"], { cwd: appDir });
-		rmSync(runtimeArchivePath, { force: true });
-		rmSync(runtimeArchiveDigestPath, { force: true });
+		finalizeNativeRuntimeWorkspace(appDir);
 
 		installBundledNode(bundleRoot, target, stagingRoot);
 		writeLauncher(bundleRoot, target);
@@ -431,4 +488,6 @@ async function main() {
 	}
 }
 
-await main();
+if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
+	await main();
+}

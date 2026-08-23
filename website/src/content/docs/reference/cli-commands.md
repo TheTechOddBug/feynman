@@ -144,3 +144,16 @@ These are equivalent to launching the REPL and typing the corresponding slash co
 | `--alpha-status` | Show alphaXiv auth status and exit |
 | `--doctor` | Alias for `feynman doctor` |
 | `--setup-preview` | Alias for `feynman setup preview` |
+
+Use the standard `--` delimiter before an interactive prompt that starts with
+a dash, so Pi treats it as research text rather than another option:
+
+```bash
+feynman -- "- summarize the strongest evidence first"
+```
+
+For one-shot mode, attach a dash-leading value directly to `--prompt`:
+
+```bash
+feynman --prompt="- summarize the strongest evidence first"
+```

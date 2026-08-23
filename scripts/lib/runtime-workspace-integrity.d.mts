@@ -14,6 +14,14 @@ export declare function runtimeManifestPackagesMatch(
 	manifestPackageSpecs: string[],
 	configuredPackageSpecs?: string[],
 ): boolean;
+export declare function runtimeWorkspacePackageGraphMatches(
+	workspacePath: string,
+	options?: {
+		platform?: string;
+		arch?: string;
+		libc?: string;
+	},
+): boolean;
 export declare function mergeRuntimePackageSpecs(
 	manifestPackageSpecs: unknown,
 	configuredPackageSpecs: unknown,
@@ -25,9 +33,42 @@ export declare function computeRuntimeInputHash(
 	inputFiles?: readonly string[],
 ): string;
 export declare function computeRuntimeTreeHash(rootPath: string): string;
+export interface RuntimeArchiveTree {
+	entries: readonly Readonly<{
+		label: string;
+		type: "file" | "symlink";
+		mode?: "x" | "-";
+		value: string;
+	}>[];
+	runtimeTreeHash: string;
+}
+export declare function captureRuntimeArchiveTree(
+	archivePath: string,
+): RuntimeArchiveTree;
 export declare function computeRuntimeArchiveTreeHash(archivePath: string): string;
 export declare function writeFileSha256(path: string, digestPath: string): string;
 export declare function verifyFileSha256(path: string, digestPath: string): boolean;
+export declare function packagedWorkspaceExtractionSucceeded(
+	result: {
+		error?: unknown;
+		signal?: string | null;
+		status?: number | null;
+		stderr?: Buffer | string | null;
+	},
+	options: {
+		extractionMatches: boolean;
+		platform?: string;
+	},
+): boolean;
+export declare function runtimeArchiveExtractionMatches(
+	archivePath: string,
+	workspacePath: string,
+	options?: {
+		allowMissingWindowsSymlinks?: boolean;
+		compareExecutableModes?: boolean;
+		expectedArchiveTree?: RuntimeArchiveTree;
+	},
+): boolean;
 export declare function filesMatch(leftPath: string, rightPath: string): boolean;
 export declare function readArchiveEntry(
 	archivePath: string,

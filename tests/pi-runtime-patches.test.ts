@@ -12,6 +12,25 @@ import {
 } from "../scripts/lib/pi-web-access-patch.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
+const PI_CLI_ARGS_SOURCE = readFileSync(
+	join(
+		process.cwd(),
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+		"dist",
+		"cli",
+		"args.js",
+	),
+	"utf8",
+);
+
+function writePiCliArgsFixture(piCodingAgentRoot: string): void {
+	const argsPath = join(piCodingAgentRoot, "dist", "cli", "args.js");
+	mkdirSync(dirname(argsPath), { recursive: true });
+	writeFileSync(argsPath, PI_CLI_ARGS_SOURCE, "utf8");
+}
+
 const SOURCE = `
 async function prepareToolCall(currentContext, assistantMessage, toolCall, config, signal) {
     const tool = currentContext.tools?.find((t) => t.name === toolCall.name);
@@ -176,9 +195,9 @@ export async function answerPdfQuery(url, query) {
 }
 `;
 
-const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.24.1");
-const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(import.meta.dirname, "..", "fixtures", "pi-web-access-0.24.1");
-function writePiWebAccessFixture(webRoot: string, version = "0.24.1", patched = false): void {
+const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.24.2");
+const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(import.meta.dirname, "..", "fixtures", "pi-web-access-0.24.2");
+function writePiWebAccessFixture(webRoot: string, version = "0.24.2", patched = false): void {
 	mkdirSync(webRoot, { recursive: true });
 	const sources = new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
@@ -206,7 +225,7 @@ function writePiWebAccessFixture(webRoot: string, version = "0.24.1", patched = 
 
 function writePiWebAccessForwardFixtures(appRoot: string): void {
 	for (const relativePath of PI_WEB_ACCESS_FORWARD_FILE_TARGETS) {
-		const fixturePath = join(appRoot, "fixtures", "pi-web-access-0.24.1", relativePath);
+		const fixturePath = join(appRoot, "fixtures", "pi-web-access-0.24.2", relativePath);
 		mkdirSync(dirname(fixturePath), { recursive: true });
 		writeFileSync(
 			fixturePath,
@@ -383,6 +402,7 @@ test("patchPiRuntimeNodeModules patches installed Pi runtime files", async () =>
 		}, null, 2) + "\n",
 		"utf8",
 	);
+	writePiCliArgsFixture(dirname(packageJsonPath));
 	writeFileSync(
 		join(dirname(dirname(agentLoopPath)), "package.json"),
 		JSON.stringify({ name: "@earendil-works/pi-agent-core", version: "0.84.2" }, null, 2) + "\n",
@@ -498,6 +518,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 		}, null, 2) + "\n",
 		"utf8",
 	);
+	writePiCliArgsFixture(dirname(packageJsonPath));
 	writeFileSync(
 		join(dirname(dirname(agentLoopPath)), "package.json"),
 		JSON.stringify({ name: "@mariozechner/pi-agent-core", version: "0.84.2" }, null, 2) + "\n",
@@ -563,7 +584,7 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/expected 0\.24\.1, found 0\.25\.0/,
+		/expected 0\.24\.2, found 0\.25\.0/,
 	);
 	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
 });
@@ -596,7 +617,8 @@ test("patchPiRuntimeNodeModules patches the Windows npm prefix layout", () => {
 		}, null, 2) + "\n",
 		"utf8",
 	);
-	writePiWebAccessFixture(webRoot, "0.24.1", true);
+	writePiCliArgsFixture(dirname(bundledPiManifestPath));
+	writePiWebAccessFixture(webRoot, "0.24.2", true);
 	writeFileSync(
 		webAccessPath,
 		readFileSync(webAccessPath, "utf8").replace(
@@ -614,7 +636,7 @@ test("patchPiRuntimeNodeModules patches the Windows npm prefix layout", () => {
 test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.24.1", true);
+	writePiWebAccessFixture(webRoot, "0.24.2", true);
 	const indexPath = join(webRoot, "index.ts");
 	const pageQueryPath = join(webRoot, "page-query.ts");
 	writeFileSync(
@@ -646,7 +668,7 @@ test("patchPiRuntimeNodeModules validates the complete web patch before writing 
 test("patchPiRuntimeNodeModules validates non-model web invariants before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-non-model-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.24.1", true);
+	writePiWebAccessFixture(webRoot, "0.24.2", true);
 	const indexPath = join(webRoot, "index.ts");
 	writeFileSync(
 		indexPath,
@@ -796,6 +818,7 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 		JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2" }, null, 2) + "\n",
 		"utf8",
 	);
+	writePiCliArgsFixture(dirname(bundledPiManifestPath));
 	writeFileSync(
 		agentTuiManifestPath,
 		JSON.stringify({ name: "@earendil-works/pi-tui", version: "0.80.6" }, null, 2) + "\n",
@@ -903,14 +926,15 @@ test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent ro
 			join(nestedBraceRoot, "package.json"),
 			JSON.stringify({ name: "brace-expansion", version: "5.0.6" }),
 		);
-		writeFileSync(
-			join(nestedUndiciRoot, "package.json"),
-			JSON.stringify({ name: "undici", version: "8.5.0" }),
-		);
-		writeFileSync(llamaProviderPath, LLAMA_PROVIDER_SOURCE);
-		writeFileSync(updateNoticePath, INTERACTIVE_UPDATE_NOTICE_SOURCE);
-		return { llamaProviderPath, nestedUndiciRoot, updateNoticePath };
-	};
+			writeFileSync(
+				join(nestedUndiciRoot, "package.json"),
+				JSON.stringify({ name: "undici", version: "8.5.0" }),
+			);
+			writeFileSync(llamaProviderPath, LLAMA_PROVIDER_SOURCE);
+			writeFileSync(updateNoticePath, INTERACTIVE_UPDATE_NOTICE_SOURCE);
+			if (version === "0.84.2") writePiCliArgsFixture(piRoot);
+			return { llamaProviderPath, nestedUndiciRoot, updateNoticePath };
+		};
 
 	const rootPi = writePiUndiciFixture(rootNodeModules, "@earendil-works", "0.84.2");
 	const globalPi = writePiUndiciFixture(
@@ -989,12 +1013,13 @@ test("patchPiRuntimeNodeModules accepts newer brace-expansion in Pi's agent-mana
 	try {
 		mkdirSync(bundledPiRoot, { recursive: true });
 		mkdirSync(agentBraceRoot, { recursive: true });
-		writeFileSync(
-			join(bundledPiRoot, "package.json"),
-			JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2" }),
-		);
-		writeFileSync(
-			join(agentPiRoot, "package.json"),
+			writeFileSync(
+				join(bundledPiRoot, "package.json"),
+				JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2" }),
+			);
+			writePiCliArgsFixture(bundledPiRoot);
+			writeFileSync(
+				join(agentPiRoot, "package.json"),
 			JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.80.6" }),
 		);
 		writeFileSync(join(agentPiRoot, "npm-shrinkwrap.json"), shrinkwrapSource);
@@ -1057,12 +1082,13 @@ test("patchPiRuntimeNodeModules skips mismatched nested Pi package versions", ()
 			);
 			const targetPath = join(nestedRoot, ...relativePath.split("/"));
 			mkdirSync(dirname(targetPath), { recursive: true });
-			writeFileSync(
-				join(codingRoot, "package.json"),
-				JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2" }),
-			);
-			writeFileSync(
-				join(nestedRoot, "package.json"),
+				writeFileSync(
+					join(codingRoot, "package.json"),
+					JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "0.84.2" }),
+				);
+				writePiCliArgsFixture(codingRoot);
+				writeFileSync(
+					join(nestedRoot, "package.json"),
 				JSON.stringify({ name: `@earendil-works/${packageName}`, version }),
 			);
 			writeFileSync(targetPath, source);

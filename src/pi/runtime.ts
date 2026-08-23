@@ -199,9 +199,9 @@ export function buildPiArgs(options: PiRuntimeOptions, paths: PiPaths = resolveP
 		args.push("--continue");
 	}
 	if (options.oneShotPrompt) {
-		args.push("-p", options.oneShotPrompt);
+		args.push("-p", "--", options.oneShotPrompt);
 	} else if (options.initialPrompt) {
-		args.push(options.initialPrompt);
+		args.push("--", options.initialPrompt);
 	}
 
 	return args;

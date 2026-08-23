@@ -6,7 +6,7 @@ import {
 	syncPiWebAccessForwardFiles,
 } from "./pi-web-access-forward-fixes-patch.mjs";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.1";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.2";
 export {
 	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	patchPiWebAccessForwardFixSource,

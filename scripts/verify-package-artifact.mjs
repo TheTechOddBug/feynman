@@ -14,6 +14,10 @@ import {
 	assertPiCompactionToolsArchive,
 	assertPiCompactionToolsPackageTree,
 } from "./lib/pi-compaction-tools-verifier.mjs";
+import {
+	assertPatchedPiCliArgsPackageRoot,
+	assertPiCliArgsPatchSource,
+} from "./lib/pi-cli-args-patch.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
 import { assertPiStateFilePermissionsPatchSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import {
@@ -30,7 +34,6 @@ import {
 } from "./lib/runtime-workspace-integrity.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
 import { assertPiSubagentPatchedSources } from "./lib/pi-subagents-verification.mjs";
-
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
@@ -508,6 +511,7 @@ const bundledPiShrinkwrapSource = readText(
 	"bundled Pi shrinkwrap",
 );
 assertPiCodingAgentUndiciShrinkwrapSource(bundledPiShrinkwrapSource, "bundled Pi shrinkwrap");
+assertPatchedPiCliArgsPackageRoot(resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent"), "bundled Pi CLI");
 if (manifest.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`package.json does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
 }
@@ -535,8 +539,8 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.24.1") {
-	fail("committed runtime lock does not pin pi-web-access 0.24.1");
+if (expectedPiWebAccessVersion !== "0.24.2") {
+	fail("committed runtime lock does not pin pi-web-access 0.24.2");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== "4.0.0") {
@@ -599,6 +603,7 @@ if (
 	fail(`runtime archive does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
 const runtimeManifest = readArchivedJson(archivePath, "npm/.runtime-manifest.json");
+assertPiCliArgsPatchSource(readArchivedText(archivePath, "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js"), "runtime Pi CLI args");
 if (!Array.isArray(runtimeManifest.packageSpecs)) {
 	fail("runtime archive manifest has no packageSpecs");
 }

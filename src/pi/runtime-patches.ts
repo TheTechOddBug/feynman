@@ -6,6 +6,10 @@ import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "../
 import { patchMcpSdkPackageJsonSource } from "../../scripts/lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "../../scripts/lib/pi-agent-core-patch.mjs";
 import {
+	assertPiCliArgsVersion,
+	patchPiCliArgsSource,
+} from "../../scripts/lib/pi-cli-args-patch.mjs";
+import {
 	PI_AI_FORWARD_FIX_TARGETS,
 	patchPiAiForwardFixSource,
 } from "../../scripts/lib/pi-ai-forward-fixes-patch.mjs";
@@ -242,7 +246,41 @@ export function patchPiRuntimeNodeModules(
 		// a startup self-install lands fresh unpatched sources there.
 		nodeModuleRoots.push(resolve(feynmanAgentDir, "npm", "node_modules"));
 	}
+	const piCliArgsCandidates: Array<{
+		path: string;
+		source: string;
+		patched: string;
+	}> = [];
+	for (const nodeModulesPath of nodeModuleRoots) {
+		for (const scope of ["@earendil-works", "@mariozechner"]) {
+			const packageRoot = resolve(
+				nodeModulesPath,
+				scope,
+				"pi-coding-agent",
+			);
+			if (!shouldPatchPiPackage(packageRoot, bundledPiVersion)) continue;
+			assertPiCliArgsVersion(
+				readPackageVersion(packageRoot),
+				packageRoot,
+			);
+			const path = resolve(packageRoot, "dist", "cli", "args.js");
+			if (!existsSync(path)) {
+				throw new Error(`Pi CLI args patch target is missing: ${path}`);
+			}
+			const source = readFileSync(path, "utf8");
+			piCliArgsCandidates.push({
+				path,
+				source,
+				patched: patchPiCliArgsSource(source),
+			});
+		}
+	}
 	let changed = false;
+	for (const candidate of piCliArgsCandidates) {
+		if (candidate.patched === candidate.source) continue;
+		writeFileSync(candidate.path, candidate.patched, "utf8");
+		changed = true;
+	}
 	const safeBraceExpansionPath = resolve(appRoot, "node_modules", "brace-expansion");
 	for (const nodeModulesPath of nodeModuleRoots) {
 		changed = patchPiBraceExpansionTree(nodeModulesPath, safeBraceExpansionPath) || changed;

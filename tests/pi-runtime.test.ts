@@ -19,6 +19,10 @@ import {
 	validatePiInstallation,
 } from "../src/pi/runtime.js";
 import { resolveBundledAlphaCliPath } from "../src/cli.js";
+import {
+	assertPiCliArgsPatchSource,
+	patchPiCliArgsSource,
+} from "../scripts/lib/pi-cli-args-patch.mjs";
 
 test("getFeynmanNpmGlobalNodeModulesPath follows npm prefix layout on each platform", () => {
 	const agentDir = join("home", ".feynman", "agent");
@@ -61,8 +65,62 @@ test("buildPiArgs includes configured runtime paths and prompt", () => {
 		"openai:gpt-test",
 		"--thinking",
 		"medium",
+		"--",
 		"hello",
 	]);
+});
+
+test("buildPiArgs places the delimiter after all options for dash-leading prompts", () => {
+	const oneShotArgs = buildPiArgs({
+		appRoot: "/repo/feynman",
+		workingDir: "/workspace",
+		sessionDir: "/sessions",
+		feynmanAgentDir: "/home/.feynman/agent",
+		mode: "text",
+		explicitModelSpec: "openai:gpt-test",
+		oneShotPrompt: "--answer briefly",
+	});
+	assert.deepEqual(oneShotArgs.slice(-5), [
+		"--model",
+		"openai:gpt-test",
+		"-p",
+		"--",
+		"--answer briefly",
+	]);
+	assert.ok(oneShotArgs.indexOf("--model") < oneShotArgs.indexOf("--"));
+
+	const initialArgs = buildPiArgs({
+		appRoot: "/repo/feynman",
+		workingDir: "/workspace",
+		sessionDir: "/sessions",
+		feynmanAgentDir: "/home/.feynman/agent",
+		mode: "rpc",
+		initialPrompt: "- summarize these results",
+	});
+	assert.deepEqual(initialArgs.slice(-2), ["--", "- summarize these results"]);
+	assert.ok(initialArgs.indexOf("--mode") < initialArgs.indexOf("--"));
+});
+
+test("Pi CLI end-of-options patch matches 0.84.2 and is idempotent", () => {
+	const source = readFileSync(
+		join(
+			process.cwd(),
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+			"dist",
+			"cli",
+			"args.js",
+		),
+		"utf8",
+	);
+	const patched = patchPiCliArgsSource(source);
+	assertPiCliArgsPatchSource(patched);
+	assert.equal(patchPiCliArgsSource(patched), patched);
+	assert.ok(
+		patched.indexOf('if (arg === "--") {') <
+			patched.indexOf('else if (arg === "--help" || arg === "-h") {'),
+	);
 });
 
 test("buildPiArgs omits thinking arg when launch thinking is not explicit", () => {
@@ -90,6 +148,7 @@ test("buildPiArgs passes --continue when resuming the recent persisted session",
 
 	assert.ok(args.includes("--continue"));
 	assert.equal(args.includes("--new-session"), false);
+	assert.equal(args.includes("--"), false);
 });
 
 test("buildPiArgs passes stable session ids through to Pi", () => {

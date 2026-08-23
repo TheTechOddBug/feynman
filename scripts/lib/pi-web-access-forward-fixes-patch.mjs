@@ -158,16 +158,19 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 		['encrypted.subarray(0, 3).toString("utf8") === "v20"', 1],
 		["async function readWindowsEncryptionKey(", 1],
 		["Add-Type -AssemblyName System.Security", 1],
-		["[Console]::In.ReadToEnd()", 1],
-		['execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]', 1],
-		['child.stdin.end(protectedData.toString("base64"))', 1],
-		['"CAST((expires_utc / 1000000) AS INTEGER) AS expires_utc"', 1],
-		["function chromeExpiryNowSeconds(): number", 1],
-	], surface, version);
+			["[Console]::In.ReadToEnd()", 1],
+			['execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]', 1],
+			['child.stdin.end(protectedData.toString("base64"))', 1],
+			["function chromeExpiryMillisExpr(): string", 1],
+			["CAST(expires_utc / 1000 AS INTEGER)", 1],
+			["function chromeExpiryNowMillis(): number", 1],
+		], surface, version);
 	rejectMarkers(chromeCookiesSource, "chrome-cookies.ts", [
 		'currentPlatform === "darwin" ? MACOS_BROWSER_CONFIGS : currentPlatform === "linux" ? LINUX_BROWSER_CONFIGS : []',
 		'columns.columns.has("expires_utc") ? "expires_utc" : "0 AS expires_utc"',
 		"function chromeExpiryNowMicros(): number",
+		"function chromeExpiryNowSeconds(): number",
+		"CAST((expires_utc / 1000000) AS INTEGER)",
 	], surface, version);
 
 	const sanitizerSource = sources.get("data-uri-sanitize.ts");
@@ -285,7 +288,7 @@ function replaceModelAwareSearchHunk(source, original, replacement, relativePath
 	if (source.includes(replacement)) return source;
 	if (!source.includes(original)) {
 		throw new Error(
-			`Unsupported pi-web-access 0.24.1 ${relativePath}: model-aware search hunk is missing (${label})`,
+			`Unsupported pi-web-access 0.24.2 ${relativePath}: model-aware search hunk is missing (${label})`,
 		);
 	}
 	return source.replace(original, replacement);
@@ -534,7 +537,7 @@ function patchModelAwareIndexSource(source) {
 			);
 		} else {
 			throw new Error(
-				"Unsupported pi-web-access 0.24.1 index.ts: model-aware search hunk is missing (tool description)",
+				"Unsupported pi-web-access 0.24.2 index.ts: model-aware search hunk is missing (tool description)",
 			);
 		}
 	}
