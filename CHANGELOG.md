@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-23 01:49 EDT — windows-runtime-timeout-0.3.36
+
+- Reproduced: Published-package E2E run `32620479741` passed Ubuntu Node `22/24/25`, macOS Node `24`, Windows Node `24`, and all three native installers, but Windows Node `25` terminated the exact-lock runtime `npm ci` at Feynman's fixed five-minute child-process timeout. The process then exited before `feynman --version`; the candidate's earlier Windows Node `25` run had completed the same path under the limit.
+- Fixed: Exact package-lock runtime restoration now has a bounded fifteen-minute budget. Lock ownership, exact lock identity, package-graph validation, mandatory pre-publication patches, and transactional publication remain unchanged and fail closed.
+- Verified locally: The focused fallback test passes `6/6`; the full suite passes `902/902`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site production audits, and `git diff --check` pass.
+- State: `unverified` until clean package and Windows proof, Daytona, successor PR CI, merge, publication, and post-release E2E pass. Next: qualify and release `0.3.36`.
+
 ### 2026-08-22 23:00 EDT — runtime-extraction-integrity-0.3.35-windows-alias
 
 - Reproduced: PR `#247` run `32613452545` passed source and website validation but the Windows native build failed while restoring the authenticated runtime. Git for Windows tar recreated the portable `@mariozechner/pi-coding-agent` directory alias as a link that `lstat` could verify but Node could not traverse to `package.json` or `dist/cli/args.js`.

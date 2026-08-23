@@ -1,3 +1,5 @@
+export declare const RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS: number;
+
 export declare function buildSourceRuntimeArchive(
 	appRoot: string,
 	options?: {
