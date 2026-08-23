@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-23 14:49 EDT — igv-mapping-origin-0.3.37-release
+
+- Persistence: PR `#249` merged exact candidate `796bde9266c11346b1daba6d6292c0f9ce1723ee` as release commit `6cd0fc55222fabbf393e762868a4d690b0abbb7c`; the release branch was deleted. The repository does not define `codex` or `codex-automation` labels.
+- Candidate proof: Clean Daytona Node `25.9.0` passed all `903` tests, typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, package budget and artifact checks, and installed local/global runtime, extension, TypeBox, and document-parser checks. The actual workbench browser rendered a VCF with IGV `3.8.5`, received the mapping catalog from `igv.org` with HTTP `200`, made no old-origin request, and emitted no loading error.
+- CI and publication: PR run `32649895467`, CodeQL, and Vercel passed the exact candidate, all six supported-node consumers, and Windows PowerShell 5.1/Core native verification. Publish run `32652620716` passed the cumulative source/package/consumer/native matrix and published npm and GitHub `0.3.37`; exact-version post-release run `32657231834` passed six registry consumers and all three live native installers.
+- Release identity: The PR artifact, publish artifact, and 118,123,369-byte registry tarball are byte-identical at SHA-256 `dfbf557489729b8a742d8e453fd2f94cf5153121822acf7521bf4e5c14ec745b`. npm provenance binds the package to `6cd0fc5`; GitHub release/tag `v0.3.37` targets that commit, and all five native API digests match `SHA256SUMS`.
+- Live and intake: The homepage, release docs, and four installer endpoints return HTTP `200`; release docs expose `v0.3.37`, installer bytes match current source, and Vercel is green on the merge. Open issue, PR, workflow, Dependabot, CodeQL, secret-scanning, and draft-advisory queues are empty. Recent forks remain identical or have only old fork-specific/superseded deltas. State: `verified`. Next: normal intake monitoring.
+
 ### 2026-08-23 07:24 EDT — igv-mapping-origin-0.3.37
 
 - Objective: Refresh the complete post-`0.3.36` maintainer intake and remove one supported research-viewer reliability regression without adding unrelated dependency churn.
