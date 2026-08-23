@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-23 04:33 EDT — windows-runtime-timeout-0.3.36-release
+
+- Persistence: PR `#248` merged exact candidate `93cf4f293da52c58f6f5024408168ae56d33fb48` as `aaf678eb561a27dceb2ae68bc52e24a011366fac` after PR run `32621882417`, CodeQL, and Vercel passed the release candidate, all six package consumers, and the Windows PowerShell 5.1/Core native installer.
+- Publication: Run `32624043934` and CodeQL run `32624043829` passed. npm `0.3.36` provenance and GitHub release/tag `v0.3.36` resolve to `aaf678eb`; all five streamed native assets match `SHA256SUMS` and GitHub's API digests. A fresh registry consumer passed package/runtime/document verification and zero-vulnerability consumer and extracted-runtime audits; the homepage, release page, and four live installer endpoints returned the published release.
+- Post-release: Run `32627678410` passed Ubuntu Node `22/24/25`, macOS Node `24`, Windows Node `24/25`, and all three native installers. Windows Node `25` completed the repaired published path in `17m04s`; duplicate dispatches `32628003187` and `32628016656` were cancelled.
+- State: `verified`. The timing-sensitive five-minute failure is released with a bounded fifteen-minute restore budget, and no open issue or PR remains. Next: preserve this receipt and require the no-op main reconciliation workflows to pass.
+
 ### 2026-08-23 01:49 EDT — windows-runtime-timeout-0.3.36
 
 - Reproduced: Published-package E2E run `32620479741` passed Ubuntu Node `22/24/25`, macOS Node `24`, Windows Node `24`, and all three native installers, but Windows Node `25` terminated the exact-lock runtime `npm ci` at Feynman's fixed five-minute child-process timeout. The process then exited before `feynman --version`; the candidate's earlier Windows Node `25` run had completed the same path under the limit.
