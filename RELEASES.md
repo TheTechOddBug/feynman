@@ -6,6 +6,24 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.35 - 2026-08-22
+
+### Research runtime
+
+- Installed packages no longer accept a partial bundled-runtime extraction merely because the top-level research extensions happened to arrive first. Feynman verifies the complete staged tree before publishing it, retains only known Windows npm links whose targets exist, and runs fallback from the archive's exact npm lock with maintained runtime patches applied before publication.
+- Windows runtime restoration now recreates legacy Pi package aliases as traversable directory links before launch, with a copy fallback when links are unavailable.
+- Configured provider-qualified research subagents now fail explicitly if the child reports that it actually launched on a different active model, instead of silently completing with misleading model metadata.
+- Research prompts beginning with `-` now pass safely through Pi's standard `--` end-of-options delimiter instead of being mistaken for runtime options.
+- Updated `pi-web-access` to `0.24.2`. Automatic search prefers Codex-backed OpenAI search when the active model is `openai-codex`, keeps Exa first for other models, and reads Windows Chromium cookie expiries without overflowing JavaScript numbers.
+
+### Workbench security
+
+- Updated Ketcher to `3.17.2`, which renders monomer labels from opened chemistry artifacts as text instead of interpolating them as HTML.
+
+### Validation
+
+- Added atomic restore, completion-marker, package-lock-graph, missing-transitive-file, exact-lock fallback, pre-publication patch, crash-backup, stale-lock, stale-stage cleanup, Windows npm-link and Pi-alias repair, terminated-process, child-model verification, dash-leading prompt, exact `pi-web-access@0.24.2` source, model-routing, Windows-cookie, and Ketcher monomer-label regressions.
+
 ## v0.3.34 - 2026-08-22
 
 ### Research runtime

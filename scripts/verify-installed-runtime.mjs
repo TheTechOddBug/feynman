@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -27,6 +27,10 @@ import {
 } from "./lib/child-process-cleanup.mjs";
 import { resolveChildProcessCommand } from "./lib/child-process-command.mjs";
 import { verifyRuntimeForwardFixBehavior } from "./lib/pi-ai-forward-fixes-verifier.mjs";
+import {
+	assertPiCliArgsPatchSource,
+	assertPiCliArgsVersion,
+} from "./lib/pi-cli-args-patch.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
 import { verifyInstalledPiStateFilePermissions } from "./lib/pi-state-file-permissions-verifier.mjs";
 import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
@@ -960,6 +964,85 @@ export async function verifyGithubCopilotRateLimitLogin() {
 	}
 }
 
+export async function verifyPiCliEndOfOptions(installedPackageRoot = packageRoot) {
+	const packageRoots = [
+		resolve(
+			installedPackageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+		),
+		resolve(
+			installedPackageRoot,
+			".feynman",
+			"npm",
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+		),
+	];
+	const candidates = packageRoots.map((piPackageRoot, index) => {
+		const manifestPath = resolve(piPackageRoot, "package.json");
+		const argsPath = resolve(piPackageRoot, "dist", "cli", "args.js");
+		assert.ok(
+			existsSync(manifestPath),
+			`Installed Pi CLI package copy ${index + 1} is missing`,
+		);
+		assert.ok(
+			existsSync(argsPath),
+			`Installed Pi CLI parser copy ${index + 1} is missing`,
+		);
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+		assert.equal(
+			manifest.name,
+			"@earendil-works/pi-coding-agent",
+			`Installed Pi CLI copy ${index + 1} has an unexpected package name`,
+		);
+		assertPiCliArgsVersion(
+			manifest.version,
+			`installed Pi CLI copy ${index + 1}`,
+		);
+		assertPiCliArgsPatchSource(
+			readFileSync(argsPath, "utf8"),
+			`installed Pi CLI copy ${index + 1}`,
+		);
+		return { argsPath, index };
+	});
+	let verifiedCopies = 0;
+	for (const { argsPath, index } of candidates) {
+		const { parseArgs } = await import(
+			`${pathToFileURL(argsPath).href}?installed-cli-args=${Date.now()}-${index}`
+		);
+		const printParsed = parseArgs([
+			"-p",
+			"--",
+			"--answer briefly",
+		]);
+		assert.equal(printParsed.print, true);
+		assert.deepEqual(printParsed.messages, ["--answer briefly"]);
+		assert.deepEqual(printParsed.fileArgs, []);
+		assert.equal(printParsed.unknownFlags.size, 0);
+		assert.deepEqual(printParsed.diagnostics, []);
+		const positionalParsed = parseArgs([
+			"--",
+			"--provider",
+			"openai",
+			"-c",
+			"--",
+			"@prompt.md",
+		]);
+		assert.deepEqual(
+			positionalParsed.messages,
+			["--provider", "openai", "-c", "--"],
+		);
+		assert.deepEqual(positionalParsed.fileArgs, ["prompt.md"]);
+		assert.equal(positionalParsed.unknownFlags.size, 0);
+		assert.deepEqual(positionalParsed.diagnostics, []);
+		verifiedCopies += 1;
+	}
+	assert.equal(verifiedCopies, packageRoots.length);
+}
+
 async function main() {
 	await verifyRpcSurface();
 	await verifyWebAccessRegistrationGates();
@@ -971,6 +1054,7 @@ async function main() {
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot);
 	await verifyPiCompactionToolsBehavior(packageRoot);
+	await verifyPiCliEndOfOptions();
 	const stateFilePermissions = await verifyInstalledPiStateFilePermissions(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
@@ -989,6 +1073,7 @@ async function main() {
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",
 		compactionTools: "disabled",
+		cliEndOfOptions: "passed",
 		stateFilePermissions,
 	}));
 }

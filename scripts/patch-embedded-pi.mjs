@@ -1,14 +1,19 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FEYNMAN_LOGO_HTML } from "../logo.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
+import {
+	ensureLegacyPiRuntimeAliases,
+	patchPiCliArgsSource,
+	preflightPiCliArgsPackageRoot,
+} from "./lib/pi-cli-args-patch.mjs";
 import { PI_AI_FORWARD_FIX_TARGETS, patchPiAiForwardFixSource } from "./lib/pi-ai-forward-fixes-patch.mjs";
 import { PI_COMPACTION_TOOLS_PATCH_TARGETS, patchPiCompactionToolsSource } from "./lib/pi-compaction-tools-patch.mjs";
 import {
@@ -22,7 +27,6 @@ import {
 } from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
-import { resolveAdjacentNpmCommand } from "./lib/npm-command.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
@@ -33,11 +37,24 @@ import {
 	patchPiInteractiveUpdateNoticeSource,
 	patchPiTuiSource,
 } from "./lib/pi-tui-patch.mjs";
+import { computeRuntimeTreeHash } from "./lib/runtime-workspace-integrity.mjs";
 import {
-	mergeRuntimePackageSpecs,
-	runtimeManifestPackagesMatch,
-	verifyFileSha256,
-} from "./lib/runtime-workspace-integrity.mjs";
+	buildSourceRuntimeArchive,
+	installRuntimeWorkspaceFromPackageLock,
+	patchStagedRuntimeWorkspace,
+} from "./lib/runtime-workspace-install.mjs";
+import {
+	acquireRuntimeWorkspaceSetupLock,
+	heartbeatRuntimeWorkspaceSetupLock,
+	prepareRuntimeWorkspaceFallback,
+	reconcileRuntimeWorkspaceRestoreArtifacts,
+	replaceRuntimeWorkspaceTransactionally,
+	releaseRuntimeWorkspaceSetupLock,
+	restoreRuntimeWorkspaceFromArchiveWithSeed,
+	runtimeWorkspaceCompletionMatches,
+	runtimeWorkspaceMatches,
+	writeRuntimeWorkspaceCompletion,
+} from "./lib/runtime-workspace-restore.mjs";
 import {
 	assertPiWebAccessVersion,
 	PI_WEB_ACCESS_PATCH_TARGETS,
@@ -47,7 +64,6 @@ import {
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
 import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
 import { patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
-
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..");
 const feynmanHome = resolve(process.env.FEYNMAN_HOME ?? homedir(), ".feynman");
@@ -147,6 +163,9 @@ function resolveWorkspacePiFile(packageName, ...segments) {
 	];
 	return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
 }
+const workspacePiPackageRoot = dirname(
+	resolveWorkspacePiFile("pi-coding-agent", "package.json"),
+);
 
 function resolvePiAiRuntimeFiles(...segments) {
 	return [
@@ -276,17 +295,13 @@ const sessionSearchIndexerPath = resolve(
 const piMemoryPath = resolve(workspaceRoot, "@samfp", "pi-memory", "src", "index.ts");
 const settingsPath = resolve(appRoot, ".feynman", "settings.json");
 const workspaceDir = resolve(appRoot, ".feynman", "npm");
-const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
-const workspaceManifestPath = resolve(workspaceDir, ".runtime-manifest.json");
 const workspaceArchivePath = resolve(appRoot, ".feynman", "runtime-workspace.tgz");
 const workspaceArchiveDigestPath = resolve(appRoot, ".feynman", "runtime-workspace.sha256");
-const workspaceNpmConfigPath = resolve(workspaceDir, ".npmrc");
 const workspaceSetupLockDir = resolve(appRoot, ".feynman", ".workspace-setup.lock");
 const globalNodeModulesRoot = process.platform === "win32"
 	? resolve(feynmanNpmPrefix, "node_modules")
 	: resolve(feynmanNpmPrefix, "lib", "node_modules");
 const PRUNE_VERSION = 8;
-const WORKSPACE_SETUP_LOCK_STALE_MS = 300000;
 const NATIVE_PACKAGE_SPECS = new Set([
 	"@kaiserlich-dev/pi-session-search",
 ]);
@@ -316,116 +331,39 @@ function patchFilesIfPresent(entryPaths, patchSource) {
 		}
 	}
 }
-const FILTERED_INSTALL_OUTPUT_PATTERNS = [
-	/npm warn deprecated node-domexception@1\.0\.0/i,
-	/npm notice/i,
-	/^(added|removed|changed) \d+ packages?( in .+)?$/i,
-	/^\d+ packages are looking for funding$/i,
-	/^run `npm fund` for details$/i,
-];
+
+function listPiCliArgsPackageRoots(nodeModulesRoot) {
+	return ["@earendil-works", "@mariozechner"]
+		.map((scope) => resolve(nodeModulesRoot, scope, "pi-coding-agent"))
+		.filter((packageRoot) => existsSync(packageRoot));
+}
+
+function preflightPiCliArgsPackageRoots(packageRoots) {
+	const uniqueRoots = new Map();
+	for (const packageRoot of packageRoots.filter(Boolean)) {
+		if (!existsSync(packageRoot)) continue;
+		let identity = packageRoot;
+		try {
+			identity = realpathSync(packageRoot);
+		} catch {}
+		// Prefer the canonical scoped package over a later legacy alias. Windows
+		// tar may recreate that alias as a junction whose real path is healthy
+		// even when traversing the alias path does not expose every file yet.
+		if (!uniqueRoots.has(identity)) {
+			uniqueRoots.set(identity, packageRoot);
+		}
+	}
+	const argsPaths = [];
+	for (const packageRoot of uniqueRoots.values()) {
+		preflightPiCliArgsPackageRoot(packageRoot, packageRoot);
+		argsPaths.push(resolve(packageRoot, "dist", "cli", "args.js"));
+	}
+	return argsPaths;
+}
 
 function supportsNativePackageSources(version = process.versions.node) {
 	const [major = "0"] = version.replace(/^v/, "").split(".");
 	return (Number.parseInt(major, 10) || 0) <= 22;
-}
-
-function createInstallCommand(packageManager, packageSpecs) {
-	switch (packageManager) {
-		case "npm":
-			return [
-				"install",
-				"--global=false",
-				"--location=project",
-				"--save-exact",
-				"--prefer-offline",
-				"--no-audit",
-				"--no-fund",
-				"--legacy-peer-deps",
-				"--loglevel",
-				"error",
-				...packageSpecs,
-			];
-		case "pnpm":
-			return ["add", "--prefer-offline", "--reporter", "silent", ...packageSpecs];
-		case "bun":
-			return ["add", "--silent", ...packageSpecs];
-		default:
-			throw new Error(`Unsupported package manager: ${packageManager}`);
-	}
-}
-
-let cachedPackageManager = undefined;
-
-function resolvePackageManager() {
-	if (cachedPackageManager !== undefined) return cachedPackageManager;
-
-	const requested = process.env.FEYNMAN_PACKAGE_MANAGER?.trim();
-	const candidates = requested ? [requested] : ["npm", "pnpm", "bun"];
-	for (const candidate of candidates) {
-		if (resolveExecutable(candidate)) {
-			cachedPackageManager = candidate;
-			return candidate;
-		}
-	}
-
-	cachedPackageManager = null;
-	return null;
-}
-
-function resolvePackageManagerInvocation(packageManager) {
-	if (packageManager === "npm") {
-		const adjacent = resolveAdjacentNpmCommand();
-		if (adjacent) return adjacent;
-	}
-	const resolved = resolveExecutable(packageManager);
-	if (!resolved) return null;
-	// Windows cannot spawn .cmd/.bat shims without a shell (EINVAL).
-	const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved);
-	return { command: resolved, args: [], shell: needsShell };
-}
-
-function installWorkspacePackages(packageSpecs) {
-	const packageManager = resolvePackageManager();
-	if (!packageManager) {
-		process.stderr.write(
-			"[feynman] no supported package manager found; install npm, pnpm, or bun, or set FEYNMAN_PACKAGE_MANAGER.\n",
-		);
-		return false;
-	}
-
-	const invocation = resolvePackageManagerInvocation(packageManager);
-	if (!invocation) {
-		process.stderr.write(`[feynman] could not resolve ${packageManager} executable for bundled package setup.\n`);
-		return false;
-	}
-	const result = spawnSync(invocation.command, [...invocation.args, ...createInstallCommand(packageManager, packageSpecs)], {
-		cwd: workspaceDir,
-		shell: invocation.shell,
-		stdio: ["ignore", "pipe", "pipe"],
-		timeout: 300000,
-		env: {
-			...process.env,
-			PATH: getPathWithCurrentNode(process.env.PATH),
-			npm_config_userconfig: workspaceNpmConfigPath,
-			NPM_CONFIG_USERCONFIG: workspaceNpmConfigPath,
-		},
-	});
-
-	for (const stream of [result.stdout, result.stderr]) {
-		if (!stream?.length) continue;
-		for (const line of stream.toString().split(/\r?\n/)) {
-			if (!line.trim()) continue;
-			if (FILTERED_INSTALL_OUTPUT_PATTERNS.some((pattern) => pattern.test(line.trim()))) continue;
-			process.stderr.write(`${line}\n`);
-		}
-	}
-
-	if (result.status !== 0) {
-		process.stderr.write(`[feynman] ${packageManager} failed while setting up bundled packages.\n`);
-		return false;
-	}
-
-	return true;
 }
 
 function parsePackageName(spec) {
@@ -438,65 +376,20 @@ function filterUnsupportedPackageSpecs(packageSpecs) {
 	return packageSpecs.filter((spec) => !NATIVE_PACKAGE_SPECS.has(parsePackageName(spec)));
 }
 
-function readWorkspaceInstallPackageSpecs(configuredPackageSpecs) {
-	try {
-		const manifest = JSON.parse(readFileSync(workspaceManifestPath, "utf8"));
-		return filterUnsupportedPackageSpecs(
-			mergeRuntimePackageSpecs(manifest.packageSpecs, configuredPackageSpecs),
-		);
-	} catch {
-		return configuredPackageSpecs;
-	}
-}
-
-function workspaceMatchesRuntime(packageSpecs) {
-	if (!existsSync(workspaceManifestPath)) return false;
-
-	try {
-		const manifest = JSON.parse(readFileSync(workspaceManifestPath, "utf8"));
-		if (!Array.isArray(manifest.packageSpecs)) {
-			return false;
-		}
-		const manifestPackageSpecs = filterUnsupportedPackageSpecs(manifest.packageSpecs);
-		if (!runtimeManifestPackagesMatch(workspaceRoot, manifestPackageSpecs, packageSpecs)) {
-			return false;
-		}
-		if (!supportsNativePackageSources()) {
-			return true;
-		}
-		if (
-			manifest.nodeAbi !== process.versions.modules ||
-			manifest.platform !== process.platform ||
-			manifest.arch !== process.arch ||
-			manifest.pruneVersion !== PRUNE_VERSION
-		) {
-			return false;
-		}
-
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function writeWorkspaceManifest(packageSpecs) {
-	writeFileSync(
-		workspaceManifestPath,
-		JSON.stringify(
-			{
-				packageSpecs,
-				generatedAt: new Date().toISOString(),
-				nodeAbi: process.versions.modules,
-				nodeVersion: process.version,
-				platform: process.platform,
-				arch: process.arch,
-				pruneVersion: PRUNE_VERSION,
-			},
-			null,
-			2,
-		) + "\n",
-		"utf8",
-	);
+function workspaceMatchesRuntime(
+	packageSpecs,
+	nodeModulesRoot = workspaceRoot,
+	requireCompletion = true,
+) {
+	return runtimeWorkspaceMatches(resolve(nodeModulesRoot, ".."), packageSpecs, {
+		archivePath: workspaceArchivePath,
+		digestPath: workspaceArchiveDigestPath,
+		filterPackageSpecs: filterUnsupportedPackageSpecs,
+		pruneVersion: PRUNE_VERSION,
+		requireCompletion,
+		requireCurrentPlatformPackageGraph: true,
+		requirePlatformIdentity: supportsNativePackageSources(),
+	});
 }
 
 function ensureParentDir(path) {
@@ -606,7 +499,6 @@ function linkBundledPackage(packageName) {
 		return false;
 	}
 }
-
 function ensureBundledPackageLinks(packageSpecs) {
 	if (!workspaceMatchesRuntime(packageSpecs)) return;
 
@@ -616,39 +508,44 @@ function ensureBundledPackageLinks(packageSpecs) {
 		linkBundledPackage(packageName);
 	}
 }
-
-function restorePackagedWorkspace(packageSpecs) {
-	if (!existsSync(workspaceArchivePath)) return false;
-	if (!verifyFileSha256(workspaceArchivePath, workspaceArchiveDigestPath)) {
-		throw new Error("Bundled runtime archive failed its SHA-256 integrity check");
-	}
-
-	rmSync(workspaceDir, { recursive: true, force: true });
-	mkdirSync(resolve(appRoot, ".feynman"), { recursive: true });
-
-	// Run tar from .feynman with relative paths: GNU tar (Git for Windows)
-	// treats absolute paths with a drive-letter colon ("C:\...") as remote
-	// host specs and fails with "Cannot connect ... resolve failed".
-	const result = spawnSync("tar", ["-xzf", "runtime-workspace.tgz", "-C", "."], {
-		cwd: resolve(appRoot, ".feynman"),
-		stdio: ["ignore", "ignore", "pipe"],
-		timeout: 300000,
+function restorePackagedWorkspace(
+	configuredPackageSpecs,
+	supportedPackageSpecs,
+	heartbeat,
+) {
+	const result = restoreRuntimeWorkspaceFromArchiveWithSeed({
+		archivePath: workspaceArchivePath,
+		configuredPackageSpecs,
+		digestPath: workspaceArchiveDigestPath,
+		heartbeat,
+		workspaceDir,
+		platform: process.platform,
+		validateWorkspace: (stagedWorkspaceDir) => {
+			// Git for Windows tar can recreate a portable directory symlink as a
+			// non-traversable file link. Repair only the known Pi compatibility
+			// aliases inside staging before any parser or runtime validation.
+			ensureLegacyPiRuntimeAliases(
+				resolve(stagedWorkspaceDir, "node_modules"),
+			);
+			preflightPiCliArgsPackageRoots(
+				listPiCliArgsPackageRoots(
+					resolve(stagedWorkspaceDir, "node_modules"),
+				),
+			);
+			return workspaceMatchesRuntime(
+				supportedPackageSpecs,
+				resolve(stagedWorkspaceDir, "node_modules"),
+				false,
+			);
+		},
 	});
-
-	// On Windows, tar may exit non-zero due to symlink creation failures in
-	// .bin/ directories. These are non-fatal — check whether the actual
-	// package directories were extracted successfully.
-	const packagesPresent = packageSpecs.every((spec) => existsSync(resolve(workspaceRoot, parsePackageName(spec))));
-	if (packagesPresent) return true;
-
-	if (result.status !== 0) {
-		if (result.stderr?.length) process.stderr.write(result.stderr);
-		return false;
+	if (result.installSeed) {
+		result.installSeed.packageSpecs = filterUnsupportedPackageSpecs(
+			result.installSeed.packageSpecs,
+		);
 	}
-
-	return false;
+	return result;
 }
-
 function resolveExecutable(name, fallbackPaths = []) {
 	for (const candidate of fallbackPaths) {
 		if (existsSync(candidate)) return candidate;
@@ -677,56 +574,25 @@ function resolveExecutable(name, fallbackPaths = []) {
 	return null;
 }
 
-function getPathWithCurrentNode(pathValue = process.env.PATH ?? "") {
-	const nodeDir = dirname(process.execPath);
-	const parts = pathValue.split(delimiter).filter(Boolean);
-	return parts.includes(nodeDir) ? pathValue : `${nodeDir}${delimiter}${pathValue}`;
-}
-
-function sleepSync(ms) {
-	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function acquireWorkspaceSetupLock() {
-	mkdirSync(dirname(workspaceSetupLockDir), { recursive: true });
-	const startedAt = Date.now();
-
-	while (true) {
-		try {
-			mkdirSync(workspaceSetupLockDir);
-			writeFileSync(resolve(workspaceSetupLockDir, "owner"), `${process.pid}\n${new Date().toISOString()}\n`, "utf8");
-			return;
-		} catch (error) {
-			if (error?.code !== "EEXIST") throw error;
-			try {
-				if (Date.now() - statSync(workspaceSetupLockDir).mtimeMs > WORKSPACE_SETUP_LOCK_STALE_MS) {
-					rmSync(workspaceSetupLockDir, { recursive: true, force: true });
-					continue;
-				}
-			} catch {}
-			if (Date.now() - startedAt > WORKSPACE_SETUP_LOCK_STALE_MS) {
-				throw new Error("Timed out waiting for another Feynman process to finish package setup.");
-			}
-			sleepSync(100);
-		}
-	}
-}
-
-function releaseWorkspaceSetupLock() {
-	rmSync(workspaceSetupLockDir, { recursive: true, force: true });
-}
-
 function ensurePackageWorkspace() {
 	if (!existsSync(settingsPath)) return;
-	acquireWorkspaceSetupLock();
+	const lockToken = acquireRuntimeWorkspaceSetupLock(workspaceSetupLockDir);
+	const heartbeat = () => {
+		if (!heartbeatRuntimeWorkspaceSetupLock(workspaceSetupLockDir, lockToken)) {
+			throw new Error(
+				"Feynman lost ownership of the runtime workspace setup lock.",
+			);
+		}
+	};
 	try {
-		ensurePackageWorkspaceUnlocked();
+		heartbeat();
+		ensurePackageWorkspaceUnlocked(heartbeat);
 	} finally {
-		releaseWorkspaceSetupLock();
+		releaseRuntimeWorkspaceSetupLock(workspaceSetupLockDir, lockToken);
 	}
 }
 
-function ensurePackageWorkspaceUnlocked() {
+function ensurePackageWorkspaceUnlocked(heartbeat) {
 	const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
 	const packageSpecs = Array.isArray(settings.packages)
 		? settings.packages
@@ -736,25 +602,59 @@ function ensurePackageWorkspaceUnlocked() {
 	const supportedPackageSpecs = filterUnsupportedPackageSpecs(packageSpecs);
 
 	if (supportedPackageSpecs.length === 0) return;
+	reconcileRuntimeWorkspaceRestoreArtifacts(workspaceDir);
 	if (workspaceMatchesRuntime(supportedPackageSpecs)) {
+		reconcileRuntimeWorkspaceRestoreArtifacts(workspaceDir, {
+			workspaceIsHealthy: true,
+		});
 		ensureBundledPackageLinks(supportedPackageSpecs);
 		return;
 	}
-	if (restorePackagedWorkspace(packageSpecs) && workspaceMatchesRuntime(supportedPackageSpecs)) {
-		ensureBundledPackageLinks(supportedPackageSpecs);
-		return;
-	}
-
-	const installPackageSpecs = readWorkspaceInstallPackageSpecs(supportedPackageSpecs);
-	mkdirSync(workspaceDir, { recursive: true });
-	if (!existsSync(workspacePackageJsonPath)) {
-		writeFileSync(
-			workspacePackageJsonPath,
-			JSON.stringify({ name: "feynman-packages", private: true }, null, 2) + "\n",
-			"utf8",
+	let packagedRestore;
+	try {
+		packagedRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
+		);
+	} catch (error) {
+		if (!buildSourceRuntimeArchive(appRoot, { force: true, heartbeat })) {
+			throw error;
+		}
+		packagedRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
 		);
 	}
-
+	if (packagedRestore.restored && workspaceMatchesRuntime(supportedPackageSpecs)) {
+		ensureBundledPackageLinks(supportedPackageSpecs);
+		return;
+	}
+	let installSeed = packagedRestore.installSeed;
+	if (
+		!installSeed &&
+		buildSourceRuntimeArchive(appRoot, { force: true, heartbeat })
+	) {
+		const sourceRestore = restorePackagedWorkspace(
+			packageSpecs,
+			supportedPackageSpecs,
+			heartbeat,
+		);
+		if (
+			sourceRestore.restored &&
+			workspaceMatchesRuntime(supportedPackageSpecs)
+		) {
+			ensureBundledPackageLinks(supportedPackageSpecs);
+			return;
+		}
+		installSeed = sourceRestore.installSeed;
+	}
+	if (!installSeed) {
+		throw new Error(
+			"Feynman could not read an authenticated package-lock restore seed.",
+		);
+	}
 	const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 	let frame = 0;
 	const start = Date.now();
@@ -763,21 +663,76 @@ function ensurePackageWorkspaceUnlocked() {
 		process.stderr.write(`\r${frames[frame++ % frames.length]} setting up feynman... ${elapsed}s`);
 	}, 80);
 
-	const result = installWorkspacePackages(installPackageSpecs);
-
-	clearInterval(spinner);
+	let result = false;
+	try {
+		result = replaceRuntimeWorkspaceTransactionally(
+			workspaceDir,
+			(stagedWorkspaceDir) => {
+				prepareRuntimeWorkspaceFallback(stagedWorkspaceDir, installSeed);
+				if (!installRuntimeWorkspaceFromPackageLock(stagedWorkspaceDir, {
+					expectedPackageLockSha256: installSeed.packageLockSha256,
+					heartbeat,
+				})) {
+					return false;
+				}
+				if (!patchStagedRuntimeWorkspace(appRoot, stagedWorkspaceDir, {
+					heartbeat,
+				})) {
+					return false;
+				}
+				if (
+					!workspaceMatchesRuntime(
+						supportedPackageSpecs,
+						resolve(stagedWorkspaceDir, "node_modules"),
+						false,
+					)
+				) {
+					return false;
+				}
+				writeRuntimeWorkspaceCompletion(stagedWorkspaceDir, {
+					source: "package-manager",
+					runtimeTreeHash: computeRuntimeTreeHash(stagedWorkspaceDir),
+					expectedPackageLockSha256: installSeed.packageLockSha256,
+				});
+				return runtimeWorkspaceCompletionMatches(stagedWorkspaceDir, {
+					archivePath: workspaceArchivePath,
+					digestPath: workspaceArchiveDigestPath,
+				});
+			},
+		);
+	} finally {
+		clearInterval(spinner);
+	}
 	const elapsed = Math.round((Date.now() - start) / 1000);
 
 	if (!result) {
 		process.stderr.write(`\r✗ setup failed (${elapsed}s)\n`);
+		throw new Error("Feynman could not restore its bundled research runtime.");
 	} else {
 		process.stderr.write("\r\x1b[2K");
-		writeWorkspaceManifest(installPackageSpecs);
+		if (!workspaceMatchesRuntime(supportedPackageSpecs)) {
+			throw new Error(
+				"Feynman restored an incomplete bundled research runtime.",
+			);
+		}
 		ensureBundledPackageLinks(supportedPackageSpecs);
 	}
 }
 
+// Preflight every package-local parser before package setup or any later patch
+// write. The generated runtime is preflighted inside staging before atomic
+// publication because an invalid previous workspace may be replaced by the
+// authenticated archive.
+const outerPiCliArgsPaths = preflightPiCliArgsPackageRoots([
+	piPackageRoot,
+	...listPiCliArgsPackageRoots(resolve(appRoot, "node_modules")),
+]);
 ensurePackageWorkspace();
+const piCliArgsPaths = preflightPiCliArgsPackageRoots([
+	...outerPiCliArgsPaths.map((argsPath) => dirname(dirname(dirname(argsPath)))),
+	workspacePiPackageRoot,
+	...listPiCliArgsPackageRoots(workspaceRoot),
+]);
 
 function ensurePandoc() {
 	if (!isGlobalInstall) return;
@@ -969,7 +924,8 @@ for (const loaderPath of [extensionLoaderPath, workspaceExtensionLoaderPath].fil
 const workspaceModelRegistryPath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-registry.js");
 const workspaceModelRuntimePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-runtime.js");
 const workspaceAuthStoragePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "auth-storage.js");
-assertPiPackageVersion(dirname(resolveWorkspacePiFile("pi-coding-agent", "package.json")), "vendored pi-coding-agent");
+assertPiPackageVersion(workspacePiPackageRoot, "vendored pi-coding-agent");
+patchFilesIfPresent(piCliArgsPaths, patchPiCliArgsSource);
 patchFilesIfPresent([authStoragePath, workspaceAuthStoragePath], patchPiStateFilePermissionsSource);
 for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegistryPath, workspaceModelRuntimePath].filter(Boolean)) {
 	if (!existsSync(entryPath)) continue;

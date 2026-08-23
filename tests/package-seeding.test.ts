@@ -76,6 +76,7 @@ test("prepare runtime workspace hash tracks every transitive patch file", async 
 test("prepare runtime workspace pins audited transitive runtime overrides", async () => {
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
 	const installedRuntimeSource = readFileSync(resolve(process.cwd(), "scripts", "patch-embedded-pi.mjs"), "utf8");
+	const runtimeInstallSource = readFileSync(resolve(process.cwd(), "scripts", "lib", "runtime-workspace-install.mjs"), "utf8");
 
 	assert.match(runtimeWorkspaceSource, /"@mozilla\/readability": "0\.6\.0"/);
 	assert.match(runtimeWorkspaceSource, /"@opentelemetry\/sdk-node": "0\.221\.0"/);
@@ -85,10 +86,17 @@ test("prepare runtime workspace pins audited transitive runtime overrides", asyn
 	assert.match(runtimeWorkspaceSource, /undici: "8\.10\.0"/);
 	assert.match(runtimeWorkspaceSource, /"undici",\n\];/);
 	assert.match(runtimeWorkspaceSource, /overrides: RUNTIME_PACKAGE_OVERRIDES/);
-	assert.match(installedRuntimeSource, /mergeRuntimePackageSpecs/);
-	assert.match(installedRuntimeSource, /"--save-exact"/);
-	assert.match(installedRuntimeSource, /if \(!existsSync\(workspacePackageJsonPath\)\)/);
-	assert.match(installedRuntimeSource, /writeWorkspaceManifest\(installPackageSpecs\)/);
+	assert.match(installedRuntimeSource, /buildSourceRuntimeArchive/);
+	assert.match(installedRuntimeSource, /installRuntimeWorkspaceFromPackageLock/);
+	assert.match(installedRuntimeSource, /patchStagedRuntimeWorkspace/);
+	assert.match(installedRuntimeSource, /let installSeed = packagedRestore\.installSeed;/);
+	assert.doesNotMatch(
+		installedRuntimeSource,
+		/readRuntimeWorkspaceInstallSeedFromDirectory|existingInstallSeed/,
+	);
+	assert.match(runtimeInstallSource, /"ci"/);
+	assert.match(runtimeInstallSource, /--patch-existing/);
+	assert.doesNotMatch(runtimeInstallSource, /case "pnpm"|case "bun"/);
 });
 
 test("installed runtime scripts follow npm's platform-specific global prefix layout", () => {
@@ -177,7 +185,7 @@ test("prepare runtime workspace links legacy Pi aliases instead of installing du
 	const runtimeWorkspaceSource = readFileSync(resolve(process.cwd(), "scripts", "prepare-runtime-workspace.mjs"), "utf8");
 
 	assert.match(runtimeWorkspaceSource, /function linkLegacyPiRuntimeAliases/);
-	assert.match(runtimeWorkspaceSource, /symlinkSync\(relative\(dirname\(linkPath\), targetPath\), linkPath/);
+	assert.match(runtimeWorkspaceSource, /ensureLegacyPiRuntimeAliases\(workspaceNodeModulesDir\)/);
 	assert.doesNotMatch(runtimeWorkspaceSource, /packageSpecs\.push\(`\$\{legacyName\}@npm:/);
 });
 

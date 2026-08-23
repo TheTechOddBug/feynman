@@ -110,6 +110,8 @@ export const cliCommandSections = [
 		commands: [
 			{ usage: "feynman", description: "Launch the interactive REPL." },
 			{ usage: "feynman chat [prompt]", description: "Start chat explicitly, optionally with an initial prompt." },
+			{ usage: 'feynman -- "- prompt"', description: "Start with a dash-leading research prompt after the end-of-options delimiter." },
+			{ usage: 'feynman --prompt="- prompt"', description: "Run a dash-leading research prompt once and exit." },
 			{ usage: "feynman help", description: "Show CLI help." },
 			{ usage: "feynman setup", description: "Run the guided setup wizard." },
 			{ usage: "feynman setup preview", description: "Install or verify preview dependencies." },

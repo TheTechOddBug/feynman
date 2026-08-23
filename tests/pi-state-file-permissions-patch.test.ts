@@ -29,6 +29,10 @@ const piRoot = resolve(
 );
 const authStoragePath = resolve(piRoot, "dist", "core", "auth-storage.js");
 const modelsStorePath = resolve(piRoot, "dist", "core", "models-store.js");
+const cliArgsSource = readFileSync(
+	resolve(piRoot, "dist", "cli", "args.js"),
+	"utf8",
+);
 const baselineSource = `
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 const AUTH_FILE_WRITE_OPTIONS = { encoding: "utf-8", mode: 0o600 };
@@ -93,7 +97,7 @@ test("Pi state-file patch fails closed on an unreviewed layout", () => {
 test("launch-time repair reaches bundled, vendored, global, and agent-managed Pi copies", () => {
 	assert.match(
 		readFileSync(resolve(process.cwd(), "scripts", "patch-embedded-pi.mjs"), "utf8"),
-		/assertPiPackageVersion\(dirname\(resolveWorkspacePiFile\("pi-coding-agent", "package\.json"\)\), "vendored pi-coding-agent"\);\npatchFilesIfPresent\(\[authStoragePath, workspaceAuthStoragePath\]/,
+		/assertPiPackageVersion\(workspacePiPackageRoot, "vendored pi-coding-agent"\);[\s\S]*patchFilesIfPresent\(\[authStoragePath, workspaceAuthStoragePath\]/,
 	);
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-pi-state-file-roots-"));
 	const agentDir = join(appRoot, "agent-home", ".feynman");
@@ -115,6 +119,7 @@ test("launch-time repair reaches bundled, vendored, global, and agent-managed Pi
 			);
 			const authPath = join(packageRoot, "dist", "core", "auth-storage.js");
 			mkdirSync(join(packageRoot, "dist", "core"), { recursive: true });
+			mkdirSync(join(packageRoot, "dist", "cli"), { recursive: true });
 			writeFileSync(
 				join(packageRoot, "package.json"),
 				JSON.stringify({
@@ -125,6 +130,11 @@ test("launch-time repair reaches bundled, vendored, global, and agent-managed Pi
 				"utf8",
 			);
 			writeFileSync(authPath, baselineSource, "utf8");
+			writeFileSync(
+				join(packageRoot, "dist", "cli", "args.js"),
+				cliArgsSource,
+				"utf8",
+			);
 			return authPath;
 		});
 

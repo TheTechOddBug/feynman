@@ -109,6 +109,12 @@ These installers download the bundled `skills/` and `prompts/` trees plus the re
 $ feynman "what do we know about scaling laws"
 → Searches papers and web, produces a cited research brief
 
+$ feynman -- "- summarize the strongest evidence first"
+→ Preserves a research prompt that begins with a dash instead of parsing it as a CLI option
+
+$ feynman --prompt="- summarize the strongest evidence first"
+→ Runs a dash-leading research prompt once and exits
+
 $ feynman deepresearch "mechanistic interpretability"
 → Multi-agent investigation with parallel researchers, synthesis, verification
 

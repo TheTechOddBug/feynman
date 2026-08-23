@@ -1,8 +1,13 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
+import {
+	assertPiCliArgsVersion,
+	ensureLegacyPiRuntimeAliases,
+	patchPiCliArgsSource,
+} from "./lib/pi-cli-args-patch.mjs";
 import {
 	PI_AI_FORWARD_FIX_TARGETS,
 	patchPiAiForwardFixSource,
@@ -64,7 +69,11 @@ const packageJsonPath = resolve(appRoot, "package.json");
 const packageLockPath = resolve(appRoot, "package-lock.json");
 const feynmanDir = resolve(appRoot, ".feynman");
 const runtimePackageLockPath = resolve(feynmanDir, "runtime-package-lock.json");
-const workspaceDir = resolve(appRoot, ".feynman", "npm");
+const explicitWorkspaceDir =
+	process.env.FEYNMAN_RUNTIME_WORKSPACE_TARGET?.trim();
+const workspaceDir = explicitWorkspaceDir
+	? resolve(explicitWorkspaceDir)
+	: resolve(appRoot, ".feynman", "npm");
 const workspaceNodeModulesDir = resolve(workspaceDir, "node_modules");
 const manifestPath = resolve(workspaceDir, ".runtime-manifest.json");
 const workspacePackageJsonPath = resolve(workspaceDir, "package.json");
@@ -116,12 +125,6 @@ const PINNED_RUNTIME_PACKAGES = [
 	"typebox",
 	"undici",
 ];
-const LEGACY_PI_RUNTIME_PACKAGE_ALIASES = {
-	"@mariozechner/pi-agent-core": "@earendil-works/pi-agent-core",
-	"@mariozechner/pi-ai": "@earendil-works/pi-ai",
-	"@mariozechner/pi-coding-agent": "@earendil-works/pi-coding-agent",
-	"@mariozechner/pi-tui": "@earendil-works/pi-tui",
-};
 const NATIVE_PACKAGE_SPECS = new Set([
 	"@kaiserlich-dev/pi-session-search",
 ]);
@@ -255,6 +258,10 @@ function childNpmInstallEnv() {
 		// publish artifact can be validated without poisoning the archive.
 		npm_config_dry_run: "false",
 		NPM_CONFIG_DRY_RUN: "false",
+		npm_config_global: "false",
+		NPM_CONFIG_GLOBAL: "false",
+		npm_config_location: "project",
+		NPM_CONFIG_LOCATION: "project",
 		npm_config_userconfig: workspaceNpmConfigPath,
 		NPM_CONFIG_USERCONFIG: workspaceNpmConfigPath,
 	};
@@ -321,6 +328,11 @@ function prepareWorkspace(packageSpecs, refreshRuntimeLock) {
 
 function writeManifest(packageSpecs, runtimeTreeHash = computeRuntimeTreeHash(workspaceDir)) {
 	const workspaceTreeHash = computeRuntimeTreeHash(workspaceDir);
+	const libc = process.platform === "linux"
+		? (process.report?.getReport?.().header?.glibcVersionRuntime
+			? "glibc"
+			: "musl")
+		: undefined;
 	writeFileSync(
 		manifestPath,
 		JSON.stringify(
@@ -330,10 +342,11 @@ function writeManifest(packageSpecs, runtimeTreeHash = computeRuntimeTreeHash(wo
 				runtimeTreeHash,
 				workspaceTreeHash,
 				nodeAbi: process.versions.modules,
-				nodeVersion: process.version,
-				platform: process.platform,
-				arch: process.arch,
-				pruneVersion: PRUNE_VERSION,
+					nodeVersion: process.version,
+					platform: process.platform,
+					arch: process.arch,
+					...(libc ? { libc } : {}),
+					pruneVersion: PRUNE_VERSION,
 			},
 			null,
 			2,
@@ -351,38 +364,8 @@ function pruneWorkspace() {
 	}
 }
 
-function linkDirectory(linkPath, targetPath) {
-	try {
-		if (existsSync(linkPath) && lstatSync(linkPath).isSymbolicLink()) {
-			if (resolve(dirname(linkPath), readlinkSync(linkPath)) === targetPath) {
-				return;
-			}
-			rmSync(linkPath, { force: true });
-		}
-	} catch {}
-
-	if (existsSync(linkPath)) {
-		return;
-	}
-
-	mkdirSync(dirname(linkPath), { recursive: true });
-	try {
-		symlinkSync(relative(dirname(linkPath), targetPath), linkPath, process.platform === "win32" ? "junction" : "dir");
-	} catch {
-		if (!existsSync(linkPath)) {
-			cpSync(targetPath, linkPath, { recursive: true });
-		}
-	}
-}
-
 function linkLegacyPiRuntimeAliases() {
-	for (const [legacyName, currentName] of Object.entries(LEGACY_PI_RUNTIME_PACKAGE_ALIASES)) {
-		const currentPath = resolve(workspaceNodeModulesDir, currentName);
-		if (!existsSync(currentPath)) {
-			continue;
-		}
-		linkDirectory(resolve(workspaceNodeModulesDir, legacyName), currentPath);
-	}
+	return ensureLegacyPiRuntimeAliases(workspaceNodeModulesDir);
 }
 
 function patchBundledPiSubagents() {
@@ -480,6 +463,47 @@ function patchPiCodingAgentPackageJsonSource(source) {
 
 function patchBundledPiCodingAgentPackageJson() {
 	return patchScopedPiWorkspaceFile("pi-coding-agent", "package.json", patchPiCodingAgentPackageJsonSource);
+}
+
+function collectBundledPiCliArgsCandidates() {
+	const candidates = [];
+	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		const packageRoot = resolve(
+			workspaceNodeModulesDir,
+			scope,
+			"pi-coding-agent",
+		);
+		if (!existsSync(packageRoot)) continue;
+		const version = JSON.parse(
+			readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+		).version;
+		assertPiCliArgsVersion(version, `runtime workspace ${scope}/pi-coding-agent`);
+		if (!existsSync(resolve(packageRoot, "dist", "cli", "args.js"))) {
+			throw new Error(
+				`Pi CLI args patch target is missing: ${resolve(packageRoot, "dist", "cli", "args.js")}`,
+			);
+		}
+		const path = resolve(packageRoot, "dist", "cli", "args.js");
+		const source = readFileSync(path, "utf8");
+		candidates.push({
+			path,
+			source,
+			patched: patchPiCliArgsSource(source),
+		});
+	}
+	return candidates;
+}
+
+function patchBundledPiCliArgs(
+	candidates = collectBundledPiCliArgsCandidates(),
+) {
+	let changed = false;
+	for (const candidate of candidates) {
+		if (candidate.patched === candidate.source) continue;
+		writeFileSync(candidate.path, candidate.patched, "utf8");
+		changed = true;
+	}
+	return changed;
 }
 
 function patchBundledPiAgentCore() {
@@ -781,8 +805,14 @@ function patchMcpSdkManifest(nodeModulesDir) {
 	return true;
 }
 
-function patchBundledRuntime() {
+function patchBundledRuntime(
+	piCliArgsCandidates = collectBundledPiCliArgsCandidates(),
+) {
 	let changed = false;
+	// Fail closed on every matching Pi parser before any runtime patch writes.
+	// This keeps a malformed secondary package from leaving a partially patched
+	// fallback candidate.
+	changed = patchBundledPiCliArgs(piCliArgsCandidates) || changed;
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
 	changed = patchBundledPiRuntimeCorrectness() || changed;
@@ -845,24 +875,48 @@ async function createWorkspaceArchive(packageSpecs) {
 	writeFileSha256(workspaceArchivePath, workspaceArchiveDigestPath);
 }
 
-patchMcpSdkManifest(resolve(appRoot, "node_modules"));
-patchPiBraceExpansionTree(
-	resolve(appRoot, "node_modules"),
-	resolve(appRoot, "node_modules", "brace-expansion"),
-);
-patchPiUndiciProxyTree(
-	resolve(appRoot, "node_modules"),
-	resolve(appRoot, "node_modules", "undici"),
-	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
-);
 const packageSpecs = readPackageSpecs();
 const refreshRuntimeLock = process.argv.includes("--refresh-lock");
 const rebuildWorkspace = process.argv.includes("--rebuild");
+const patchExistingWorkspace = process.argv.includes("--patch-existing");
+
+function patchRootRuntimeDependencies() {
+	patchMcpSdkManifest(resolve(appRoot, "node_modules"));
+	patchPiBraceExpansionTree(
+		resolve(appRoot, "node_modules"),
+		resolve(appRoot, "node_modules", "brace-expansion"),
+	);
+	patchPiUndiciProxyTree(
+		resolve(appRoot, "node_modules"),
+		resolve(appRoot, "node_modules", "undici"),
+		PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+	);
+}
+
+if (patchExistingWorkspace) {
+	if (!explicitWorkspaceDir || !existsSync(workspaceNodeModulesDir)) {
+		throw new Error(
+			"--patch-existing requires FEYNMAN_RUNTIME_WORKSPACE_TARGET with an installed node_modules tree",
+		);
+	}
+	if (!workspacePackagesMatch(workspaceNodeModulesDir, packageSpecs)) {
+		throw new Error(
+			"Existing runtime workspace does not match Feynman's exact package contract",
+		);
+	}
+	const piCliArgsCandidates = collectBundledPiCliArgsCandidates();
+	linkLegacyPiRuntimeAliases();
+	patchBundledRuntime(piCliArgsCandidates);
+	writeManifest(packageSpecs);
+	process.exit(0);
+}
 
 if (!refreshRuntimeLock && !rebuildWorkspace && workspaceIsCurrent(packageSpecs)) {
+	const piCliArgsCandidates = collectBundledPiCliArgsCandidates();
+	patchRootRuntimeDependencies();
 	console.log("[feynman] vendored runtime workspace already up to date");
 	linkLegacyPiRuntimeAliases();
-	if (patchBundledRuntime()) {
+	if (patchBundledRuntime(piCliArgsCandidates)) {
 		writeManifest(packageSpecs);
 		console.log("[feynman] patched bundled Pi runtime");
 	}
@@ -877,9 +931,11 @@ if (!refreshRuntimeLock && !rebuildWorkspace && workspaceIsCurrent(packageSpecs)
 
 console.log("[feynman] preparing vendored runtime workspace...");
 prepareWorkspace(packageSpecs, refreshRuntimeLock);
+const piCliArgsCandidates = collectBundledPiCliArgsCandidates();
+patchRootRuntimeDependencies();
 pruneWorkspace();
 linkLegacyPiRuntimeAliases();
-patchBundledRuntime();
+patchBundledRuntime(piCliArgsCandidates);
 if (refreshRuntimeLock) {
 	cpSync(resolve(workspaceDir, "package-lock.json"), runtimePackageLockPath);
 	console.log("[feynman] refreshed committed runtime lock");

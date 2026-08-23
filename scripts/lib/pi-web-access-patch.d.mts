@@ -1,4 +1,4 @@
-export declare const PI_WEB_ACCESS_REQUIRED_VERSION: "0.24.1";
+export declare const PI_WEB_ACCESS_REQUIRED_VERSION: "0.24.2";
 export declare const PI_WEB_ACCESS_FORWARD_FILE_TARGETS: string[];
 export declare const PI_WEB_ACCESS_PATCH_TARGETS: string[];
 export declare function patchPiWebAccessForwardFixSource(

@@ -59,7 +59,7 @@ export const CORE_PACKAGE_SOURCES = [
 	"npm:pi-subagents@0.40.0",
 	"npm:pi-btw@0.4.1",
 	"npm:pi-docparser@4.0.0",
-	"npm:pi-web-access@0.24.1",
+	"npm:pi-web-access@0.24.2",
 	"npm:pi-otel@0.1.0",
 ] as const;
 
@@ -190,6 +190,7 @@ const MANAGED_CORE_PACKAGE_SOURCES = new Set<string>([
 	"npm:pi-web-access@0.22.0",
 	"npm:pi-web-access@0.23.0",
 	"npm:pi-web-access@0.24.0",
+	"npm:pi-web-access@0.24.1",
 	...CORE_PACKAGE_SOURCES,
 ]);
 const MANAGED_CORE_PACKAGE_NAMES = new Set(

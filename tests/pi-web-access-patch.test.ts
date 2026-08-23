@@ -21,13 +21,13 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.24.1",
+	"pi-web-access-0.24.2",
 );
 const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"..",
 	"fixtures",
-	"pi-web-access-0.24.1",
+	"pi-web-access-0.24.2",
 );
 const PI_WEB_ACCESS_RUNTIME_ROOT = join(
 	import.meta.dirname,
@@ -269,10 +269,10 @@ test("model-aware auto routing matches upstream commit 9b1b917 exactly", () => {
 	}
 });
 
-test("exact pi-web-access fixture keeps 0.24.1 retrieval and clone protections", () => {
+test("exact pi-web-access fixture keeps 0.24.2 retrieval and clone protections", () => {
 	const patchedSources = patchPiWebAccessSources(
 		readPiWebAccessFixtureSources(),
-		"0.24.1 fixture",
+		"0.24.2 fixture",
 	);
 	const extractSource = patchedSources.get("extract.ts") ?? "";
 	const githubSource = patchedSources.get("github-extract.ts") ?? "";
@@ -329,7 +329,7 @@ test("runtime readable extraction removes inline data URIs while raw mode preser
 	assert.equal(output.userAgent, "OpenAI File Downloader, XaiImageApiFetch/1.0");
 });
 
-test("runtime 0.24.1 normalizes PDF limits and honors OpenAI search provider priority", () => {
+test("runtime 0.24.2 normalizes PDF limits and honors OpenAI search provider priority", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-web-0241-config-"));
 	const configPath = join(root, "web-search.json");
 	writeFileSync(
@@ -387,7 +387,7 @@ test("runtime 0.24.1 normalizes PDF limits and honors OpenAI search provider pri
 	}
 });
 
-test("runtime 0.24.1 rejects unsafe GitHub clone identities", () => {
+test("runtime 0.24.2 rejects unsafe GitHub clone identities", () => {
 	const githubUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "github-extract.ts")).href;
 	const child = spawnSync(
 		process.execPath,
@@ -987,11 +987,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.1");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.1", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.2");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.2", "test"));
 	assert.throws(
 		() => assertPiWebAccessVersion("0.25.0", "future"),
-		/expected 0\.24\.1, found 0\.25\.0/,
+		/expected 0\.24\.2, found 0\.25\.0/,
 	);
 
 	const futureSource = [
@@ -1011,7 +1011,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.24\.1 summary model scope layout/,
+		/Unsupported pi-web-access 0\.24\.2 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

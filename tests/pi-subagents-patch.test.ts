@@ -120,7 +120,11 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 			"src/runs/shared/pi-spawn.ts",
 			"src/runs/shared/model-fallback.ts",
 			"src/runs/foreground/execution.ts",
+			"src/runs/foreground/chain-execution.ts",
+			"src/runs/background/async-execution.ts",
 			"src/runs/background/subagent-runner.ts",
+			"src/runs/background/async-resume.ts",
+			"src/runs/shared/parallel-utils.ts",
 			"src/runs/background/chain-root-attachment.ts",
 			"src/runs/background/stale-run-reconciler.ts",
 			"src/runs/background/async-status.ts",
@@ -134,7 +138,132 @@ test("PI_SUBAGENTS_PATCH_TARGETS covers current pi-subagents source paths", () =
 	);
 });
 
-test("patched installed pi-subagents carries context overflow, backfilled tool completion, and logical failures end to end", async () => {
+test("patchPiSubagentsSource replaces registry-gated model verification with exact provider identity checks", () => {
+	const weakHelper = [
+		"export function splitThinkingSuffix(model: string) {",
+		"\treturn model;",
+		"}",
+		"",
+		"export function formatSubagentModelVerificationError(expectedModel: string, observedModel: string, availableModels: AvailableModelInfo[] | undefined): string | undefined {",
+		"\tif (!availableModels || availableModels.length === 0) return undefined;",
+		"\tconst expectedBase = splitThinkingSuffix(expectedModel).baseModel;",
+		"\tconst observedBase = splitThinkingSuffix(observedModel).baseModel;",
+		"\tif (!availableModels.some((entry) => entry.fullId === observedBase)) return undefined;",
+		"\tif (expectedBase === observedBase) return undefined;",
+		"\treturn `model_verification_failed: child reported a different model than the launch candidate. Expected '${expectedModel}' but observed '${observedModel}'.`;",
+		"}",
+		"",
+		"/** Sentinel model value requesting that a subagent inherit the parent session's model. */",
+		'export const INHERIT_MODEL = "inherit";',
+	].join("\n");
+	const patched = patchPiSubagentsSource("src/runs/shared/model-fallback.ts", weakHelper);
+
+	assert.match(patched, /parseExpectedSubagentModelIdentity/);
+	assert.match(patched, /observedProvider: unknown,/);
+	assert.match(patched, /observedModel: unknown,/);
+	assert.match(patched, /availableModels\?: AvailableModelInfo\[\]/);
+	assert.match(patched, /expected\.provider === provider/);
+	assert.match(patched, /expected\.model === model/);
+	assert.match(
+		patched,
+		/typeof observedProvider === "string" \? observedProvider : ""/,
+	);
+	assert.match(
+		patched,
+		/typeof observedModel === "string" \? observedModel : ""/,
+	);
+	assert.doesNotMatch(patched, /observedProvider\.trim\(\)/);
+	assert.doesNotMatch(patched, /observedModel\.trim\(\)/);
+	assert.match(patched, /entry\.fullId === requested/);
+	assert.match(patched, /entry\.fullId === expectedBase/);
+	assert.match(patched, /<missing-provider>/);
+	assert.match(patched, /<missing-model>/);
+	assert.match(patched, /\["off", "minimal", "low", "medium", "high", "xhigh", "max"\]/);
+	assert.doesNotMatch(patched, /requested\.toLowerCase/);
+	assert.doesNotMatch(patched, /expectedBase\.toLowerCase/);
+	assert.doesNotMatch(patched, /model\.slice\(colonIndex \+ 1\)\.toLowerCase/);
+	assert.doesNotMatch(patched, /availableModels\.some/);
+	assert.equal(patchPiSubagentsSource("src/runs/shared/model-fallback.ts", patched), patched);
+});
+
+test("patchPiSubagentsSource keeps parent-model metadata out of fork model resolver arguments", () => {
+	const input = [
+		"const options = {",
+		"\tmodelOverride,",
+		"\tthinkingOverride: delegatedThinkingOverride,",
+		"};",
+		"const primaryModel = resolveEffectiveSubagentModel(",
+		"\tmodelOverride,",
+		"\tmodelOverrideFromParent,",
+		"\tagentConfig?.model,",
+		"\tparentModel,",
+		");",
+	].join("\n");
+
+	const patched = patchPiSubagentsSource(
+		"src/runs/foreground/subagent-executor.ts",
+		input,
+	);
+
+	assert.match(
+		patched,
+		/\tmodelOverride,\n\tmodelOverrideFromParent,\n\tthinkingOverride:/,
+	);
+	assert.match(
+		patched,
+		/resolveEffectiveSubagentModel\(\n\tmodelOverride,\n\tagentConfig\?\.model,/,
+	);
+	assert.doesNotMatch(
+		patched,
+		/resolveEffectiveSubagentModel\(\n\tmodelOverride,\n\tmodelOverrideFromParent,/,
+	);
+	assert.equal(
+		patchPiSubagentsSource(
+			"src/runs/foreground/subagent-executor.ts",
+			patched,
+		),
+		patched,
+	);
+});
+
+test("current pi-subagents identity patches are exact idempotent fixed points", () => {
+	const appRoot = resolve(import.meta.dirname, "..");
+	const subagentsRoot = resolve(
+		appRoot,
+		".feynman",
+		"npm",
+		"node_modules",
+		"pi-subagents",
+	);
+	for (const relativePath of [
+		"src/runs/shared/model-fallback.ts",
+		"src/runs/foreground/execution.ts",
+		"src/runs/foreground/chain-execution.ts",
+		"src/runs/foreground/subagent-executor.ts",
+		"src/runs/background/async-execution.ts",
+		"src/runs/background/subagent-runner.ts",
+		"src/runs/background/async-resume.ts",
+		"src/runs/shared/parallel-utils.ts",
+		"src/shared/types.ts",
+	]) {
+		const source = readFileSync(resolve(subagentsRoot, relativePath), "utf8");
+		const patched = patchPiSubagentsSource(relativePath, source);
+		assert.equal(
+			patchPiSubagentsSource(relativePath, patched),
+			patched,
+			`${relativePath} patch is not idempotent`,
+		);
+		if (relativePath === "src/runs/foreground/subagent-executor.ts") {
+			assert.doesNotMatch(
+				patched,
+				/resolveEffectiveSubagentModel\(\s*modelOverride,\s*modelOverrideFromParent,/s,
+				"model inheritance metadata must not alter a resolver argument list",
+			);
+		}
+	}
+});
+
+test("patched installed pi-subagents carries model identity, context overflow, backfilled tool completion, and logical failures end to end", async () => {
 	const appRoot = resolve(import.meta.dirname, "..");
 	const subagentsRoot = resolve(
 		appRoot,
