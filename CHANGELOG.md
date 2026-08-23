@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-23 07:24 EDT — igv-mapping-origin-0.3.37
+
+- Objective: Refresh the complete post-`0.3.36` maintainer intake and remove one supported research-viewer reliability regression without adding unrelated dependency churn.
+- Intake: Open issues, pull requests, active workflows, and security-alert queues are empty. Recent `dubbypanda`, `TheTechOddBug`, `birhantprkc`, and newly created `Shergill08` forks are identical to `main`; the older `randomm` and `fuzzywigg` deltas remain fork-specific or superseded. Pi `0.84.2`, pi-web-access `0.24.2`, pi-docparser `4.0.0`, and LiteParse `2.13.1` remain current. The broad pi-subagents `0.55.0` workflow/fleet/control-plane migration, coordinated TypeBox, routine UI/tooling, npyjs, and patristic drift have no narrow unmet research-loop fix.
+- Reproduced: Feynman's embedded genome preview used IGV `3.8.4`, whose published browser bundle unconditionally points legacy URL-map loading at `raw.githubusercontent.com`. Upstream issue `#2087` confirms restrictive content-security policies can block that origin; IGV `3.8.5` moves the exact mapping request to `https://igv.org/data/url_mappings.tsv`.
+- Changed: Updated IGV to `3.8.5`, added an installed-bundle regression for the supported origin and absence of the old raw-GitHub mapping path, bumped Feynman to `0.3.37`, and updated root and website release notes.
+- Verification: Focused genome-parser, viewer-shell, and installed-IGV tests pass (`5/5`); the full suite passes (`903/903`); typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, exact npm-artifact comparison, freshness review, and `git diff --check` pass. Dry and real packs match at `116,445,627` bytes and `29,176` files with SHA-256 `e09e7352946dd2c80fff7e1d4382a6381d424ec2106f46454e4bed8c2a6a83df`; clean local/global consumers pass package, runtime, extension/tool, TypeBox, document, and stale-upgrade checks. A headless Chrome run of the actual built workbench rendered a VCF in IGV `3.8.5`, received the mapping catalog from `igv.org` with HTTP `200`, made no request to the old mapping origin, and emitted no load failure, exception, or error log. State: `unverified` for exact-commit Daytona, CI, merge, publication, and post-release gates. Next: commit the candidate, prove the exact SHA in Daytona and CI, then merge and verify `0.3.37`.
+
 ### 2026-08-23 04:33 EDT — windows-runtime-timeout-0.3.36-release
 
 - Persistence: PR `#248` merged exact candidate `93cf4f293da52c58f6f5024408168ae56d33fb48` as `aaf678eb561a27dceb2ae68bc52e24a011366fac` after PR run `32621882417`, CodeQL, and Vercel passed the release candidate, all six package consumers, and the Windows PowerShell 5.1/Core native installer.

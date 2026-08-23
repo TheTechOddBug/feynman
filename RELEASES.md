@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.37 - 2026-08-23
+
+### Research visualization
+
+- Updated IGV to `3.8.5`. Embedded VCF, BED, and GFF genome previews now load IGV's legacy URL-mapping catalog from `igv.org` instead of raw GitHub, avoiding unnecessary blocked-origin warnings under restrictive content-security policies.
+
+### Validation
+
+- Matched the installed package to the published `3.8.5` npm artifact and upstream commit `1ff36cd`, with an executable regression for the supported mapping origin.
+
 ## v0.3.36 - 2026-08-23
 
 ### Research runtime
