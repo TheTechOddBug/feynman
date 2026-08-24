@@ -9,6 +9,16 @@ import {
 	patchPiCliArgsSource,
 } from "./lib/pi-cli-args-patch.mjs";
 import {
+	assertPiEditLineEndingsVersion,
+	PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
+	patchPiEditLineEndingsSource,
+} from "./lib/pi-edit-line-endings-patch.mjs";
+import {
+	assertPiDocparserInvisibleTextVersion,
+	PI_DOCPARSER_INVISIBLE_TEXT_PATCH_TARGETS,
+	patchPiDocparserInvisibleTextSource,
+} from "./lib/pi-docparser-invisible-text-patch.mjs";
+import {
 	PI_AI_FORWARD_FIX_TARGETS,
 	patchPiAiForwardFixSource,
 } from "./lib/pi-ai-forward-fixes-patch.mjs";
@@ -625,6 +635,27 @@ function patchBundledPiRuntimeCorrectness() {
 	return changed;
 }
 
+function patchBundledPiEditLineEndings() {
+	let changed = false;
+	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		const packageRoot = resolve(workspaceNodeModulesDir, scope, "pi-coding-agent");
+		if (!existsSync(packageRoot)) continue;
+		const version = JSON.parse(
+			readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+		).version;
+		assertPiEditLineEndingsVersion(version, `runtime workspace ${scope}/pi-coding-agent`);
+		for (const relativePath of PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS) {
+			changed = patchScopedPiWorkspaceFile(
+				"pi-coding-agent",
+				relativePath,
+				(source) => patchPiEditLineEndingsSource(relativePath, source),
+			) || changed;
+		}
+		break;
+	}
+	return changed;
+}
+
 function patchBundledPiLlamaUsage() {
 	return patchScopedPiWorkspaceFile(
 		"pi-coding-agent",
@@ -760,6 +791,28 @@ function patchBundledPiSessionSearch() {
 	return changed;
 }
 
+function patchBundledPiDocparser() {
+	const packageRoot = resolve(workspaceNodeModulesDir, "pi-docparser");
+	if (!existsSync(packageRoot)) return false;
+	const version = JSON.parse(
+		readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+	).version;
+	assertPiDocparserInvisibleTextVersion(version, "bundled runtime workspace");
+	let changed = false;
+	for (const relativePath of PI_DOCPARSER_INVISIBLE_TEXT_PATCH_TARGETS) {
+		const entryPath = resolve(packageRoot, ...relativePath.split("/"));
+		if (!existsSync(entryPath)) {
+			throw new Error(`pi-docparser invisible-text patch target is missing: ${entryPath}`);
+		}
+		const source = readFileSync(entryPath, "utf8");
+		const patched = patchPiDocparserInvisibleTextSource(relativePath, source);
+		if (patched === source) continue;
+		writeFileSync(entryPath, patched, "utf8");
+		changed = true;
+	}
+	return changed;
+}
+
 function patchBundledAlphaHub() {
 	const alphaHubLib = resolve(
 		workspaceNodeModulesDir,
@@ -816,6 +869,7 @@ function patchBundledRuntime(
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
 	changed = patchBundledPiRuntimeCorrectness() || changed;
+	changed = patchBundledPiEditLineEndings() || changed;
 	changed = patchBundledPiLlamaUsage() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;
 	changed = patchBundledPiStateFilePermissions() || changed;
@@ -836,6 +890,7 @@ function patchBundledRuntime(
 	changed = patchBundledPiSubagents() || changed;
 	changed = patchBundledPiOtel() || changed;
 	changed = patchBundledPiSessionSearch() || changed;
+	changed = patchBundledPiDocparser() || changed;
 	changed = patchBundledAlphaHub() || changed;
 	changed = patchMcpSdkManifest(workspaceNodeModulesDir) || changed;
 	return changed;

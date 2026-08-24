@@ -10,6 +10,16 @@ import {
 	patchPiCliArgsSource,
 } from "../../scripts/lib/pi-cli-args-patch.mjs";
 import {
+	PI_EDIT_LINE_ENDINGS_PATCH_TARGETS,
+	patchPiEditLineEndingsSource,
+} from "../../scripts/lib/pi-edit-line-endings-patch.mjs";
+import {
+	assertPiDocparserInvisibleTextVersion,
+	PI_DOCPARSER_INVISIBLE_TEXT_PATCH_TARGETS,
+	PI_DOCPARSER_INVISIBLE_TEXT_REQUIRED_VERSION,
+	patchPiDocparserInvisibleTextSource,
+} from "../../scripts/lib/pi-docparser-invisible-text-patch.mjs";
+import {
 	PI_AI_FORWARD_FIX_TARGETS,
 	patchPiAiForwardFixSource,
 } from "../../scripts/lib/pi-ai-forward-fixes-patch.mjs";
@@ -118,6 +128,20 @@ function patchPiWebAccessPackageFiles(nodeModulesPath: string, appRoot: string):
 		changed = true;
 	}
 	return changed;
+}
+
+function patchPiDocparserPackageFiles(nodeModulesPath: string): boolean {
+	const packageRoot = resolve(nodeModulesPath, "pi-docparser");
+	if (!existsSync(packageRoot)) return false;
+	const version = readPackageVersion(packageRoot);
+	if (version !== PI_DOCPARSER_INVISIBLE_TEXT_REQUIRED_VERSION) return false;
+	assertPiDocparserInvisibleTextVersion(version, packageRoot);
+	return patchPackageFiles(
+		nodeModulesPath,
+		"pi-docparser",
+		[...PI_DOCPARSER_INVISIBLE_TEXT_PATCH_TARGETS],
+		patchPiDocparserInvisibleTextSource,
+	);
 }
 
 function readPackageVersion(packageRoot: string): string | undefined {
@@ -403,6 +427,15 @@ export function patchPiRuntimeNodeModules(
 				bundledPiVersion,
 			) || changed;
 		}
+		for (const relativePath of PI_EDIT_LINE_ENDINGS_PATCH_TARGETS) {
+			changed = patchScopedPiPackageFileIfPresent(
+				nodeModulesPath,
+				"pi-coding-agent",
+				relativePath,
+				(source) => patchPiEditLineEndingsSource(relativePath, source),
+				bundledPiVersion,
+			) || changed;
+		}
 		changed = patchScopedPiPackageFileIfPresent(
 			nodeModulesPath,
 			"pi-tui",
@@ -504,6 +537,7 @@ export function patchPiRuntimeNodeModules(
 			patchAlphaHubSearchResultsSource,
 		) || changed;
 		changed = patchPiWebAccessPackageFiles(nodeModulesPath, appRoot) || changed;
+		changed = patchPiDocparserPackageFiles(nodeModulesPath) || changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"pi-subagents",

@@ -14,6 +14,12 @@ import {
 	patchPiCliArgsSource,
 	preflightPiCliArgsPackageRoot,
 } from "./lib/pi-cli-args-patch.mjs";
+import {
+	assertPiEditLineEndingsVersion,
+	PI_EDIT_LINE_ENDINGS_PATCH_TARGETS,
+	patchPiEditLineEndingsSource,
+} from "./lib/pi-edit-line-endings-patch.mjs";
+import { patchPiDocparserRuntimeRoots } from "./lib/pi-docparser-runtime-patch.mjs";
 import { PI_AI_FORWARD_FIX_TARGETS, patchPiAiForwardFixSource } from "./lib/pi-ai-forward-fixes-patch.mjs";
 import { PI_COMPACTION_TOOLS_PATCH_TARGETS, patchPiCompactionToolsSource } from "./lib/pi-compaction-tools-patch.mjs";
 import {
@@ -193,6 +199,9 @@ const piAiForwardFixPaths = PI_AI_FORWARD_FIX_TARGETS.flatMap((relativePath) =>
 	resolvePiAiRuntimeFiles(...relativePath.split("/")).map((entryPath) => ({ entryPath, relativePath }))
 );
 const compactionToolsPaths = PI_COMPACTION_TOOLS_PATCH_TARGETS.flatMap((relativePath) =>
+	[piPackageRoot ? resolve(piPackageRoot, ...relativePath.split("/")) : null, resolveWorkspacePiFile("pi-coding-agent", ...relativePath.split("/"))]
+		.filter(Boolean).map((entryPath) => ({ entryPath, relativePath })));
+const piEditLineEndingsPaths = PI_EDIT_LINE_ENDINGS_PATCH_TARGETS.flatMap((relativePath) =>
 	[piPackageRoot ? resolve(piPackageRoot, ...relativePath.split("/")) : null, resolveWorkspacePiFile("pi-coding-agent", ...relativePath.split("/"))]
 		.filter(Boolean).map((entryPath) => ({ entryPath, relativePath })));
 const workspaceAgentLoopPath = resolveWorkspacePiFile("pi-agent-core", "dist", "agent-loop.js");
@@ -817,6 +826,14 @@ for (const otelRoot of new Set(
 	}
 }
 
+const piDocparserRoot = resolve(workspaceRoot, "pi-docparser");
+const globalPiDocparserRoot = resolve(globalNodeModulesRoot, "pi-docparser");
+const agentNpmPiDocparserRoot = resolve(feynmanHome, "agent", "npm", "node_modules", "pi-docparser");
+patchPiDocparserRuntimeRoots({
+	bundledRoot: piDocparserRoot,
+	roots: [piDocparserRoot, globalPiDocparserRoot, agentNpmPiDocparserRoot],
+});
+
 if (packageJsonPath && existsSync(packageJsonPath)) {
 	const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 	if (pkg.piConfig?.name !== "feynman" || pkg.piConfig?.configDir !== ".feynman") {
@@ -925,6 +942,21 @@ const workspaceModelRegistryPath = resolveWorkspacePiFile("pi-coding-agent", "di
 const workspaceModelRuntimePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-runtime.js");
 const workspaceAuthStoragePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "auth-storage.js");
 assertPiPackageVersion(workspacePiPackageRoot, "vendored pi-coding-agent");
+for (const packageRoot of [piPackageRoot, workspacePiPackageRoot].filter(Boolean)) {
+	if (!existsSync(resolve(packageRoot, "package.json"))) continue;
+	const version = JSON.parse(
+		readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+	).version;
+	assertPiEditLineEndingsVersion(version, packageRoot);
+}
+for (const { entryPath, relativePath } of piEditLineEndingsPaths) {
+	if (!existsSync(entryPath) || !shouldPatchPiRuntimeCorrectnessFile(entryPath)) continue;
+	const source = readFileSync(entryPath, "utf8");
+	const patched = patchPiEditLineEndingsSource(relativePath, source);
+	if (patched !== source) {
+		writeFileSync(entryPath, patched, "utf8");
+	}
+}
 patchFilesIfPresent(piCliArgsPaths, patchPiCliArgsSource);
 patchFilesIfPresent([authStoragePath, workspaceAuthStoragePath], patchPiStateFilePermissionsSource);
 for (const entryPath of [modelRegistryPath, modelRuntimePath, workspaceModelRegistryPath, workspaceModelRuntimePath].filter(Boolean)) {

@@ -7,6 +7,9 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 export const VERIFICATION_PHRASE = "Feynman installed docparser verification phrase";
+export const HIDDEN_GPO_STAMP = "jbell on PROD1PC69 with BILLS";
+export const HIDDEN_GPO_PRINT_STAMP =
+	"VerDate Aug 31 2005 05:35 Dec 11, 2008 Jkt 079200 PO 00000 Frm 00002 Fmt 6652 Sfmt 6301 E:\\BILLS\\H7337.IH H7337";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const defaultPackageRoot = resolve(import.meta.dirname, "..");
@@ -23,14 +26,61 @@ function escapePdfText(value) {
 		.replaceAll(")", "\\)");
 }
 
-export function createMinimalPdf(text = VERIFICATION_PHRASE) {
+export function createMinimalPdf(
+	text = VERIFICATION_PHRASE,
+	stampFill = "1 g",
+	stampBackgroundFill,
+	printRowCount = 1,
+) {
 	const byteLength = (value) => Buffer.byteLength(value, "latin1");
 	const content = [
 		"BT",
 		"/F1 18 Tf",
+		"0 g",
 		"72 720 Td",
 		`(${escapePdfText(text)}) Tj`,
 		"ET",
+		"BT",
+		"/F1 8 Tf",
+		"0 g",
+		"72 690 Td",
+		`(${escapePdfText(HIDDEN_GPO_STAMP)}) Tj`,
+		"ET",
+		...(stampBackgroundFill
+			? [
+					"q",
+					stampBackgroundFill,
+					"16 10 10 110 re f",
+					`20 10 580 ${Math.max(14, printRowCount * 12 + 4)} re f`,
+					"Q",
+				]
+			: []),
+		"BT",
+		"/F1 1 Tf",
+		stampFill,
+		"0 5 -5 0 22 18 Tm",
+		`(${escapePdfText(HIDDEN_GPO_STAMP)}) Tj`,
+		"ET",
+		...Array.from({ length: printRowCount }, (_, rowIndex) =>
+			[
+				["VerDate Aug 31 2005", 72],
+				["05:35 Dec 11, 2008", 160],
+				["Jkt 079200", 240],
+				["PO 00000", 300],
+				["Frm 00002", 350],
+				["Fmt 6652", 410],
+				["Sfmt 6301", 460],
+				["E:\\BILLS\\H7337.IH", 510],
+				["H7337", 585],
+			].flatMap(([stampText, x]) => [
+				"BT",
+				"/F1 1 Tf",
+				stampFill,
+				`1 0 0 1 ${x} ${18 + rowIndex * 12} Tm`,
+				`(${escapePdfText(stampText)}) Tj`,
+				"ET",
+			]),
+		).flat(),
 		"",
 	].join("\n");
 	const objects = [
@@ -217,6 +267,9 @@ export async function verifyInstalledDocparser(options = {}) {
 	const paths = resolveInstalledDocparserPaths(options.packageRoot);
 	const root = await mkdtemp(resolve(tmpdir(), "feynman-installed-docparser-"));
 	const pdfPath = resolve(root, "verification.pdf");
+	const visibleStampPdfPath = resolve(root, "visible-stamps.pdf");
+	const visibleWhiteStampPdfPath = resolve(root, "visible-white-stamps.pdf");
+	const nearWhiteStampPdfPath = resolve(root, "near-white-stamps.pdf");
 	const tools = new Map();
 	const shutdownHandlers = [];
 	const outputDirs = new Set();
@@ -233,7 +286,16 @@ export async function verifyInstalledDocparser(options = {}) {
 		process.env.TMPDIR = root;
 		process.env.TMP = root;
 		process.env.TEMP = root;
-		writeFileSync(pdfPath, createMinimalPdf());
+		writeFileSync(pdfPath, createMinimalPdf(VERIFICATION_PHRASE, "1 g", false, 2));
+		writeFileSync(visibleStampPdfPath, createMinimalPdf(VERIFICATION_PHRASE, "0 g"));
+		writeFileSync(
+			visibleWhiteStampPdfPath,
+			createMinimalPdf(VERIFICATION_PHRASE, "1 g", "0 g"),
+		);
+		writeFileSync(
+			nearWhiteStampPdfPath,
+			createMinimalPdf(VERIFICATION_PHRASE, "1 g", "0.960784 g"),
+		);
 		const jitiModule = await import(pathToFileURL(paths.jitiEntryPath).href);
 		assert.equal(typeof jitiModule.createJiti, "function", "Pi's installed Jiti has no createJiti");
 		const liteparseModule = await import(pathToFileURL(paths.liteparseEntryPath).href);
@@ -275,6 +337,30 @@ export async function verifyInstalledDocparser(options = {}) {
 		);
 		if (parseResult?.details?.outputDir) outputDirs.add(parseResult.details.outputDir);
 		assertDocumentParseResult(parseResult);
+		const parsedArtifact = readFileSync(parseResult.details.outputPath, "utf8");
+		const parsedJson = JSON.parse(parsedArtifact);
+		assert.match(parsedJson.text, new RegExp(VERIFICATION_PHRASE));
+		const visibleGpoControls = parsedJson.pages[0].textItems
+			.filter((item) => item.text === HIDDEN_GPO_STAMP);
+		assert.equal(
+			visibleGpoControls.length,
+			1,
+			"document_parse did not preserve exactly one visible GPO-shaped negative control",
+		);
+		assert.ok(
+			visibleGpoControls[0].x > 50,
+			"document_parse retained the hidden margin stamp instead of the visible control",
+		);
+		assert.equal(
+			parsedJson.text.split(HIDDEN_GPO_STAMP).length - 1,
+			1,
+			"document_parse text did not preserve exactly the visible GPO-shaped negative control",
+		);
+		assert.doesNotMatch(
+			parsedJson.text,
+			/VerDate Aug 31 2005/,
+			"document_parse leaked the hidden GPO print-tracking stamp",
+		);
 
 		const searchResult = await findTool(tools, "document_search").execute(
 			"installed-docparser-search",
@@ -290,6 +376,173 @@ export async function verifyInstalledDocparser(options = {}) {
 			context,
 		);
 		assertDocumentSearchResult(searchResult);
+		const hiddenSearchResult = await findTool(tools, "document_search").execute(
+			"installed-docparser-hidden-gpo-search",
+			{
+				path: pdfPath,
+				phrase: HIDDEN_GPO_STAMP,
+				ocr: "off",
+				maxPages: 1,
+				maxResults: 5,
+			},
+			undefined,
+			undefined,
+			context,
+		);
+		assert.equal(
+			hiddenSearchResult?.details?.hits?.length,
+			1,
+			"document_search did not preserve exactly one visible GPO-shaped negative control",
+		);
+		assert.equal(hiddenSearchResult.details.hits[0].text, HIDDEN_GPO_STAMP);
+		assert.ok(
+			hiddenSearchResult.details.hits[0].x > 50,
+			"document_search retained the hidden margin stamp instead of the visible control",
+		);
+		const hiddenPrintSearchResult = await findTool(tools, "document_search").execute(
+			"installed-docparser-hidden-gpo-print-search",
+			{
+				path: pdfPath,
+				phrase: "VerDate Aug 31 2005",
+				ocr: "off",
+				maxPages: 1,
+				maxResults: 5,
+			},
+			undefined,
+			undefined,
+			context,
+		);
+		assert.deepEqual(
+			hiddenPrintSearchResult?.details?.hits,
+			[],
+			"document_search returned the hidden GPO print-tracking stamp",
+		);
+		const visibleStampParseResult = await findTool(tools, "document_parse").execute(
+			"installed-docparser-visible-gpo-parse",
+			{ path: visibleStampPdfPath, format: "json", ocr: "off", maxPages: 1 },
+			undefined,
+			undefined,
+			context,
+		);
+		if (visibleStampParseResult?.details?.outputDir) {
+			outputDirs.add(visibleStampParseResult.details.outputDir);
+		}
+		const visibleStampArtifact = JSON.parse(
+			readFileSync(visibleStampParseResult.details.outputPath, "utf8"),
+		);
+		assert.equal(
+			visibleStampArtifact.pages[0].textItems
+				.filter((item) => item.text === HIDDEN_GPO_STAMP).length,
+			2,
+			"document_parse removed a visibly painted GPO-shaped operator pair",
+		);
+		assert.match(
+			visibleStampArtifact.text,
+			/VerDate Aug 31 2005/,
+			"document_parse removed a visibly painted GPO-shaped print row",
+		);
+		const visiblePrintSearchResult = await findTool(tools, "document_search").execute(
+			"installed-docparser-visible-gpo-search",
+			{
+				path: visibleStampPdfPath,
+				phrase: "VerDate Aug 31 2005",
+				ocr: "off",
+				maxPages: 1,
+				maxResults: 5,
+			},
+			undefined,
+			undefined,
+			context,
+		);
+		assert.equal(
+			visiblePrintSearchResult?.details?.hits?.length,
+			1,
+			"document_search removed a visibly painted GPO-shaped print row",
+		);
+		const visibleWhiteStampParseResult = await findTool(tools, "document_parse").execute(
+			"installed-docparser-visible-white-gpo-parse",
+			{ path: visibleWhiteStampPdfPath, format: "json", ocr: "off", maxPages: 1 },
+			undefined,
+			undefined,
+			context,
+		);
+		if (visibleWhiteStampParseResult?.details?.outputDir) {
+			outputDirs.add(visibleWhiteStampParseResult.details.outputDir);
+		}
+		const visibleWhiteStampArtifact = JSON.parse(
+			readFileSync(visibleWhiteStampParseResult.details.outputPath, "utf8"),
+		);
+		assert.equal(
+			visibleWhiteStampArtifact.pages[0].textItems
+				.filter((item) => item.text === HIDDEN_GPO_STAMP).length,
+			2,
+			"document_parse removed a visible white-on-dark GPO-shaped operator pair",
+		);
+		assert.match(
+			visibleWhiteStampArtifact.text,
+			/VerDate Aug 31 2005/,
+			"document_parse removed a visible white-on-dark GPO-shaped print row",
+		);
+		const visibleWhitePrintSearchResult = await findTool(tools, "document_search").execute(
+			"installed-docparser-visible-white-gpo-search",
+			{
+				path: visibleWhiteStampPdfPath,
+				phrase: "VerDate Aug 31 2005",
+				ocr: "off",
+				maxPages: 1,
+				maxResults: 5,
+			},
+			undefined,
+			undefined,
+			context,
+		);
+		assert.equal(
+			visibleWhitePrintSearchResult?.details?.hits?.length,
+			1,
+			"document_search removed a visible white-on-dark GPO-shaped print row",
+		);
+		const nearWhiteStampParseResult = await findTool(tools, "document_parse").execute(
+			"installed-docparser-near-white-gpo-parse",
+			{ path: nearWhiteStampPdfPath, format: "json", ocr: "off", maxPages: 1 },
+			undefined,
+			undefined,
+			context,
+		);
+		if (nearWhiteStampParseResult?.details?.outputDir) {
+			outputDirs.add(nearWhiteStampParseResult.details.outputDir);
+		}
+		const nearWhiteStampArtifact = JSON.parse(
+			readFileSync(nearWhiteStampParseResult.details.outputPath, "utf8"),
+		);
+		assert.equal(
+			nearWhiteStampArtifact.pages[0].textItems
+				.filter((item) => item.text === HIDDEN_GPO_STAMP).length,
+			2,
+			"document_parse removed visible white-on-RGB-245 GPO-shaped operators",
+		);
+		assert.match(
+			nearWhiteStampArtifact.text,
+			/VerDate Aug 31 2005/,
+			"document_parse removed a visible white-on-RGB-245 GPO-shaped print row",
+		);
+		const nearWhitePrintSearchResult = await findTool(tools, "document_search").execute(
+			"installed-docparser-near-white-gpo-search",
+			{
+				path: nearWhiteStampPdfPath,
+				phrase: "VerDate Aug 31 2005",
+				ocr: "off",
+				maxPages: 1,
+				maxResults: 5,
+			},
+			undefined,
+			undefined,
+			context,
+		);
+		assert.equal(
+			nearWhitePrintSearchResult?.details?.hits?.length,
+			1,
+			"document_search removed a visible white-on-RGB-245 GPO-shaped print row",
+		);
 
 		const screenshotResult = await findTool(tools, "document_screenshot").execute(
 			"installed-docparser-screenshot",
@@ -310,6 +563,7 @@ export async function verifyInstalledDocparser(options = {}) {
 			jiti: jitiManifest.version,
 			pageCount: parseResult.details.pageCount,
 			hits: searchResult.details.hits.length,
+			hiddenGpoStamps: "suppressed",
 			pngBytes: screenshotResult.details.screenshots[0].bytes,
 			tableColumns: tableMarkdown.split("\n")[0].split("|").length - 2,
 		};

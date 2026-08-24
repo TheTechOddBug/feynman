@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-24 00:23 EDT — research-artifact-integrity-0.3.38
+
+- Objective: Port only the bounded research-integrity portions of upstream Pi issue `#8544` and LiteParse issue `#432`, without adopting unrelated package freshness or claiming a general PDF compositor fix.
+- Reproduced: Pi `0.84.2` rewrites untouched LF bytes to CRLF after exact and fuzzy edits in mixed-line-ending files. LiteParse `2.13.1` returns two visually hidden GPO production stamps from official 2008 and 2026 bill PDFs through pi-docparser parsed text, JSON text items, and document search.
+- Changed: Maintained Pi patches now splice exact edits through normalized-to-original offsets, preserve per-line terminators for fuzzy edits, update the exported result type, and patch source, bundled, restored, and installed copies. The pi-docparser fallback removes only paired GPO margin/operator and bottom print-tracking signatures after metadata, geometry, and exact rendered-white proof; it preserves visible matching controls and skips recognized legacy `3.0.1` roots until normal package migration.
+- Verified: Focused source and installed-tool regressions pass `5/5`; the full suite passes `908/908`; root typecheck/build/architecture, website lint/typecheck/build, root/site/runtime audits, package budget/artifact verification, and a clean installed-tarball consumer pass. Actual `document_parse` and `document_search` probes against `BILLS-110hr7337ih.pdf` and `BILLS-119hr10136ih.pdf` suppressed both hidden stamp forms while preserving body hits; same-geometry black, white-on-dark, RGB-245, multiple-footer, and whitespace controls pass. State: `unverified` for clean Daytona, exact-commit CI, merge, publication, and post-release checks. Next: persist the exact tested candidate, then complete clean-machine and provider gates.
+
 ### 2026-08-23 14:49 EDT — igv-mapping-origin-0.3.37-release
 
 - Persistence: PR `#249` merged exact candidate `796bde9266c11346b1daba6d6292c0f9ce1723ee` as release commit `6cd0fc55222fabbf393e762868a4d690b0abbb7c`; the release branch was deleted. The repository does not define `codex` or `codex-automation` labels.
