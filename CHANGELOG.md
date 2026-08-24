@@ -4,6 +4,16 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-24 13:04 EDT — pi-compaction-integrity-0.3.39-release
+
+- Persistence: PR `#251` merged exact tested head `c86733f1b731eacd5c616711edac75f12ab260b7` as `cf00120843d3cec4d788170d99e296c9e83ed528`; the owning branch was deleted locally and remotely. The repository does not define `codex` or `codex-automation` labels.
+- Candidate and clean proof: PR run `32731339308`, CodeQL, and Vercel passed the release candidate, Windows native installer, and all six supported-node consumers. Disposable Daytona sandbox `feynman-039-152444` tested exact merge `cf001208` on Node `25.9.0`: focused tests passed `20/20`, the full suite passed `911/911`, and typecheck, build, architecture, website checks, audits, dry/real pack, clean consumer, runtime, extension/tool, and document-parser checks passed; the sandbox was deleted.
+- Publication: Run `32737279385` passed source/package verification, six consumers, five native bundles, npm publication, GitHub release creation, and published-state verification. npm `0.3.39` provenance and GitHub release/tag `v0.3.39` resolve to `cf001208`; the 118,134,729-byte registry tarball has SHA-256 `61beeede4007642191097e1fed0c239c43a17f218219def9e2c2219e4725e1bd`, and all five native API digests match `SHA256SUMS`.
+- Post-release: Exact-version run `32746549917` passed Ubuntu Node `22/24/25`, macOS Node `24`, Windows Node `24/25`, all three live native installers, and live model, text-mode, and researcher-child `RESULT=PONG` smokes. The slow Windows package and model paths completed normally.
+- Live and intake: Production deployment `6064476604` is green; release docs expose `v0.3.39`, and all four installer endpoints return HTTP `200` with bytes matching committed sources. Open issue, PR, Dependabot, CodeQL, secret-scanning, and draft-advisory queues are empty. `dubbypanda` is identical to `main`; the other recently active forks are behind or contain only previously reviewed fork-specific/superseded deltas.
+- Package disposition: `posthog-node@5.51.1` is released for the reproduced Node gzip-body leak. Pi `0.84.3` still omits the post-tag truncation guard Feynman maintains, `pi-subagents@0.56.0` remains a broad adjacent workflow migration, and the remaining root/site drift has no security finding or concrete unmet research-loop defect. Root and site production audits report zero vulnerabilities.
+- Preservation and cleanup: Root `main` is synchronized. The independently dirty nested `website` checkout remains untouched with 8 tracked changes, 43 untracked paths, and tracked diff SHA-256 `22effe6a377be3da7fa67ece467788327c71a26c77f5c154b5559a68da8f094d`; no temporary worktree, release branch, or owned Daytona sandbox remains. State: `verified`. Next: normal intake monitoring.
+
 ### 2026-08-24 07:41 EDT — pi-compaction-integrity-0.3.39
 
 - Objective: Prevent output-token truncation from becoming an authoritative research-session compaction or branch checkpoint.
