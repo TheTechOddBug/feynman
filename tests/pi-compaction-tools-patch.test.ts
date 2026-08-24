@@ -58,6 +58,7 @@ test("Pi compaction patch applies exact request and response guards", () => {
 			'        throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);',
 			"    }",
 			"    return {",
+			"//# sourceMappingURL=compaction.js.map",
 		].join("\n"),
 	);
 	for (const marker of [
@@ -71,6 +72,7 @@ test("Pi compaction patch applies exact request and response guards", () => {
 	assert.match(compaction, /Summarization attempted to call a tool/);
 	assert.match(compaction, /Turn prefix summarization attempted to call a tool/);
 	assert.match(compaction, /generation hit the token cap and the summary is incomplete/);
+	assert.doesNotMatch(compaction, /sourceMappingURL/);
 
 	const branch = patchPiCompactionToolsSource(
 		"dist/core/compaction/branch-summarization.js",
@@ -80,18 +82,24 @@ test("Pi compaction patch applies exact request and response guards", () => {
 			'        return { error: response.errorMessage || "Summarization failed" };',
 			"    }",
 			"    let summary = contentText(response.content);",
+			"//# sourceMappingURL=branch-summarization.js.map",
 		].join("\n"),
 	);
 	assert.match(branch, new RegExp(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchResponse));
 	assert.match(branch, /Branch summarization attempted to call a tool/);
 	assert.match(branch, /getSummarizationFailure/);
+	assert.doesNotMatch(branch, /sourceMappingURL/);
 
 	const declarations = patchPiCompactionToolsSource(
 		"dist/core/compaction/compaction.d.ts",
-		"export declare function completeSummarization(",
+		[
+			"export declare function completeSummarization(",
+			"//# sourceMappingURL=compaction.d.ts.map",
+		].join("\n"),
 	);
 	assert.match(declarations, /getSummarizationFailure/);
 	assert.match(declarations, /response: AssistantMessage/);
+	assert.doesNotMatch(declarations, /sourceMappingURL/);
 });
 
 test("Pi summary calls disable tools and reject tool-call responses", async () => {

@@ -52,6 +52,25 @@ function assertFragments(source, relativePath, fragments) {
 	}
 }
 
+function assertAbsentFragments(source, relativePath, fragments) {
+	for (const fragment of fragments) {
+		if (source.includes(fragment)) {
+			throw new Error(`Invalid Pi compaction tools patch ${relativePath}: retained ${fragment}`);
+		}
+	}
+}
+
+function stripStaleSourceMapDirective(source, sourceMapName, label) {
+	const directive = `//# sourceMappingURL=${sourceMapName}`;
+	const count = countOccurrences(source, directive);
+	if (count > 1) {
+		throw new Error(
+			`Unsupported Pi ${PI_COMPACTION_TOOLS_REQUIRED_VERSION} ${label} layout; expected at most 1 source map directive, found ${count}`,
+		);
+	}
+	return count === 1 ? source.replace(directive, "") : source;
+}
+
 export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 	switch (relativePath) {
 		case "dist/core/compaction/compaction.js":
@@ -67,6 +86,7 @@ export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 				'throw new Error("Summarization attempted to call a tool");',
 				'throw new Error("Turn prefix summarization attempted to call a tool");',
 			]);
+			assertAbsentFragments(source, relativePath, ["//# sourceMappingURL="]);
 			return;
 		case "dist/core/compaction/branch-summarization.js":
 			assertFragments(source, relativePath, [
@@ -75,6 +95,7 @@ export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 				'const failure = getSummarizationFailure(response, "Branch summarization");',
 				'return { error: "Branch summarization attempted to call a tool" };',
 			]);
+			assertAbsentFragments(source, relativePath, ["//# sourceMappingURL="]);
 			return;
 		case "dist/core/compaction/compaction.d.ts":
 			assertFragments(source, relativePath, [
@@ -84,6 +105,7 @@ export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 				"label: string",
 				"): string | undefined;",
 			]);
+			assertAbsentFragments(source, relativePath, ["//# sourceMappingURL="]);
 			return;
 		default:
 			throw new Error(`Unknown Pi compaction tools patch target: ${relativePath}`);
@@ -185,6 +207,11 @@ function createSummarizationOptions(`,
 			"turn-prefix summary failure",
 		);
 	}
+	patched = stripStaleSourceMapDirective(
+		patched,
+		"compaction.js.map",
+		"compaction JavaScript source map",
+	);
 	assertPiCompactionToolsPatchedSource("dist/core/compaction/compaction.js", patched);
 	return patched;
 }
@@ -230,22 +257,31 @@ function patchBranchSummarizationSource(source) {
 			"branch summary failure",
 		);
 	}
+	patched = stripStaleSourceMapDirective(
+		patched,
+		"branch-summarization.js.map",
+		"branch summarization JavaScript source map",
+	);
 	assertPiCompactionToolsPatchedSource("dist/core/compaction/branch-summarization.js", patched);
 	return patched;
 }
 
 function patchCompactionTypesSource(source) {
-	if (source.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.summaryFailureTypes)) {
-		assertPiCompactionToolsPatchedSource("dist/core/compaction/compaction.d.ts", source);
-		return source;
-	}
-	const patched = replaceRequired(
-		source,
-		"export declare function completeSummarization(",
-		`/** ${PI_COMPACTION_TOOLS_PATCH_MARKERS.summaryFailureTypes} */
+	let patched = source;
+	if (!patched.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.summaryFailureTypes)) {
+		patched = replaceRequired(
+			patched,
+			"export declare function completeSummarization(",
+			`/** ${PI_COMPACTION_TOOLS_PATCH_MARKERS.summaryFailureTypes} */
 export declare function getSummarizationFailure(response: AssistantMessage, label: string): string | undefined;
 export declare function completeSummarization(`,
-		"compaction declarations",
+			"compaction declarations",
+		);
+	}
+	patched = stripStaleSourceMapDirective(
+		patched,
+		"compaction.d.ts.map",
+		"compaction declaration source map",
 	);
 	assertPiCompactionToolsPatchedSource("dist/core/compaction/compaction.d.ts", patched);
 	return patched;
