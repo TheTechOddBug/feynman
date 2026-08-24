@@ -18,6 +18,7 @@ import {
 	assertPatchedPiCliArgsPackageRoot,
 	assertPiCliArgsPatchSource,
 } from "./lib/pi-cli-args-patch.mjs";
+import { verifyResearchArtifactIntegrityRuntime } from "./lib/research-artifact-integrity-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
 import { assertPiStateFilePermissionsPatchSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import {
@@ -604,6 +605,7 @@ if (
 }
 const runtimeManifest = readArchivedJson(archivePath, "npm/.runtime-manifest.json");
 assertPiCliArgsPatchSource(readArchivedText(archivePath, "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js"), "runtime Pi CLI args");
+verifyResearchArtifactIntegrityRuntime((entryPath) => readArchivedText(archivePath, entryPath));
 if (!Array.isArray(runtimeManifest.packageSpecs)) {
 	fail("runtime archive manifest has no packageSpecs");
 }
@@ -635,9 +637,7 @@ for (const spec of runtimeManifest.packageSpecs) {
 		fail(`runtime archive ${name} version mismatch: expected ${version}, found ${archived.version}`);
 	}
 }
-
 assertPiSubagentPatchedSources((relativePath) => readArchivedText(archivePath, `npm/node_modules/pi-subagents/${relativePath}`), "runtime pi-subagents");
-
 assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(
 		archivePath,

@@ -27,3 +27,16 @@ export declare function isDirectExecution(
 	entryPath?: string,
 	modulePath?: string,
 ): boolean;
+
+export declare function isNativeBundlePackageRoot(
+	installedPackageRoot: string,
+): boolean;
+
+export declare function resolvePiEditLineEndingsVerificationTargets(
+	installedPackageRoot: string,
+	copyIndex: number,
+): readonly string[];
+
+export declare function verifyPiEditLineEndings(
+	installedPackageRoot?: string,
+): Promise<"passed">;

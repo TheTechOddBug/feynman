@@ -31,6 +31,11 @@ import {
 	assertPiCliArgsPatchSource,
 	assertPiCliArgsVersion,
 } from "./lib/pi-cli-args-patch.mjs";
+import {
+	assertPiEditLineEndingsPatchSource,
+	PI_EDIT_LINE_ENDINGS_PATCH_TARGETS,
+	PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
+} from "./lib/pi-edit-line-endings-patch.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
 import { verifyInstalledPiStateFilePermissions } from "./lib/pi-state-file-permissions-verifier.mjs";
 import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
@@ -1043,6 +1048,103 @@ export async function verifyPiCliEndOfOptions(installedPackageRoot = packageRoot
 	assert.equal(verifiedCopies, packageRoots.length);
 }
 
+export function isNativeBundlePackageRoot(installedPackageRoot) {
+	const bundleRoot = resolve(installedPackageRoot, "..");
+	return ["node/node.exe", "node/bin/node"]
+		.some((entry) => existsSync(resolve(bundleRoot, entry)));
+}
+
+export function resolvePiEditLineEndingsVerificationTargets(
+	installedPackageRoot,
+	copyIndex,
+) {
+	if (copyIndex === 0 && !isNativeBundlePackageRoot(installedPackageRoot)) {
+		return PI_EDIT_LINE_ENDINGS_PATCH_TARGETS;
+	}
+	return PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS;
+}
+
+export async function verifyPiEditLineEndings(installedPackageRoot = packageRoot) {
+	const packageRoots = [
+		resolve(
+			installedPackageRoot,
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+		),
+		resolve(
+			installedPackageRoot,
+			".feynman",
+			"npm",
+			"node_modules",
+			"@earendil-works",
+			"pi-coding-agent",
+		),
+	];
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-edit-eol-"));
+	try {
+		for (const [index, piPackageRoot] of packageRoots.entries()) {
+			const targets = resolvePiEditLineEndingsVerificationTargets(
+				installedPackageRoot,
+				index,
+			);
+			for (const relativePath of targets) {
+				const entryPath = resolve(piPackageRoot, ...relativePath.split("/"));
+				assert.ok(
+					existsSync(entryPath),
+					`Installed Pi edit copy ${index + 1} is missing ${relativePath}`,
+				);
+				assertPiEditLineEndingsPatchSource(
+					relativePath,
+					readFileSync(entryPath, "utf8"),
+					`installed Pi edit copy ${index + 1}`,
+				);
+			}
+			const fixtureDir = resolve(root, `copy-${index + 1}`);
+			mkdirSync(fixtureDir, { recursive: true });
+			const fixturePath = resolve(fixtureDir, "mixed.txt");
+			writeFileSync(fixturePath, Buffer.from("a\r\nb\nc", "utf8"));
+			const editModulePath = resolve(piPackageRoot, "dist", "core", "tools", "edit.js");
+			const { createEditTool } = await import(
+				`${pathToFileURL(editModulePath).href}?installed-edit-eol=${Date.now()}-${index}`
+			);
+			const tool = createEditTool(fixtureDir);
+			await tool.execute(
+				"installed-edit-line-endings",
+				{ path: "mixed.txt", edits: [{ oldText: "c", newText: "C" }] },
+			);
+			assert.deepEqual(
+				readFileSync(fixturePath),
+				Buffer.from("a\r\nb\nC", "utf8"),
+				`Installed Pi edit copy ${index + 1} rewrote an untouched line ending`,
+			);
+			writeFileSync(fixturePath, Buffer.from("a  \r\nb\nc", "utf8"));
+			await tool.execute(
+				"installed-fuzzy-delete-line-ending",
+				{ path: "mixed.txt", edits: [{ oldText: "a\nb", newText: "Ab" }] },
+			);
+			assert.deepEqual(
+				readFileSync(fixturePath),
+				Buffer.from("Ab\nc", "utf8"),
+				`Installed Pi edit copy ${index + 1} rewrote the surviving fuzzy line ending`,
+			);
+			writeFileSync(fixturePath, Buffer.from("first\r\n“last”", "utf8"));
+			await tool.execute(
+				"installed-fuzzy-insert-line-ending",
+				{ path: "mixed.txt", edits: [{ oldText: '"last"', newText: "LAST\nNEXT" }] },
+			);
+			assert.deepEqual(
+				readFileSync(fixturePath),
+				Buffer.from("first\r\nLAST\r\nNEXT", "utf8"),
+				`Installed Pi edit copy ${index + 1} used the wrong fuzzy insertion ending`,
+			);
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+	return "passed";
+}
+
 async function main() {
 	await verifyRpcSurface();
 	await verifyWebAccessRegistrationGates();
@@ -1055,6 +1157,7 @@ async function main() {
 	await verifyRuntimeForwardFixBehavior(packageRoot);
 	await verifyPiCompactionToolsBehavior(packageRoot);
 	await verifyPiCliEndOfOptions();
+	const editLineEndings = await verifyPiEditLineEndings();
 	const stateFilePermissions = await verifyInstalledPiStateFilePermissions(packageRoot);
 	console.log(JSON.stringify({
 		binary: defaultBinaryPath,
@@ -1074,6 +1177,7 @@ async function main() {
 		runtimeForwardFixes: "passed",
 		compactionTools: "disabled",
 		cliEndOfOptions: "passed",
+		editLineEndings,
 		stateFilePermissions,
 	}));
 }

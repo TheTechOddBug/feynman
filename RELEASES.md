@@ -6,6 +6,21 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.38 - 2026-08-24
+
+### Research artifacts
+
+- Congress.gov and GovInfo bill parsing now excludes paired white-on-white GPO operator and print-tracking stamps from parsed text, JSON text items, and document search. Removal requires matching metadata, geometry, and exact rendered-white regions, so visible bill text and visible text that merely resembles a stamp remain available.
+
+### Research runtime
+
+- Pi's edit tool now preserves the original CRLF, LF, and CR terminators outside each replacement. Exact and fuzzy edits no longer create unrelated full-file diffs in mixed-line-ending research code or data.
+
+### Validation
+
+- Reproduced the hidden-stamp path with official 2008 and 2026 GPO bill PDFs and verified consistent parsed artifacts and searches with visible body-text, same-geometry black, white-on-dark, and white-on-RGB-245 controls.
+- Added exact, fuzzy, multiline, bare-CR, restored-runtime, package-artifact, and clean installed-package regressions for the maintained Pi and pi-docparser patches.
+
 ## v0.3.37 - 2026-08-23
 
 ### Research visualization
