@@ -21,6 +21,7 @@ test("Pi compaction patch covers every bundled 0.84.2 summary path", () => {
 		"utf8",
 	);
 	assert.match(patchSource, /90305d90a049d3f7784f15821d117fc6932248e7/);
+	assert.match(patchSource, /97fa14e39cfce78c273a36b2d9e8509cd5bc6b72/);
 	assert.match(
 		patchSource,
 		/Removal condition: delete this patch after Feynman adopts a released Pi/,
@@ -46,11 +47,14 @@ test("Pi compaction patch applies exact request and response guards", () => {
 	const compaction = patchPiCompactionToolsSource(
 		"dist/core/compaction/compaction.js",
 		[
+			"function createSummarizationOptions(",
 			"        cacheRetention: \"none\",",
 			"        sessionId: uuidv7(),",
+			'    if (response.stopReason === "error") {',
 			'        throw new Error(`Summarization failed: ${response.errorMessage || "Unknown error"}`);',
 			"    }",
 			"    const textContent = contentText(response.content);",
+			'    if (response.stopReason === "error") {',
 			'        throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);',
 			"    }",
 			"    return {",
@@ -66,10 +70,13 @@ test("Pi compaction patch applies exact request and response guards", () => {
 	assert.match(compaction, /toolChoice: "none"/);
 	assert.match(compaction, /Summarization attempted to call a tool/);
 	assert.match(compaction, /Turn prefix summarization attempted to call a tool/);
+	assert.match(compaction, /generation hit the token cap and the summary is incomplete/);
 
 	const branch = patchPiCompactionToolsSource(
 		"dist/core/compaction/branch-summarization.js",
 		[
+			'import { completeSummarization, estimateTokens } from "./compaction.js";',
+			'    if (response.stopReason === "error") {',
 			'        return { error: response.errorMessage || "Summarization failed" };',
 			"    }",
 			"    let summary = contentText(response.content);",
@@ -77,6 +84,14 @@ test("Pi compaction patch applies exact request and response guards", () => {
 	);
 	assert.match(branch, new RegExp(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchResponse));
 	assert.match(branch, /Branch summarization attempted to call a tool/);
+	assert.match(branch, /getSummarizationFailure/);
+
+	const declarations = patchPiCompactionToolsSource(
+		"dist/core/compaction/compaction.d.ts",
+		"export declare function completeSummarization(",
+	);
+	assert.match(declarations, /getSummarizationFailure/);
+	assert.match(declarations, /response: AssistantMessage/);
 });
 
 test("Pi summary calls disable tools and reject tool-call responses", async () => {

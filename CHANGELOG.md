@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-24 07:41 EDT — pi-compaction-integrity-0.3.39
+
+- Objective: Prevent output-token truncation from becoming an authoritative research-session compaction or branch checkpoint.
+- Verified upstream: Pi commit `97fa14e` rejects `stopReason: "length"` for history, split-turn, and branch summaries; newly published Pi `0.84.3` does not contain the post-tag fix and remains a coordinated runtime migration rather than a safe pin-only update.
+- Changed: Extended the existing exact-version Pi compaction patch, declarations, archive/package checks, and installed-runtime verifier with the shared upstream failure guard and all three executable paths. Updated package and public release metadata to `0.3.39`.
+- Repaired: The first clean installed-consumer artifact check correctly rejected a declaration requirement inside the pruned runtime archive. Direct npm/source packages still require the patched declaration, while executable archive and native copies now require only the two runtime targets.
+- Verified: Focused runtime tests pass `16/16`; the full suite passes `909/909`; typecheck, build, architecture, website lint/typecheck/build, source/site/runtime/consumer audits, diff checks, package budget, package artifact, installed runtime, and installed document checks pass. The clean tarball is `116,441,998` bytes with SHA-256 `68b173db133af9bb1500278708e1da7377104a20c1727d692a6a5c4b8b117a52`.
+- State: `unverified` for committed exact-SHA Daytona/CI, merge, publication, and post-release ladders. Next: commit the exact candidate and complete those gates.
+
 ### 2026-08-24 00:23 EDT — research-artifact-integrity-0.3.38
 
 - Objective: Port only the bounded research-integrity portions of upstream Pi issue `#8544` and LiteParse issue `#432`, without adopting unrelated package freshness or claiming a general PDF compositor fix.

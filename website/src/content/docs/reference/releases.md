@@ -9,6 +9,16 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.39 - 2026-08-24
+
+### Research continuity
+
+- Pi no longer persists a partial compaction, split-turn, or branch summary when summary generation reaches its output-token limit. The incomplete checkpoint now fails explicitly so long research sessions retain the last complete context instead of silently replacing it with truncated history.
+
+### Validation
+
+- Backported Pi commit `97fa14e` across source, bundled, restored, installed, and package-artifact copies, with executable history, split-turn, and branch-summary regressions.
+
 ## v0.3.38 - 2026-08-24
 
 ### Research artifacts

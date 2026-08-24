@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import {
 	assertPiCompactionToolsPatchedSource,
 	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	PI_COMPACTION_TOOLS_RUNTIME_TARGETS,
 	PI_COMPACTION_TOOLS_REQUIRED_VERSION,
 } from "./pi-compaction-tools-patch.mjs";
 
@@ -32,7 +33,7 @@ export function assertPiCompactionToolsPackageTree(packageRoot, readText) {
 }
 
 export function assertPiCompactionToolsArchive(readEntry) {
-	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+	for (const relativePath of PI_COMPACTION_TOOLS_RUNTIME_TARGETS) {
 		assertPiCompactionToolsPatchedSource(
 			relativePath,
 			readEntry(`npm/node_modules/@earendil-works/pi-coding-agent/${relativePath}`),
@@ -67,7 +68,7 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		"@earendil-works",
 		"pi-coding-agent",
 	);
-	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+	for (const relativePath of PI_COMPACTION_TOOLS_RUNTIME_TARGETS) {
 		assertPiCompactionToolsPatchedSource(
 			relativePath,
 			readFileSync(resolve(codingAgentRoot, ...relativePath.split("/")), "utf8"),
@@ -161,4 +162,59 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		{ model, apiKey: "test", streamFn: toolStream },
 	);
 	assert.equal(branchResult.error, "Branch summarization attempted to call a tool");
+
+	const lengthStream = async () => ({
+		result: async () => assistantMessage(
+			model,
+			[{ type: "text", text: "partial summary" }],
+			"length",
+		),
+	});
+	await assert.rejects(
+		() => compaction.generateSummaryWithUsage(
+			[{ role: "user", content: "summarize", timestamp: 1 }],
+			model,
+			2048,
+			"test",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"off",
+			lengthStream,
+		),
+		/generation hit the token cap/,
+	);
+	await assert.rejects(
+		() => compaction.compact(
+			{
+				firstKeptEntryId: "entry-keep",
+				messagesToSummarize: [],
+				turnPrefixMessages: [{ role: "user", content: "split turn", timestamp: 1 }],
+				isSplitTurn: true,
+				tokensBefore: 100,
+				fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+				settings: { enabled: true, reserveTokens: 2048, keepRecentTokens: 20 },
+			},
+			model,
+			"test",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			lengthStream,
+		),
+		/generation hit the token cap/,
+	);
+	const truncatedBranch = await branch.generateBranchSummary(
+		[{
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: new Date(1).toISOString(),
+			message: { role: "user", content: "abandoned work", timestamp: 1 },
+		}],
+		{ model, apiKey: "test", streamFn: lengthStream },
+	);
+	assert.match(truncatedBranch.error ?? "", /generation hit the token cap/);
 }
