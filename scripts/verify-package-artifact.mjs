@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-
 import {
 	assertPiCodingAgentUndiciShrinkwrapSource,
 	FEYNMAN_UNDICI_VERSION,
@@ -36,6 +35,7 @@ import {
 import { PI_WEB_ACCESS_PATCH_TARGETS, assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
 import { assertPiSubagentPatchedSources } from "./lib/pi-subagents-verification.mjs";
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
+const prunedNative = process.argv.includes("--pruned-native");
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
 const FEYNMAN_IP_ADDRESS_VERSION = "10.5.0";
@@ -316,7 +316,7 @@ for (const [target, relativePath] of [
 	}
 }
 assertPiAiForwardFixPackageTree(packageRoot, readText);
-assertPiCompactionToolsPackageTree(packageRoot, readText);
+assertPiCompactionToolsPackageTree(packageRoot, readText, { prunedNative });
 assertPiStateFilePermissionsPatchSource(
 	readText(
 		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", "dist", "core", "auth-storage.js"),

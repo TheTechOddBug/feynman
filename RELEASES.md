@@ -12,9 +12,13 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 - Pi no longer persists a partial compaction, split-turn, or branch summary when summary generation reaches its output-token limit. The incomplete checkpoint now fails explicitly so long research sessions retain the last complete context instead of silently replacing it with truncated history.
 
+### Reliability
+
+- Updated `posthog-node` to `5.51.1`. On Node 24.16 and later, each telemetry flush now sends gzip bytes directly instead of retaining a native `BlobReader` for the life of the process.
+
 ### Validation
 
-- Backported Pi commit `97fa14e` across source, bundled, restored, installed, and package-artifact copies, with executable history, split-turn, and branch-summary regressions. Disabled stale upstream source-map directives in the forward-patched files so diagnostics cannot resolve the new guards to unrelated pre-patch TypeScript lines.
+- Backported Pi commit `97fa14e` across source, bundled, restored, installed, and package-artifact copies, with executable history, split-turn, and branch-summary regressions. Disabled stale upstream source-map directives in the forward-patched files so diagnostics cannot resolve the new guards to unrelated pre-patch TypeScript lines. Matched the PostHog fix to upstream commit `3593c43` and added a transport regression that requires a `Uint8Array` gzip body instead of a `Blob`.
 
 ## v0.3.38 - 2026-08-24
 

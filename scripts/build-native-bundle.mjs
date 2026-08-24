@@ -288,6 +288,12 @@ function installBundledNode(bundleRoot, target, stagingRoot) {
 	renameSync(extractedDir, resolve(bundleRoot, "node"));
 }
 
+function resolveBundledNodeExecutable(bundleRoot, target) {
+	return target.launcher === "windows"
+		? resolve(bundleRoot, "node", "node.exe")
+		: resolve(bundleRoot, "node", "bin", "node");
+}
+
 function writeLauncher(bundleRoot, target) {
 	logStep("writing launchers...");
 	if (target.launcher === "unix") {
@@ -332,10 +338,7 @@ function writeLauncher(bundleRoot, target) {
 
 function validateBundle(bundleRoot, target) {
 	logStep("validating bundled native dependencies...");
-	const nodeExecutable =
-		target.launcher === "windows"
-			? resolve(bundleRoot, "node", "node.exe")
-			: resolve(bundleRoot, "node", "bin", "node");
+	const nodeExecutable = resolveBundledNodeExecutable(bundleRoot, target);
 
 	const betterSqlitePackageJson = resolve(bundleRoot, "app", ".feynman", "npm", "node_modules", "better-sqlite3", "package.json");
 	if (!existsSync(betterSqlitePackageJson)) {
@@ -473,11 +476,20 @@ async function main() {
 		extractTarball(runtimeArchivePath, appFeynmanDir, "-xzf");
 		logStep("patching embedded Pi runtime...");
 		run(process.execPath, [resolve(appDir, "scripts", "patch-embedded-pi.mjs")], { cwd: appDir });
-		run(process.execPath, [resolve(appDir, "scripts", "verify-package-artifact.mjs"), appDir], { cwd: appDir });
+		installBundledNode(bundleRoot, target, stagingRoot);
+		const nativeNodeExecutable = resolveBundledNodeExecutable(bundleRoot, target);
+		run(
+			nativeNodeExecutable,
+			[
+				resolve(appDir, "scripts", "verify-package-artifact.mjs"),
+				appDir,
+				"--pruned-native",
+			],
+			{ cwd: appDir },
+		);
 		run("npm", ["audit", "--omit=dev", "--no-fund"], { cwd: appDir });
 		finalizeNativeRuntimeWorkspace(appDir);
 
-		installBundledNode(bundleRoot, target, stagingRoot);
 		writeLauncher(bundleRoot, target);
 		validateBundle(bundleRoot, target);
 

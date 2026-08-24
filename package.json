@@ -126,7 +126,7 @@
     "npyjs": "^1.1.0",
     "patristic": "^0.5.7",
     "pdfjs-dist": "^6.2.108",
-    "posthog-node": "^5.50.0",
+    "posthog-node": "^5.51.1",
     "react-json-view-lite": "^2.5.0",
     "semver": "^7.8.5",
     "tidytree": "^0.7.0",

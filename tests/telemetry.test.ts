@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { gunzipSync } from "node:zlib";
 
 import {
 	DEFAULT_POSTHOG_HOST,
@@ -142,6 +143,35 @@ test("PostHog transport failures open a silent session circuit breaker", async (
 
 	assert.equal(fetchAttempts, 1);
 	assert.deepEqual(consoleErrors, []);
+});
+
+test("PostHog transport sends gzip bytes without retaining Node Blob readers", async () => {
+	const home = mkdtempSync(join(tmpdir(), "feynman-telemetry-gzip-home-"));
+	let requestBody: unknown;
+	let requestHeaders: unknown;
+	try {
+		initializePostHogTelemetry({
+			home,
+			appVersion: "0.3.39",
+			serviceName: "feynman-test",
+			posthogFetch: async (_url, options) => {
+				requestBody = options?.body;
+				requestHeaders = options?.headers;
+				return new Response(null, { status: 204 });
+			},
+			otlpFetch: async () => new Response(null, { status: 204 }),
+		});
+		await captureTelemetryEventImmediate("gzip_body_probe");
+	} finally {
+		await shutdownPostHogTelemetry();
+		rmSync(home, { recursive: true, force: true });
+	}
+
+	assert.equal(requestBody instanceof Uint8Array, true);
+	assert.equal(requestBody instanceof Blob, false);
+	assert.deepEqual(Array.from((requestBody as Uint8Array).subarray(0, 2)), [0x1f, 0x8b]);
+	assert.equal(new Headers(requestHeaders as HeadersInit).get("content-encoding"), "gzip");
+	assert.match(gunzipSync(requestBody as Uint8Array).toString("utf8"), /gzip_body_probe/);
 });
 
 test("PostHog circuit breaker drops later requests after a non-success response", async () => {

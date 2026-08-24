@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 
@@ -7,9 +14,16 @@ import {
 	assertPiCompactionToolsPatchedSource,
 	PI_COMPACTION_TOOLS_PATCH_MARKERS,
 	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	PI_COMPACTION_TOOLS_RUNTIME_TARGETS,
 	patchPiCompactionToolsSource,
 } from "../scripts/lib/pi-compaction-tools-patch.mjs";
-import { verifyPiCompactionToolsBehavior } from "../scripts/lib/pi-compaction-tools-verifier.mjs";
+import {
+	assertPiCompactionToolsPackageTree,
+	assertPiCompactionToolsPrunedDependencyTree,
+	isPiCompactionToolsNativePackageRoot,
+	resolvePiCompactionToolsPackageTargets,
+	verifyPiCompactionToolsBehavior,
+} from "../scripts/lib/pi-compaction-tools-verifier.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const appRoot = process.cwd();
@@ -100,6 +114,92 @@ test("Pi compaction patch applies exact request and response guards", () => {
 	assert.match(declarations, /getSummarizationFailure/);
 	assert.match(declarations, /response: AssistantMessage/);
 	assert.doesNotMatch(declarations, /sourceMappingURL/);
+});
+
+test("Pi package verification requires declarations except in pruned native bundles", () => {
+	assert.deepEqual(
+		resolvePiCompactionToolsPackageTargets(),
+		PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	);
+	assert.deepEqual(
+		resolvePiCompactionToolsPackageTargets({ prunedNative: true }),
+		PI_COMPACTION_TOOLS_RUNTIME_TARGETS,
+	);
+	const readWithoutDeclarations = (path: string) => {
+		if (path.endsWith("compaction.d.ts")) {
+			throw new Error("declaration intentionally absent");
+		}
+		return readFileSync(path, "utf8");
+	};
+	assert.equal(isPiCompactionToolsNativePackageRoot(appRoot), false);
+	assert.throws(
+		() => assertPiCompactionToolsPackageTree(
+			appRoot,
+			readWithoutDeclarations,
+			{ prunedNative: true },
+		),
+		/requires a native bundle package root/,
+	);
+	assert.throws(
+		() => assertPiCompactionToolsPackageTree(appRoot, readWithoutDeclarations),
+		/declaration intentionally absent/,
+	);
+
+	const nativeRoot = mkdtempSync(resolve(tmpdir(), "feynman-native-compaction-test-"));
+	const nativeAppRoot = resolve(nativeRoot, "app");
+	const nativeNodeModulesRoot = resolve(nativeAppRoot, "node_modules");
+	const nativeNodePath =
+		process.platform === "win32"
+			? resolve(nativeRoot, "node", "node.exe")
+			: resolve(nativeRoot, "node", "bin", "node");
+	try {
+		mkdirSync(nativeNodeModulesRoot, { recursive: true });
+		mkdirSync(resolve(nativeNodePath, ".."), { recursive: true });
+		writeFileSync(nativeNodePath, "");
+		assert.equal(isPiCompactionToolsNativePackageRoot(nativeAppRoot), false);
+		const forbiddenDeclaration = resolve(
+			nativeNodeModulesRoot,
+			"unrelated-package",
+			"index.d.ts",
+		);
+		mkdirSync(resolve(forbiddenDeclaration, ".."), { recursive: true });
+		writeFileSync(forbiddenDeclaration, "export {};\n");
+		assert.throws(
+			() => assertPiCompactionToolsPrunedDependencyTree(nativeAppRoot),
+			/retained .*index\.d\.ts/,
+		);
+		rmSync(forbiddenDeclaration);
+		assert.doesNotThrow(() =>
+			assertPiCompactionToolsPrunedDependencyTree(nativeAppRoot));
+	} finally {
+		rmSync(nativeRoot, { recursive: true, force: true });
+	}
+
+	const nativeBuilderSource = readFileSync(
+		resolve(appRoot, "scripts", "build-native-bundle.mjs"),
+		"utf8",
+	);
+	assert.match(
+		nativeBuilderSource,
+		/verify-package-artifact\.mjs"[\s\S]*appDir,[\s\S]*"--pruned-native"/,
+	);
+	assert.ok(
+		nativeBuilderSource.indexOf("installBundledNode(bundleRoot, target, stagingRoot);") <
+			nativeBuilderSource.indexOf("const nativeNodeExecutable = resolveBundledNodeExecutable"),
+		"native identity must exist before pruned artifact verification",
+	);
+	assert.match(
+		nativeBuilderSource,
+		/run\(\s*nativeNodeExecutable,[\s\S]*verify-package-artifact\.mjs/,
+	);
+	const packageVerifierSource = readFileSync(
+		resolve(appRoot, "scripts", "verify-package-artifact.mjs"),
+		"utf8",
+	);
+	assert.match(
+		packageVerifierSource,
+		/assertPiCompactionToolsPackageTree\(packageRoot, readText, \{ prunedNative \}\)/,
+	);
 });
 
 test("Pi summary calls disable tools and reject tool-call responses", async () => {
