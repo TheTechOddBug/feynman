@@ -1048,6 +1048,22 @@ export async function verifyPiCliEndOfOptions(installedPackageRoot = packageRoot
 	assert.equal(verifiedCopies, packageRoots.length);
 }
 
+export function isNativeBundlePackageRoot(installedPackageRoot) {
+	const bundleRoot = resolve(installedPackageRoot, "..");
+	return ["node/node.exe", "node/bin/node"]
+		.some((entry) => existsSync(resolve(bundleRoot, entry)));
+}
+
+export function resolvePiEditLineEndingsVerificationTargets(
+	installedPackageRoot,
+	copyIndex,
+) {
+	if (copyIndex === 0 && !isNativeBundlePackageRoot(installedPackageRoot)) {
+		return PI_EDIT_LINE_ENDINGS_PATCH_TARGETS;
+	}
+	return PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS;
+}
+
 export async function verifyPiEditLineEndings(installedPackageRoot = packageRoot) {
 	const packageRoots = [
 		resolve(
@@ -1068,9 +1084,10 @@ export async function verifyPiEditLineEndings(installedPackageRoot = packageRoot
 	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-edit-eol-"));
 	try {
 		for (const [index, piPackageRoot] of packageRoots.entries()) {
-			const targets = index === 0
-				? PI_EDIT_LINE_ENDINGS_PATCH_TARGETS
-				: PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS;
+			const targets = resolvePiEditLineEndingsVerificationTargets(
+				installedPackageRoot,
+				index,
+			);
 			for (const relativePath of targets) {
 				const entryPath = resolve(piPackageRoot, ...relativePath.split("/"));
 				assert.ok(

@@ -9,8 +9,13 @@ import {
 	assertPiEditLineEndingsPatchSource,
 	assertPiEditLineEndingsVersion,
 	PI_EDIT_LINE_ENDINGS_PATCH_TARGETS,
+	PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
 	patchPiEditLineEndingsSource,
 } from "../scripts/lib/pi-edit-line-endings-patch.mjs";
+import {
+	isNativeBundlePackageRoot,
+	resolvePiEditLineEndingsVerificationTargets,
+} from "../scripts/verify-installed-runtime.mjs";
 
 const piPackageRoot = resolve(
 	process.cwd(),
@@ -34,6 +39,37 @@ test("Pi edit line-ending patch is exact, complete, and idempotent", () => {
 			patched,
 			`${relativePath} was not idempotent`,
 		);
+	}
+});
+
+test("installed verifier requires declarations except in pruned native bundles", () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-native-edit-eol-test-"));
+	const appRoot = resolve(root, "app");
+	try {
+		mkdirSync(appRoot, { recursive: true });
+		assert.equal(isNativeBundlePackageRoot(appRoot), false);
+		assert.deepEqual(
+			resolvePiEditLineEndingsVerificationTargets(appRoot, 0),
+			PI_EDIT_LINE_ENDINGS_PATCH_TARGETS,
+		);
+		assert.deepEqual(
+			resolvePiEditLineEndingsVerificationTargets(appRoot, 1),
+			PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
+		);
+
+		const nativeNodePath =
+			process.platform === "win32"
+				? resolve(root, "node", "node.exe")
+				: resolve(root, "node", "bin", "node");
+		mkdirSync(resolve(nativeNodePath, ".."), { recursive: true });
+		writeFileSync(nativeNodePath, "");
+		assert.equal(isNativeBundlePackageRoot(appRoot), true);
+		assert.deepEqual(
+			resolvePiEditLineEndingsVerificationTargets(appRoot, 0),
+			PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
 	}
 });
 
