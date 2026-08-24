@@ -1,15 +1,100 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+	existsSync,
+	readFileSync,
+	readdirSync,
+	realpathSync,
+	statSync,
+} from "node:fs";
+import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
 	assertPiCompactionToolsPatchedSource,
 	PI_COMPACTION_TOOLS_PATCH_TARGETS,
+	PI_COMPACTION_TOOLS_RUNTIME_TARGETS,
 	PI_COMPACTION_TOOLS_REQUIRED_VERSION,
 } from "./pi-compaction-tools-patch.mjs";
 
-export function assertPiCompactionToolsPackageTree(packageRoot, readText) {
+export function resolvePiCompactionToolsPackageTargets(options = {}) {
+	return options.prunedNative
+		? PI_COMPACTION_TOOLS_RUNTIME_TARGETS
+		: PI_COMPACTION_TOOLS_PATCH_TARGETS;
+}
+
+export function isPiCompactionToolsNativePackageRoot(packageRoot) {
+	const bundleRoot = resolve(packageRoot, "..");
+	const nativeNodePath =
+		process.platform === "win32"
+			? resolve(bundleRoot, "node", "node.exe")
+			: resolve(bundleRoot, "node", "bin", "node");
+	if (!existsSync(nativeNodePath)) return false;
+	try {
+		const stats = statSync(nativeNodePath);
+		return (
+			stats.isFile() &&
+			stats.size > 0 &&
+			realpathSync(nativeNodePath) === realpathSync(process.execPath)
+		);
+	} catch {
+		return false;
+	}
+}
+
+const PRUNED_NATIVE_FORBIDDEN_FILE_PATTERNS = Object.freeze([
+	/\.map$/i,
+	/\.d\.cts$/i,
+	/\.d\.ts$/i,
+	/^README(\..+)?\.md$/i,
+	/^CHANGELOG(\..+)?\.md$/i,
+]);
+
+export function assertPiCompactionToolsPrunedDependencyTree(packageRoot) {
+	const nodeModulesRoot = resolve(packageRoot, "node_modules");
+	assert.ok(
+		existsSync(nodeModulesRoot),
+		"Pruned native Pi compaction verification requires a dependency tree",
+	);
+	const rootRealPath = realpathSync(nodeModulesRoot);
+	const seen = new Set([rootRealPath]);
+
+	const visit = (directory) => {
+		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			const entryPath = resolve(directory, entry.name);
+			const stats = entry.isSymbolicLink() ? statSync(entryPath) : null;
+			if (entry.isDirectory() || stats?.isDirectory()) {
+				const realPath = realpathSync(entryPath);
+				assert.ok(
+					realPath === rootRealPath || realPath.startsWith(`${rootRealPath}${sep}`),
+					`Pruned native dependency link escapes node_modules: ${entryPath}`,
+				);
+				if (!seen.has(realPath)) {
+					seen.add(realPath);
+					visit(entryPath);
+				}
+				continue;
+			}
+			if (
+				(entry.isFile() || stats?.isFile()) &&
+				PRUNED_NATIVE_FORBIDDEN_FILE_PATTERNS.some((pattern) => pattern.test(entry.name))
+			) {
+				assert.fail(`Pruned native dependency tree retained ${entryPath}`);
+			}
+		}
+	};
+
+	visit(nodeModulesRoot);
+}
+
+export function assertPiCompactionToolsPackageTree(packageRoot, readText, options = {}) {
+	if (options.prunedNative) {
+		assert.equal(
+			isPiCompactionToolsNativePackageRoot(packageRoot),
+			true,
+			"Pruned Pi compaction verification requires a native bundle package root",
+		);
+		assertPiCompactionToolsPrunedDependencyTree(packageRoot);
+	}
 	const codingAgentRoot = resolve(
 		packageRoot,
 		"node_modules",
@@ -20,7 +105,7 @@ export function assertPiCompactionToolsPackageTree(packageRoot, readText) {
 		readText(resolve(codingAgentRoot, "package.json"), "bundled Pi coding-agent manifest"),
 	);
 	assert.equal(manifest.version, PI_COMPACTION_TOOLS_REQUIRED_VERSION);
-	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+	for (const relativePath of resolvePiCompactionToolsPackageTargets(options)) {
 		assertPiCompactionToolsPatchedSource(
 			relativePath,
 			readText(
@@ -32,7 +117,7 @@ export function assertPiCompactionToolsPackageTree(packageRoot, readText) {
 }
 
 export function assertPiCompactionToolsArchive(readEntry) {
-	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+	for (const relativePath of PI_COMPACTION_TOOLS_RUNTIME_TARGETS) {
 		assertPiCompactionToolsPatchedSource(
 			relativePath,
 			readEntry(`npm/node_modules/@earendil-works/pi-coding-agent/${relativePath}`),
@@ -67,7 +152,7 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		"@earendil-works",
 		"pi-coding-agent",
 	);
-	for (const relativePath of PI_COMPACTION_TOOLS_PATCH_TARGETS) {
+	for (const relativePath of PI_COMPACTION_TOOLS_RUNTIME_TARGETS) {
 		assertPiCompactionToolsPatchedSource(
 			relativePath,
 			readFileSync(resolve(codingAgentRoot, ...relativePath.split("/")), "utf8"),
@@ -161,4 +246,59 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		{ model, apiKey: "test", streamFn: toolStream },
 	);
 	assert.equal(branchResult.error, "Branch summarization attempted to call a tool");
+
+	const lengthStream = async () => ({
+		result: async () => assistantMessage(
+			model,
+			[{ type: "text", text: "partial summary" }],
+			"length",
+		),
+	});
+	await assert.rejects(
+		() => compaction.generateSummaryWithUsage(
+			[{ role: "user", content: "summarize", timestamp: 1 }],
+			model,
+			2048,
+			"test",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"off",
+			lengthStream,
+		),
+		/generation hit the token cap/,
+	);
+	await assert.rejects(
+		() => compaction.compact(
+			{
+				firstKeptEntryId: "entry-keep",
+				messagesToSummarize: [],
+				turnPrefixMessages: [{ role: "user", content: "split turn", timestamp: 1 }],
+				isSplitTurn: true,
+				tokensBefore: 100,
+				fileOps: { read: new Set(), written: new Set(), edited: new Set() },
+				settings: { enabled: true, reserveTokens: 2048, keepRecentTokens: 20 },
+			},
+			model,
+			"test",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			lengthStream,
+		),
+		/generation hit the token cap/,
+	);
+	const truncatedBranch = await branch.generateBranchSummary(
+		[{
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: new Date(1).toISOString(),
+			message: { role: "user", content: "abandoned work", timestamp: 1 },
+		}],
+		{ model, apiKey: "test", streamFn: lengthStream },
+	);
+	assert.match(truncatedBranch.error ?? "", /generation hit the token cap/);
 }

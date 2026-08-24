@@ -4,6 +4,19 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-24 07:41 EDT — pi-compaction-integrity-0.3.39
+
+- Objective: Prevent output-token truncation from becoming an authoritative research-session compaction or branch checkpoint.
+- Verified upstream: Pi commit `97fa14e` rejects `stopReason: "length"` for history, split-turn, and branch summaries; newly published Pi `0.84.3` does not contain the post-tag fix and remains a coordinated runtime migration rather than a safe pin-only update.
+- Changed: Extended the existing exact-version Pi compaction patch, declarations, archive/package checks, and installed-runtime verifier with the shared upstream failure guard and all three executable paths. Updated package and public release metadata to `0.3.39`.
+- Repaired: The first clean installed-consumer artifact check correctly rejected a declaration requirement inside the pruned runtime archive. Direct npm/source packages still require the patched declaration, while executable archive and native copies now require only the two runtime targets.
+- Repaired: Adversarial exact-head review found that the forward-patched files still advertised upstream source maps that do not contain the new helper. The patch and verifier now remove and reject those stale directives across JavaScript and declaration targets so `--enable-source-maps` cannot report unrelated TypeScript lines.
+- Repaired: Windows native CI then proved that the native app's deliberately pruned direct dependency tree also needs the executable-only contract. The native build now opts into that mode explicitly; source and npm package verification continue to require the declaration instead of inferring pruning from a missing file.
+- Repaired: Adversarial review rejected a caller-controlled native exception. The builder now runs artifact verification through its authenticated sibling Node binary, and the verifier requires both that exact executable identity and a dependency tree with the native pruning invariant before accepting the explicit pruned contract.
+- Freshness: Adopted `posthog-node@5.51.1` because Feynman's one-event-per-flush telemetry path exactly matched upstream's Node 24.16+ native `BlobReader` leak. Upstream commit `3593c43` sends the same gzip wire bytes as a `Uint8Array`; a focused transport regression rejects the old `Blob` body.
+- Verified: Focused runtime/release tests pass `16/16`; the full suite passes `911/911`; typecheck, build, architecture, website lint/typecheck/build, source/site/runtime audits, diff checks, package budget, and package artifact verification pass. Local clean dry and real packs match at `29,177` files.
+- State: `verified` locally for the repaired candidate; `unverified` for its committed exact-SHA clean consumer, Daytona, CI, merge, publication, and post-release ladders. Next: commit the repaired candidate and complete those gates.
+
 ### 2026-08-24 00:23 EDT — research-artifact-integrity-0.3.38
 
 - Objective: Port only the bounded research-integrity portions of upstream Pi issue `#8544` and LiteParse issue `#432`, without adopting unrelated package freshness or claiming a general PDF compositor fix.
