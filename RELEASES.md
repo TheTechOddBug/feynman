@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.40 - 2026-08-24
+
+### Research continuity
+
+- Image-only steering and follow-up messages are now removed from Pi's pending queue state when they are delivered. Research sessions that add screenshots, paper figures, or other image context no longer remain falsely marked as waiting on input after the model receives the image.
+
+### Validation
+
+- Reproduced the defect on the bundled Pi `0.84.2`: the agent queue was empty after image delivery while `pendingMessageCount` remained `1` and no clearing `queue_update` event was emitted. Ported the focused fix from commit `b67b3db` across source, bundled, restored, installed, and package-artifact copies, with executable steering and follow-up regressions plus fail-closed patch verification.
+
 ## v0.3.39 - 2026-08-24
 
 ### Research continuity

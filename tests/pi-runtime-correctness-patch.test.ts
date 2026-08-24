@@ -11,6 +11,7 @@ import { Type } from "typebox";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
 	assertPiRuntimeCorrectnessVersion,
+	PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 	patchPiAgentSessionSource,
@@ -149,6 +150,7 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	);
 
 	assert.match(agentSessionSource, /issue #7053/);
+	assert.match(agentSessionSource, /image-only queue delivery #8581/);
 	assert.match(agentSessionSource, /Cannot submit a prompt while compaction is in progress/);
 	assert.match(agentSessionSource, /_feynmanEagerlyPersistedToolResults/);
 	assert.match(agentSessionSource, /feynmanToolResultIdBeforeExtensions/);
@@ -176,6 +178,7 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	}
 	assert.match(patchSource, /Removal condition: delete this patch once a supported released Pi version/);
 	assert.match(patchSource, /upstream commits d5278ea and 086c32e/);
+	assert.match(patchSource, /delivered image-only queue entries as in commit b67b3db/);
 
 	assert.equal(patchPiAgentSessionSource(agentSessionSource), agentSessionSource);
 	assert.equal(patchPiSessionManagerSource(sessionManagerSource), sessionManagerSource);
@@ -211,6 +214,12 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 				/Incomplete Pi runtime correctness patch/,
 			);
 		}
+		for (const fragment of PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS[target]) {
+			assert.throws(
+				() => assertPiRuntimeCorrectnessPatchSource(`${source}\n${fragment}`, target),
+				/Incomplete Pi runtime correctness patch/,
+			);
+		}
 	}
 	const appendFragment = "const entryId = this.sessionManager.appendMessage(toolResult);";
 	const extensionFragment = "await this._emitExtensionEvent(event);";
@@ -222,9 +231,27 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 		() => assertPiRuntimeCorrectnessPatchSource(reorderedAgentSession, "agentSession"),
 		/out of order/,
 	);
+	const reformattedImageQueueGuard = agentSessionSource.replace(
+		"            // Empty text is valid when a queued user message contains only images.\n",
+		"            if (messageText) {\n            // Empty text is valid when a queued user message contains only images.\n",
+	);
+	assert.notEqual(reformattedImageQueueGuard, agentSessionSource);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(reformattedImageQueueGuard, "agentSession"),
+		/retained messageText truthiness guard/,
+	);
+	const wrappedImageQueueGuard = agentSessionSource.replace(
+		'            const messageText = contentText(event.message.content, "");\n',
+		'            if ( messageText ) {\n            const messageText = contentText(event.message.content, "");\n',
+	);
+	assert.notEqual(wrappedImageQueueGuard, agentSessionSource);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(wrappedImageQueueGuard, "agentSession"),
+		/retained messageText truthiness guard/,
+	);
 	assert.throws(
 		() => patchPiAgentSessionSource("export class AgentSession {}\n"),
-		/Unsupported Pi 0\.84\.2 agent-session import layout/,
+		/Unsupported Pi 0\.84\.2 agent-session image-only queue delivery layout/,
 	);
 	assert.throws(
 		() => patchPiGithubCopilotDeviceCodeSource("function sleep() {}\n"),

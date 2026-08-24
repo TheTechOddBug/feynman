@@ -2,10 +2,12 @@
  * Temporary Pi 0.84.2 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7053
  * - https://github.com/earendil-works/pi/issues/8121
+ * - https://github.com/earendil-works/pi/issues/8581
  *
  * Removal condition: delete this patch once a supported released Pi version
  * eagerly persists finalized parallel tool results while restoring them in
- * tool-call order and includes upstream commits d5278ea and 086c32e.
+ * tool-call order, includes upstream commits d5278ea and 086c32e, and clears
+ * delivered image-only queue entries as in commit b67b3db.
  */
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
@@ -25,10 +27,14 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	transformMessages: "Feynman Pi 0.84.2 correctness patch: order eager tool results",
 	githubCopilotDeviceCode: "Feynman Pi 0.84.2 correctness patch: export abortableSleep for upstream #8121",
 	githubCopilotOAuth: "Feynman Pi 0.84.2 correctness patch: upstream #8121",
+	imageQueue: "Feynman Pi 0.84.2 correctness patch: image-only queue delivery #8581",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession,
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue,
+		"const steeringIndex = this._steeringMessages.indexOf(messageText);",
+		"const followUpIndex = this._followUpMessages.indexOf(messageText);",
 		'const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"',
 		"const entryId = this.sessionManager.appendMessage(toolResult);",
 		"this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {",
@@ -80,9 +86,20 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 		"await enableGitHubCopilotModel(token, model.id, enterpriseDomain, signal);",
 	]),
 });
+export const PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS = Object.freeze({
+	agentSession: Object.freeze([
+		`            if (messageText) {
+                // Check steering queue first`,
+	]),
+	sessionManager: Object.freeze([]),
+	transformMessages: Object.freeze([]),
+	githubCopilotDeviceCode: Object.freeze([]),
+	githubCopilotOAuth: Object.freeze([]),
+});
 
 const PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue,
 		"const entryId = this.sessionManager.appendMessage(toolResult);",
 		"await this._emitExtensionEvent(event);",
 		"event.message.toolCallId = feynmanToolResultIdBeforeExtensions;",
@@ -128,13 +145,31 @@ export function assertPiRuntimeCorrectnessVersion(version, surface) {
 
 export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = target) {
 	const required = PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS[target];
+	const forbidden = PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS[target];
 	const ordered = PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS[target];
-	if (!required || !ordered) {
+	if (!required || !forbidden || !ordered) {
 		throw new Error(`Unknown Pi runtime correctness target: ${target}`);
 	}
 	for (const fragment of required) {
 		if (!source.includes(fragment)) {
 			throw new Error(`Incomplete Pi runtime correctness patch ${surface}: missing ${fragment}`);
+		}
+	}
+	for (const fragment of forbidden) {
+		if (source.includes(fragment)) {
+			throw new Error(`Incomplete Pi runtime correctness patch ${surface}: retained ${fragment}`);
+		}
+	}
+	if (target === "agentSession") {
+		if (/\bif\s*\([^{}\n]*\bmessageText\b[^{}\n]*\)\s*\{/.test(source)) {
+			throw new Error(
+				`Incomplete Pi runtime correctness patch ${surface}: retained messageText truthiness guard`,
+			);
+		}
+		if (!source.includes(PATCHED_IMAGE_QUEUE_EVENT_HANDLER)) {
+			throw new Error(
+				`Incomplete Pi runtime correctness patch ${surface}: missing exact image-only queue event handler`,
+			);
 		}
 	}
 	let previousIndex = -1;
@@ -155,6 +190,60 @@ function replaceRequired(source, original, replacement, label) {
 		);
 	}
 	return source.replace(original, replacement);
+}
+
+const ORIGINAL_IMAGE_QUEUE_DELIVERY = `            const messageText = contentText(event.message.content, "");
+            if (messageText) {
+                // Check steering queue first
+                const steeringIndex = this._steeringMessages.indexOf(messageText);
+                if (steeringIndex !== -1) {
+                    this._steeringMessages.splice(steeringIndex, 1);
+                    this._emitQueueUpdate();
+                }
+                else {
+                    // Check follow-up queue
+                    const followUpIndex = this._followUpMessages.indexOf(messageText);
+                    if (followUpIndex !== -1) {
+                        this._followUpMessages.splice(followUpIndex, 1);
+                        this._emitQueueUpdate();
+                    }
+                }
+            }`;
+
+const PATCHED_IMAGE_QUEUE_DELIVERY = `            const messageText = contentText(event.message.content, "");
+            // ${PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue}
+            // Empty text is valid when a queued user message contains only images.
+            // Match it just like textual steering and follow-up messages.
+            const steeringIndex = this._steeringMessages.indexOf(messageText);
+            if (steeringIndex !== -1) {
+                this._steeringMessages.splice(steeringIndex, 1);
+                this._emitQueueUpdate();
+            }
+            else {
+                // Check follow-up queue
+                const followUpIndex = this._followUpMessages.indexOf(messageText);
+                if (followUpIndex !== -1) {
+                    this._followUpMessages.splice(followUpIndex, 1);
+                    this._emitQueueUpdate();
+                }
+            }`;
+
+const PATCHED_IMAGE_QUEUE_EVENT_HANDLER = `        if (event.type === "message_start" && event.message.role === "user") {
+            this._overflowRecoveryAttempted = false;
+${PATCHED_IMAGE_QUEUE_DELIVERY}
+        }
+        const feynmanToolResultIdBeforeExtensions =`;
+
+function patchPiImageQueueDeliverySource(source) {
+	if (source.includes(PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue)) {
+		return source;
+	}
+	return replaceRequired(
+		source,
+		ORIGINAL_IMAGE_QUEUE_DELIVERY,
+		PATCHED_IMAGE_QUEUE_DELIVERY,
+		"agent-session image-only queue delivery",
+	);
 }
 
 const AGENT_SESSION_HELPERS = `
@@ -269,6 +358,7 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
             }`;
 
 export function patchPiAgentSessionSource(source) {
+	source = patchPiImageQueueDeliverySource(source);
 	if (source.includes(AGENT_SESSION_MARKER)) {
 		try {
 			assertPiRuntimeCorrectnessPatchSource(source, "agentSession");

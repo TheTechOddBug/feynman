@@ -9,8 +9,16 @@ export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	transformMessages: string;
 	githubCopilotDeviceCode: string;
 	githubCopilotOAuth: string;
+	imageQueue: string;
 }>;
 export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS: Readonly<{
+	agentSession: readonly string[];
+	sessionManager: readonly string[];
+	transformMessages: readonly string[];
+	githubCopilotDeviceCode: readonly string[];
+	githubCopilotOAuth: readonly string[];
+}>;
+export declare const PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS: Readonly<{
 	agentSession: readonly string[];
 	sessionManager: readonly string[];
 	transformMessages: readonly string[];

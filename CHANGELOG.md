@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-24 15:38 EDT — pi-image-queue-0.3.40
+
+- Objective: Clear Pi's delivered image-only steering and follow-up records so research sessions that add screenshots or paper figures do not retain false pending-input state.
+- Reproduced: Bundled patched Pi `0.84.2` delivered the image and emptied its agent queue but left `pendingMessageCount` at `1`, with no clearing `queue_update`. Upstream issue `#8581` and proposed commit `b67b3db` identify the same truthiness guard.
+- Candidate: The existing version-gated Pi runtime correctness patch now matches empty text when a queued user message contains only images, verifies that the stale truthiness gate is absent, and exercises both steering and follow-up delivery. Focused tests pass `9/9`; the full suite passes `912/912`; root typecheck, build, architecture, and diff checks pass; website lint, typecheck, build (`34` pages), and both production audits pass.
+- State: `verified` for the source candidate and `unverified` for the exact committed package/runtime ladder, clean-machine proof, pull-request CI, merge, publication, and live release identity. Next: complete the release ladder and publish `0.3.40`.
+
 ### 2026-08-24 13:04 EDT — pi-compaction-integrity-0.3.39-release
 
 - Persistence: PR `#251` merged exact tested head `c86733f1b731eacd5c616711edac75f12ab260b7` as `cf00120843d3cec4d788170d99e296c9e83ed528`; the owning branch was deleted locally and remotely. The repository does not define `codex` or `codex-automation` labels.
