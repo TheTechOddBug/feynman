@@ -151,6 +151,9 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 
 	assert.match(agentSessionSource, /issue #7053/);
 	assert.match(agentSessionSource, /image-only queue delivery #8581/);
+	assert.match(agentSessionSource, /interleaved user content #8615/);
+	assert.match(agentSessionSource, /async _prompt\(text, options, orderedContent\)/);
+	assert.match(agentSessionSource, /_createUserContent\(text, images, orderedContent\)/);
 	assert.match(agentSessionSource, /Cannot submit a prompt while compaction is in progress/);
 	assert.match(agentSessionSource, /_feynmanEagerlyPersistedToolResults/);
 	assert.match(agentSessionSource, /feynmanToolResultIdBeforeExtensions/);
@@ -179,6 +182,9 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	assert.match(patchSource, /Removal condition: delete this patch once a supported released Pi version/);
 	assert.match(patchSource, /upstream commits d5278ea and 086c32e/);
 	assert.match(patchSource, /delivered image-only queue entries as in commit b67b3db/);
+	assert.match(patchSource, /27115254/);
+	assert.match(patchSource, /86c42324/);
+	assert.doesNotMatch(agentSessionSource, /sourceMappingURL/);
 
 	assert.equal(patchPiAgentSessionSource(agentSessionSource), agentSessionSource);
 	assert.equal(patchPiSessionManagerSource(sessionManagerSource), sessionManagerSource);
@@ -251,7 +257,7 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	);
 	assert.throws(
 		() => patchPiAgentSessionSource("export class AgentSession {}\n"),
-		/Unsupported Pi 0\.84\.2 agent-session image-only queue delivery layout/,
+		/Unsupported Pi 0\.84\.2 interleaved content prompt delegate layout/,
 	);
 	assert.throws(
 		() => patchPiGithubCopilotDeviceCodeSource("function sleep() {}\n"),
@@ -560,6 +566,123 @@ test("RPC reports success false for a prompt submitted during manual compaction"
 	assert.equal(result.command, "prompt");
 	assert.equal(result.success, false);
 	assert.match(result.error ?? "", /Cannot submit a prompt while compaction is in progress/);
+});
+
+test("interleaved research text and images retain order for idle and queued delivery", async (t) => {
+	const [{ Agent }, codingAgent, piAi] = await Promise.all([
+		import("@earendil-works/pi-agent-core"),
+		import("@earendil-works/pi-coding-agent"),
+		import("@earendil-works/pi-ai/compat"),
+	]);
+	const { AgentSession, SessionManager, SettingsManager, convertToLlm } = codingAgent;
+	const { fauxAssistantMessage, registerFauxProvider, streamSimple } = piAi;
+	const tempRoot = mkdtempSync(resolve(tmpdir(), "feynman-pi-8615-"));
+	const faux = registerFauxProvider();
+	let session: InstanceType<typeof AgentSession> | undefined;
+	t.after(() => {
+		session?.dispose();
+		faux.unregister();
+		if (existsSync(tempRoot)) rmSync(tempRoot, { recursive: true });
+	});
+	const content = [
+		{ type: "text" as const, text: "Figure A:" },
+		{ type: "image" as const, mimeType: "image/png" as const, data: "Zmlyc3Q=" },
+		{ type: "text" as const, text: "Figure B:" },
+		{ type: "image" as const, mimeType: "image/png" as const, data: "c2Vjb25k" },
+	];
+	let providerContent: unknown;
+	faux.setResponses([
+		(context) => {
+			providerContent = context.messages.find((message) => message.role === "user")?.content;
+			return fauxAssistantMessage("received");
+		},
+	]);
+	const model = faux.getModel();
+	const sessionManager = SessionManager.create(tempRoot, tempRoot);
+	const agent = new Agent({
+		getApiKey: () => "faux-key",
+		streamFn: streamSimple,
+		initialState: {
+			model,
+			systemPrompt: "You are a test assistant.",
+			tools: [],
+		},
+		convertToLlm,
+	});
+	session = new AgentSession({
+		agent,
+		sessionManager,
+		settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
+		cwd: tempRoot,
+		modelRuntime: {
+			hasConfiguredAuth: () => true,
+			checkAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+			getAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+			isUsingOAuth: () => false,
+		} as never,
+		resourceLoader: createResourceLoader(codingAgent.createExtensionRuntime()) as never,
+		baseToolsOverride: {},
+	});
+
+	await session.sendUserMessage(content);
+	assert.deepEqual(providerContent, content);
+	const agentUser = agent.state.messages.find((message) => message.role === "user");
+	assert.deepEqual(agentUser?.role === "user" ? agentUser.content : undefined, content);
+	const persistedUser = sessionManager
+		.buildSessionContext()
+		.messages.find((message) => message.role === "user");
+	assert.deepEqual(persistedUser?.role === "user" ? persistedUser.content : undefined, content);
+
+	const prototype = AgentSession.prototype as unknown as {
+		_createUserContent(
+			text: string,
+			images?: Array<{ type: "image"; mimeType: "image/png"; data: string }>,
+			orderedContent?: typeof content,
+		): typeof content;
+		_queueSteer(
+			this: unknown,
+			text: string,
+			images: typeof content extends Array<infer Part>
+				? Array<Extract<Part, { type: "image" }>>
+				: never,
+			orderedContent: typeof content,
+		): Promise<void>;
+		_queueFollowUp(
+			this: unknown,
+			text: string,
+			images: typeof content extends Array<infer Part>
+				? Array<Extract<Part, { type: "image" }>>
+				: never,
+			orderedContent: typeof content,
+		): Promise<void>;
+	};
+	const queued: { steer?: unknown; followUp?: unknown } = {};
+	const queueHarness = {
+		_steeringMessages: [] as string[],
+		_followUpMessages: [] as string[],
+		_emitQueueUpdate: () => {},
+		_createUserContent: prototype._createUserContent,
+		agent: {
+			steer: (message: { content: unknown }) => {
+				queued.steer = message.content;
+			},
+			followUp: (message: { content: unknown }) => {
+				queued.followUp = message.content;
+			},
+		},
+	};
+	const images = content.filter(
+		(part): part is Extract<(typeof content)[number], { type: "image" }> =>
+			part.type === "image",
+	);
+	await prototype._queueSteer.call(queueHarness, "Figure A:\nFigure B:", images, content);
+	await prototype._queueFollowUp.call(queueHarness, "Figure A:\nFigure B:", images, content);
+	assert.deepEqual(queued.steer, content);
+	assert.deepEqual(queued.followUp, content);
+	assert.deepEqual(
+		prototype._createUserContent("transformed", images),
+		[{ type: "text", text: "transformed" }, ...images],
+	);
 });
 
 test("completed parallel results persist before a slow sibling and restore in tool-call order", async (t) => {

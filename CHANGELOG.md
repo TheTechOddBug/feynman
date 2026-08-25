@@ -4,6 +4,35 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 08:06 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Intake: Open Feynman issues remain empty and PR `#253` remains the only open PR. Recent contributor branches and forks expose no new port target; security queues and production audits remain clear. Upstream Pi PRs `#8615` and `#8616` reproduced against both bundled `0.84.2` trees and directly affect research figures, so both are ported rather than deferred.
+- Changed: Extension messages retain interleaved text/image order through idle, steering, follow-up, agent state, and session persistence. JPEG conversion and provider-bound resizing scan past XMP APP1 metadata to apply later EXIF orientation. Exact source, package, installed-runtime, and image-path regressions cover both fixes.
+- Prior clean proof preserved: exact `a8fd30b` passed `922/922` on Daytona Node `25.9.0` plus root, website, audit, package, installed-consumer, runtime, and document checks; the sandbox was deleted. Successor `684c875` then passed `927/927`, was committed and pushed, and its PR/CodeQL/Vercel checks are running.
+- Current local proof: focused runtime/package/image tests pass `30/30`; after adding the helper to the runtime input hash and rebuilding the archive, the full suite passes `929/929`. Root and website typechecks/builds, architecture check, production audits, and diff checks pass; package and clean-machine proof remain next.
+- State: `unverified` for the dirty successor's exact commit, package artifact, Daytona proof, CI, merge, publication, and release identity. Next: persist this tested tree, pack and prove the exact commit, then require all PR checks green before merge.
+
+### 2026-08-25 07:56 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Repaired the forward-fix candidate after adversarial review: stale Pi source-map directives are stripped fail-closed, provider `in_flight_budget_exhausted` retries are caller-scoped with explicit no-retry handling, non-cooperative stream iterators no longer block watchdog settlement, Gemini encrypted reasoning and thought signatures survive persistence, and tool-free compaction omits `tool_choice`.
+- Verified: focused forward-fix tests pass `20/20`; after rebuilding generated `dist`, the full suite passes `927/927`. The first full-suite attempt used stale generated code and failed 18 subprocess/runtime tests; no source defect remained after the required rebuild.
+- State: `unverified` for the dirty successor's exact commit, clean-machine proof, CI, merge, publication, and release identity. Next: commit and push the corrected candidate, then rerun the complete release ladder.
+
+### 2026-08-25 06:40 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Reproduced CI run `32834794452`'s Windows native failure: installed-runtime forward-fix verification still required `dist/utils/provider-retry.d.ts` after native dependency pruning.
+- Changed: `verifyRuntimeForwardFixBehavior` now accepts explicit pruned-native targets; the installed verifier selects that mode only for the bundled native app root. Added declaration coverage and a source-level wiring regression.
+- Verified: focused forward-fix tests pass `10/10`; full `npm test` passes `924/924`; root typecheck/build/architecture, website lint/typecheck, disposable website build (`34` pages), root/site production audits, artifact verification, and `git diff --check` pass. State: `unverified` for exact commit, clean-machine proof, CI, merge, publication, and release identity. Next: commit and push this repair, then rerun the full release ladder.
+
+### 2026-08-25 04:25 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Objective: Forward only Pi fixes that improve research-session continuity, provider replay, runtime reliability, or package/runtime integrity; reject freshness-only and adjacent workflow changes.
+- Intake: Live GitHub issue and PR queues are empty; the only parent branch is `main`; recent forks expose no contributor-only port target; root and website production audits report zero vulnerabilities. Pi `0.84.3` remains a coordinated migration rather than a safe pin-only upgrade because it omits maintained `0.84.2` correctness patches.
+- Changed: Added deferred `triggerTurn: false` custom-message persistence, large-tool render loops, GitHub release-redirect lookup, opt-in provider-stream idle watchdog, Gemini thought-signature replay with encrypted reasoning coexistence, full-hash cross-provider tool IDs, and structured OpenRouter in-flight-budget retries. Added exact source/installed/runtime/package checks and release notes for `0.3.41`.
+- Repaired: Reduced `scripts/verify-package-artifact.mjs` from `1,215` to `1,198` lines by extracting the coding-agent forward-fix verifier. The first real artifact check caught declarations being required from the pruned runtime archive; archive verification now checks executable Pi AI targets while source/npm trees still require declarations.
+- Verified locally: Focused forward-fix tests pass `16/16`; full `npm test` passes `922/922`; root typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site audits, `git diff --check`, package artifact verification, real tarball packaging, clean installed-consumer audit, installed runtime/tool/model checks, and document-parser checks pass.
+- State: `unverified` for the exact committed SHA, Daytona clean-machine proof, pull-request CI, merge, publication, and post-release identity. Next: commit and push the candidate, run the exact clean-machine and CI ladders, then merge and publish `0.3.41`.
+
 ### 2026-08-24 20:35 EDT — pi-image-queue-0.3.40-release
 
 - Persistence: PR `#252` merged exact tested head `9e6b80a32fc9c95cfcf854b819292e978f7f3656` as release commit `5d1d3d8bced23d0f05bc15da9b4660edea61ab06`; the candidate and merge trees match, and the owning branch was deleted. The repository does not define `codex` or `codex-automation` labels.

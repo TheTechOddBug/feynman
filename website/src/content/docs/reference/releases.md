@@ -9,6 +9,33 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.41 - 2026-08-25
+
+### Research continuity
+
+- Custom research messages queued while a Pi turn is active now wait until the turn settles before they are persisted and emitted. Tool results remain adjacent to their calls, and `triggerTurn: false` notifications no longer corrupt resumable session history.
+- Extension-supplied research prompts now preserve interleaved text and image order through idle, steering, and follow-up delivery, so captions and questions stay attached to the intended figure.
+- Large rendered tool diffs no longer hit V8's argument-count limit. Feynman's Pi runtime also resolves `fd` and `rg` releases through GitHub's public redirect without spending anonymous API quota.
+
+### Research images
+
+- JPEG conversion and provider-bound resizing now continue past XMP APP1 metadata to apply a later EXIF orientation block. Figures, scans, photographs, and microscopy images no longer remain sideways when XMP precedes EXIF.
+
+### Model reliability
+
+- OpenAI-compatible Gemini 3 streams now preserve the first Google thought signature and encrypted reasoning details together across persisted tool-call replay.
+- Foreign OpenAI-compatible tool-call IDs now retain the full hash when they must be sanitized and bounded, reducing cross-provider replay collisions.
+- OpenRouter's structured `in_flight_budget_exhausted` 402 responses can use their `Retry-After` budget without replacing ordinary 429 and server-error retries or overriding an explicit provider no-retry response.
+- OpenAI-compatible compaction no longer sends `tool_choice: "none"` when no tools are present, avoiding requests that strict gateways reject before summary generation.
+
+### Runtime reliability
+
+- An opt-in `FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS` watchdog can terminate a provider stream that stops producing Pi events, even when the provider's iterator cleanup never settles. It remains disabled by default for local and private models that legitimately spend time in silent prefills.
+
+### Validation
+
+- Ported the focused Pi fixes from commits `240eb29c` (following contributor precursor `7b1dcfd`), `8c16a558`, `6d05adb`, `94f6e7c`, `d8def812`, `fe37e9f9`, `27115254`, and `86c42324`, plus the structured OpenRouter retry correction, across source, bundled, restored, installed, and package-artifact copies. Added fail-closed source-map checks, restored-runtime coverage, provider and image regressions, and clean installed-package verification.
+
 ## v0.3.40 - 2026-08-24
 
 ### Research continuity

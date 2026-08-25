@@ -3,6 +3,12 @@ export declare const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS: Readonly<{
 	piAi: readonly string[];
 }>;
 export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION: "0.84.2";
+export declare const PI_CODING_AGENT_FORWARD_FIX_TARGETS: readonly string[];
+export declare const PI_CODING_AGENT_FORWARD_FIX_MARKERS: Readonly<{
+	largeToolRender: string;
+	toolReleaseRedirect: string;
+	exifAfterXmp: string;
+}>;
 export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	agentSession: string;
 	sessionManager: string;
@@ -10,6 +16,8 @@ export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	githubCopilotDeviceCode: string;
 	githubCopilotOAuth: string;
 	imageQueue: string;
+	turnEndMessages: string;
+	interleavedUserContent: string;
 }>;
 export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS: Readonly<{
 	agentSession: readonly string[];
@@ -26,6 +34,12 @@ export declare const PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS: Readonly<{
 	githubCopilotOAuth: readonly string[];
 }>;
 export declare function assertPiRuntimeCorrectnessVersion(version: string | undefined, surface: string): void;
+export declare function assertPiCodingAgentForwardFixSource(
+	relativePath: string,
+	source: string,
+	surface?: string,
+): void;
+export declare function patchPiCodingAgentForwardFixSource(relativePath: string, source: string): string;
 export declare function assertPiRuntimeCorrectnessPatchSource(
 	source: string,
 	target:

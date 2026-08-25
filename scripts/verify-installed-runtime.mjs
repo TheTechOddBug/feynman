@@ -1154,7 +1154,7 @@ async function main() {
 	const windowsWebCookies = await verifyWindowsWebCookies();
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
-	await verifyRuntimeForwardFixBehavior(packageRoot);
+	await verifyRuntimeForwardFixBehavior(packageRoot, { prunedNative: isNativeBundlePackageRoot(packageRoot) });
 	await verifyPiCompactionToolsBehavior(packageRoot);
 	await verifyPiCliEndOfOptions();
 	const editLineEndings = await verifyPiEditLineEndings();

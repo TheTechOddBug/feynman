@@ -9,8 +9,13 @@ import {
 	assertPiAiForwardFixSource,
 	PI_AI_FORWARD_FIX_MARKERS,
 	PI_AI_FORWARD_FIX_TARGETS,
+	PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
 	patchPiAiForwardFixSource,
 } from "../scripts/lib/pi-ai-forward-fixes-patch.mjs";
+import {
+	assertPiAiForwardFixPackageTree,
+	resolvePiAiForwardFixVerificationTargets,
+} from "../scripts/lib/pi-ai-forward-fixes-verifier.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const appRoot = process.cwd();
@@ -100,7 +105,15 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		resolve(appRoot, "scripts", "lib", "pi-ai-forward-fixes-patch.mjs"),
 		"utf8",
 	);
-	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548", "ad58801", "e5dde9a"]) {
+	for (const commit of [
+		"af2c352",
+		"10acee6",
+		"0e4d495",
+		"8720548",
+		"ad58801",
+		"e5dde9a",
+		"fe37e9f",
+	]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
 	assert.match(
@@ -113,8 +126,47 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 			const source = readPiAiSource(root, relativePath);
 			assert.doesNotThrow(() => assertPiAiForwardFixSource(relativePath, source));
 			assert.equal(patchPiAiForwardFixSource(relativePath, source), source);
+			if (!relativePath.endsWith(".json")) {
+				assert.doesNotMatch(source, /sourceMappingURL/);
+			}
 		}
 	}
+});
+
+test("pruned native Pi AI verification does not require declaration files", () => {
+	const readText = (path: string, label: string): string => {
+		if (path.endsWith(".d.ts")) {
+			throw new Error(`${label} is missing`);
+		}
+		return readFileSync(path, "utf8");
+	};
+
+	assert.doesNotThrow(() =>
+		assertPiAiForwardFixPackageTree(appRoot, readText, { prunedNative: true }),
+	);
+	assert.throws(
+		() => assertPiAiForwardFixPackageTree(appRoot, readText),
+		/bundled root Pi AI dist\/utils\/provider-retry\.d\.ts is missing/,
+	);
+});
+
+test("installed Pi AI verification selects executable targets only for native bundles", () => {
+	assert.deepEqual(
+		resolvePiAiForwardFixVerificationTargets(),
+		PI_AI_FORWARD_FIX_TARGETS,
+	);
+	assert.deepEqual(
+		resolvePiAiForwardFixVerificationTargets({ prunedNative: true }),
+		PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
+	);
+	const installedVerifierSource = readFileSync(
+		resolve(appRoot, "scripts", "verify-installed-runtime.mjs"),
+		"utf8",
+	);
+	assert.match(
+		installedVerifierSource,
+		/verifyRuntimeForwardFixBehavior\(packageRoot,\s*\{\s*prunedNative:\s*isNativeBundlePackageRoot\(packageRoot\)/,
+	);
 });
 
 test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", () => {
@@ -387,4 +439,339 @@ test("patched Xiaomi and China ZAI catalogs expose only current provider models"
 	for (const id of ["zai-org/GLM-5.2", "zai-org/GLM-5.2-Fast"]) {
 		assert.deepEqual(providers.getBuiltinModel("baseten", id).input, ["text", "image"]);
 	}
+});
+
+function openAiCompletionsModel(provider: string, id: string, baseUrl: string) {
+	return {
+		id,
+		name: id,
+		api: "openai-completions" as const,
+		provider,
+		baseUrl,
+		reasoning: true,
+		input: ["text" as const],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128_000,
+		maxTokens: 4096,
+	};
+}
+
+test("OpenAI-compatible history bounds foreign tool IDs and preserves result pairing", async () => {
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-ids=${Date.now()}`
+	);
+	const ids = [
+		"a".repeat(40),
+		"a".repeat(41),
+		`${"same-prefix-".repeat(6)}first`,
+		`${"same-prefix-".repeat(6)}second`,
+		"short.native:1",
+	];
+	const assistant = {
+		role: "assistant" as const,
+		content: ids.map((id, index) => ({
+			type: "toolCall" as const,
+			id,
+			name: "read",
+			arguments: { path: `file-${index}` },
+		})),
+		api: "other",
+		provider: "other",
+		model: "other",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "toolUse" as const,
+		timestamp: 1,
+	};
+	const results = ids.map((toolCallId, index) => ({
+		role: "toolResult" as const,
+		toolCallId,
+		toolName: "read",
+		content: [{ type: "text" as const, text: `result-${index}` }],
+		isError: false,
+		timestamp: 2 + index,
+	}));
+	let payload: any;
+	const response = await openAiCompletions.streamSimple(
+		openAiCompletionsModel("custom-gateway", "proxy-model", "https://gateway.example/v1"),
+		{ messages: [{ role: "user", content: "read", timestamp: 0 }, assistant, ...results] },
+		{
+			apiKey: "test",
+			onPayload: (next: unknown) => {
+				payload = next;
+				throw new Error("captured tool IDs");
+			},
+		},
+	).result();
+	assert.match(response.errorMessage ?? "", /captured tool IDs/);
+	const callIds = payload.messages.find((message: any) => message.role === "assistant")
+		.tool_calls.map((call: any) => call.id);
+	const resultIds = payload.messages.filter((message: any) => message.role === "tool")
+		.map((message: any) => message.tool_call_id);
+	assert.deepEqual(callIds, resultIds);
+	assert.equal(callIds[0], ids[0]);
+	assert.equal(callIds[4], ids[4]);
+	assert.equal(callIds[1].length, 40);
+	assert.equal(new Set(callIds).size, ids.length);
+	for (const id of callIds.slice(1, 4)) {
+		assert.match(id, /^[A-Za-z0-9_-]+$/);
+		assert.ok(id.length <= 40);
+	}
+});
+
+test("OpenAI-compatible compaction omits tool_choice when no tools are available", async () => {
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-choice=${Date.now()}`
+	);
+	let payload: any;
+	const response = await openAiCompletions.streamSimple(
+		openAiCompletionsModel("custom-gateway", "proxy-model", "https://gateway.example/v1"),
+		{ messages: [{ role: "user", content: "Summarize the conversation", timestamp: 0 }] },
+		{
+			apiKey: "test",
+			toolChoice: "none",
+			onPayload: (next: unknown) => {
+				payload = next;
+				throw new Error("captured compaction payload");
+			},
+		},
+	).result();
+	assert.match(response.errorMessage ?? "", /captured compaction payload/);
+	assert.ok(payload);
+	assert.equal("tool_choice" in payload, false);
+	assert.equal("tools" in payload, false);
+});
+
+test("Gemini signatures and encrypted reasoning coexist across JSON replay", async (t) => {
+	const firstSignature = "AgGDja8BCEmVrN0first";
+	const laterSignature = "AgGDja8BCEmVrN0later";
+	const encryptedDetail = {
+		type: "reasoning.encrypted",
+		id: "call_1",
+		data: "encrypted-reasoning",
+	};
+	const server = createServer((_request, response) => {
+		response.writeHead(200, { "content-type": "text/event-stream" });
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: { reasoning_details: [encryptedDetail] },
+				finish_reason: null,
+			}],
+		})}\n\n`);
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: {
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "{\"path\":\"README.md\"}" },
+						extra_content: { google: { thought_signature: firstSignature } },
+					}],
+				},
+				finish_reason: null,
+			}],
+		})}\n\n`);
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: {
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "" },
+						extra_content: { google: { thought_signature: laterSignature } },
+					}],
+				},
+				finish_reason: null,
+			}],
+		})}\n\n`);
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+		})}\n\n`);
+		response.end("data: [DONE]\n\n");
+	});
+	t.after(async () => {
+		await new Promise<void>((resolveClose, rejectClose) =>
+			server.close((error) => error ? rejectClose(error) : resolveClose())
+		);
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?signature=${Date.now()}`
+	);
+	const model = openAiCompletionsModel(
+		"openrouter",
+		"google/gemini-3-test",
+		`http://127.0.0.1:${address.port}`,
+	);
+	const first = await openAiCompletions.streamSimple(
+		model,
+		{
+			messages: [{ role: "user", content: "read", timestamp: 0 }],
+			tools: [{
+				name: "read",
+				description: "Read",
+				parameters: { type: "object", properties: { path: { type: "string" } } },
+			}],
+		},
+		{ apiKey: "test" },
+	).result();
+	const toolCall = first.content.find((block: any) => block.type === "toolCall") as any;
+	assert.equal(toolCall?.thoughtSignature, firstSignature);
+	assert.deepEqual((first as any).reasoningDetails, [encryptedDetail]);
+
+	let replayPayload: any;
+	const persisted = JSON.parse(JSON.stringify(first));
+	await openAiCompletions.streamSimple(
+		model,
+		{ messages: [persisted] },
+		{
+			apiKey: "test",
+			onPayload: (next: unknown) => {
+				replayPayload = next;
+				throw new Error("captured signature replay");
+			},
+		},
+	).result();
+	assert.deepEqual(replayPayload.messages[0].tool_calls[0].extra_content, {
+		google: { thought_signature: firstSignature },
+	});
+	assert.deepEqual(replayPayload.messages[0].reasoning_details, [encryptedDetail]);
+});
+
+test("provider retry handles only Retry-After in-flight budget 402 errors", async () => {
+	const { isTransientInFlightBudgetError, retryProviderRequest } = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "utils", "provider-retry.js")).href}?budget=${Date.now()}`
+	);
+	const transient = Object.assign(
+		new Error("OpenRouter in_flight_budget_exhausted"),
+		{
+			status: 402,
+			headers: new Headers({ "retry-after": "0" }),
+			error: { code: "in_flight_budget_exhausted" },
+		},
+	);
+	let transientAttempts = 0;
+	assert.equal(isTransientInFlightBudgetError(transient), true);
+	assert.equal(isTransientInFlightBudgetError(undefined), false);
+	assert.equal(isTransientInFlightBudgetError({ status: 402 }), false);
+	assert.equal(
+		await retryProviderRequest(async () => {
+			transientAttempts++;
+			if (transientAttempts === 1) throw transient;
+			return "recovered";
+		}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
+		"recovered",
+	);
+	assert.equal(transientAttempts, 2);
+
+	let unscopedAttempts = 0;
+	await assert.rejects(
+		retryProviderRequest(async () => {
+			unscopedAttempts++;
+			throw transient;
+		}, { maxRetries: 1 }),
+		/in_flight_budget_exhausted/,
+	);
+	assert.equal(unscopedAttempts, 1);
+
+	const ordinary429 = Object.assign(new Error("rate limited"), {
+		status: 429,
+		headers: new Headers({ "retry-after": "0" }),
+	});
+	let ordinaryAttempts = 0;
+	assert.equal(
+		await retryProviderRequest(async () => {
+			ordinaryAttempts++;
+			if (ordinaryAttempts === 1) throw ordinary429;
+			return "standard retry recovered";
+		}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
+		"standard retry recovered",
+	);
+	assert.equal(ordinaryAttempts, 2);
+
+	for (const error of [
+		Object.assign(new Error("payment required"), {
+			status: 402,
+			headers: new Headers({ "retry-after": "0" }),
+		}),
+		Object.assign(new Error("in_flight_budget_exhausted"), {
+			status: 402,
+			headers: new Headers(),
+		}),
+		Object.assign(new Error("provider explicitly disabled retry"), {
+			status: 402,
+			headers: new Headers({ "retry-after": "120", "x-should-retry": "false" }),
+			error: { code: "in_flight_budget_exhausted" },
+		}),
+	]) {
+		let attempts = 0;
+		await assert.rejects(
+			retryProviderRequest(async () => {
+				attempts++;
+				throw error;
+			}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
+			new RegExp((error as Error).message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+		);
+		assert.equal(attempts, 1);
+	}
+});
+
+test("provider retry patch upgrades the pre-review candidate to caller-scoped policy", () => {
+	const current = readPiAiSource(piAiRoot, "dist/utils/provider-retry.js");
+	const legacyCandidate = current
+		.replace(
+			`    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        !(error.headers instanceof Headers) ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
+        return false;`,
+			`    if (error.status !== 402 || !error.headers?.get("retry-after"))
+        return false;`,
+		)
+		.replace(
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
+                throw error;`,
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                (options.retryOn ? !options.retryOn(error) : !isRetryableProviderError(error)))
+                throw error;`,
+		)
+		.replace(
+			`    if (error.status === undefined)
+        return true;
+`,
+			`    if (error.status === undefined)
+        return true;
+    if (isTransientInFlightBudgetError(error))
+        return true;
+`,
+		);
+	assert.notEqual(legacyCandidate, current);
+	assert.equal(
+		patchPiAiForwardFixSource("dist/utils/provider-retry.js", legacyCandidate),
+		current,
+	);
 });

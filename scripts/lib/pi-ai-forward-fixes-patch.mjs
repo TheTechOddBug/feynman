@@ -6,9 +6,13 @@
  * - 87205484bf749c2140fef5d1bea68995d57e739c (China ZAI catalog)
  * - ad58801ce793ca4ca2f6fb64b307e9eaffd2c471 (Baseten GLM image inputs)
  * - e5dde9a76bfec3c4eff764d1b6db3b60e5dd0b30 (provider-neutral tool choice)
+ * - 94f6e7c9ffdb9a57fabdc39fb6b12ee54fa05ee6 (Gemini thought signatures)
+ * - d8def8121bcb4d4e2cce16d12a521347559329ce (OpenAI-compatible tool-call IDs)
+ * - fe37e9f9b5fb2e7bd9ff504e678f08d115375230 (omit tool_choice without tools)
+ * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all six commits.
+ * version that contains all ten fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -18,6 +22,10 @@ export const PI_AI_FORWARD_FIX_TARGETS = Object.freeze([
 	"dist/api/google-shared.js",
 	"dist/api/google-vertex.js",
 	"dist/api/bedrock-converse-stream.js",
+	"dist/api/openai-completions.js",
+	"dist/utils/provider-retry.js",
+	"dist/utils/provider-retry.d.ts",
+	"dist/types.d.ts",
 	"dist/api/anthropic-messages.js",
 	"dist/api/azure-openai-responses.js",
 	"dist/api/mistral-conversations.js",
@@ -32,6 +40,9 @@ export const PI_AI_FORWARD_FIX_TARGETS = Object.freeze([
 	"dist/providers/data/baseten.json",
 	"dist/providers/data/.manifest.json",
 ]);
+export const PI_AI_FORWARD_FIX_RUNTIME_TARGETS = Object.freeze(
+	PI_AI_FORWARD_FIX_TARGETS.filter((relativePath) => !relativePath.endsWith(".d.ts")),
+);
 
 export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	googleGenerativeAi: "Feynman Pi 0.84.2 forward patch: Google thinking level maps",
@@ -39,6 +50,8 @@ export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	googleVertex: "Feynman Pi 0.84.2 forward patch: Vertex thinking level maps",
 	bedrock: "Feynman Pi 0.84.2 forward patch: Bedrock Smithy response headers",
 	toolChoice: "Feynman Pi 0.84.2 forward patch: provider-neutral tool choice",
+	openAiCompletions: "Feynman Pi 0.84.2 forward patch: Gemini signatures and bounded tool IDs",
+	providerRetry: "Feynman Pi 0.84.2 forward patch: transient in-flight budget retry #8507",
 });
 
 const TOOL_CHOICE_BASE_OPTIONS = Object.freeze({
@@ -146,6 +159,23 @@ const ZAI_CHINA_ADDITIONS = Object.freeze({
 
 function countOccurrences(source, fragment) {
 	return source.split(fragment).length - 1;
+}
+
+function stripStaleSourceMapDirective(source, relativePath) {
+	const marker = "//# sourceMappingURL=";
+	const first = source.indexOf(marker);
+	if (first === -1) {
+		return source;
+	}
+	if (
+		source.indexOf(marker, first + marker.length) !== -1 ||
+		!/^\/\/# sourceMappingURL=[^\r\n]*[\r\n]*$/.test(source.slice(first))
+	) {
+		throw new Error(
+			`Unsupported Pi ${PI_AI_FORWARD_FIX_REQUIRED_VERSION} ${relativePath} source map layout`,
+		);
+	}
+	return source.slice(0, first).replace(/\r?\n$/, "");
 }
 
 function replaceRequired(source, original, replacement, label) {
@@ -318,6 +348,9 @@ function assertSourceFragments(source, relativePath, fragments) {
 }
 
 export function assertPiAiForwardFixSource(relativePath, source) {
+	if (!relativePath.endsWith(".json") && source.includes("//# sourceMappingURL=")) {
+		throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained stale source map directive`);
+	}
 	if (relativePath.includes("/providers/data/")) {
 		const catalog = parseCatalog(source, relativePath);
 		if (relativePath.endsWith("/.manifest.json")) {
@@ -374,6 +407,64 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				"addResponseHeadersMiddleware(client, options.onResponse, model",
 				"if (!observedRawResponse && response.$metadata.httpStatusCode !== undefined)",
 				'name: "pi-ai-response-headers"',
+			]);
+			return;
+		case "dist/api/openai-completions.js":
+			assertSourceFragments(source, relativePath, [
+				PI_AI_FORWARD_FIX_MARKERS.openAiCompletions,
+				"const maxToolCallIdLength = 40;",
+				"fitToolCallIdWithHash(combinedId, id)",
+				"const hash = shortHash(hashSource);",
+				"const signature = toolCall.extra_content?.google?.thought_signature;",
+				"compat.supportsGoogleThoughtSignatures",
+				"isFeynmanSerializedReasoningDetail",
+				"appendFeynmanEncryptedReasoningDetail",
+				"output.reasoningDetails ??= []",
+				"const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)",
+				"if (!block.thoughtSignature ||",
+				"isFeynmanSerializedReasoningDetail(block.thoughtSignature))",
+				"extra_content: { google: { thought_signature: tc.thoughtSignature } }",
+				"if (options?.toolChoice && params.tools?.length)",
+				'model.provider === "openrouter" && /^~?google\\/gemini-3(?:[.:-]|$)/.test(model.id)',
+				'model.provider === "github-copilot" && /^gemini-3(?:[.:-]|$)/.test(model.id)',
+				"retryProviderRequest",
+				'const openRouterBudgetRetry = model.provider === "openrouter";',
+				"maxRetries: openRouterBudgetRetry ?",
+				"retryOn: openRouterBudgetRetry ? isTransientInFlightBudgetError : undefined",
+			]);
+			if (/model\.provider === "openai"\)\s*\n?\s*return id\.length > 40 \? id\.slice/.test(source)) {
+				throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained provider-only truncation`);
+			}
+			return;
+		case "dist/utils/provider-retry.js":
+			assertSourceFragments(source, relativePath, [
+				PI_AI_FORWARD_FIX_MARKERS.providerRetry,
+				"function isTransientInFlightBudgetError(error)",
+				"!(error instanceof Error)",
+				"error.status !== 402",
+				'error.headers.get("x-should-retry") === "false"',
+				'error.headers.get("retry-after")',
+				'getFeynmanStructuredErrorCode(error) === "in_flight_budget_exhausted"',
+				"retryOn",
+				"isTransientInFlightBudgetError(error)",
+				"isRetryableProviderError(error) || options.retryOn?.(error) === true",
+			]);
+			if (source.includes("if (isTransientInFlightBudgetError(error))")) {
+				throw new Error(
+					`Incomplete Pi AI forward patch ${relativePath}: leaked OpenRouter budget retries into the provider-global policy`,
+				);
+			}
+			return;
+		case "dist/utils/provider-retry.d.ts":
+			assertSourceFragments(source, relativePath, [
+				"retryOn?: (error: unknown) => boolean;",
+				"export declare function isTransientInFlightBudgetError(error: unknown): boolean;",
+			]);
+			return;
+		case "dist/types.d.ts":
+			assertSourceFragments(source, relativePath, [
+				"supportsGoogleThoughtSignatures?: boolean;",
+				"reasoningDetails?: JsonValue[];",
 			]);
 			return;
 		case "dist/api/anthropic-messages.js":
@@ -563,6 +654,473 @@ export const streamSimple`;
 	return patched;
 }
 
+
+function patchOpenAiCompletions(source) {
+	const relativePath = "dist/api/openai-completions.js";
+	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.openAiCompletions)) {
+		let upgraded = source
+			.replaceAll("output.reasoning_details", "output.reasoningDetails")
+			.replace(
+				`                            if (compat.supportsGoogleThoughtSignatures &&
+                                typeof signature === "string" &&
+                                signature.length > 0) {
+                                if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                }
+                                block.thoughtSignature = signature;
+                            }`,
+				`                            if (compat.supportsGoogleThoughtSignatures &&
+                                typeof signature === "string" &&
+                                signature.length > 0) {
+                                if (!block.thoughtSignature ||
+                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                        appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                    }
+                                    block.thoughtSignature = signature;
+                                }
+                            }`,
+			)
+			.replace(
+				`                                    else {
+                                        matchingToolCall.thoughtSignature = serializedDetail;
+                                    }`,
+				`                                    else {
+                                        if (isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
+                                            appendFeynmanEncryptedReasoningDetail(matchingToolCall.thoughtSignature);
+                                        }
+                                        matchingToolCall.thoughtSignature = serializedDetail;
+                                    }`,
+				);
+		upgraded = upgraded.replace(
+			"    if (options?.toolChoice) {\n        params.tool_choice = options.toolChoice;\n    }",
+			"    if (options?.toolChoice && params.tools?.length) {\n        params.tool_choice = options.toolChoice;\n    }",
+		);
+		if (!upgraded.includes("const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)")) {
+			upgraded = replaceRequired(
+				upgraded,
+				`                const reasoningDetails = toolCalls
+                    .filter((tc) => tc.thoughtSignature)
+                    .map((tc) => {
+                    try {
+                        return JSON.parse(tc.thoughtSignature);
+                    }
+                    catch {
+                        return null;
+                    }
+                })
+                    .filter(Boolean);
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+				`                const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)
+                    ? msg.reasoningDetails
+                    : [];
+                const reasoningDetails = [];
+                const seenReasoningDetails = new Set();
+                for (const detail of [
+                    ...preservedReasoningDetails,
+                    ...toolCalls.map((tc) => {
+                        if (!tc.thoughtSignature)
+                            return null;
+                        try {
+                            return JSON.parse(tc.thoughtSignature);
+                        }
+                        catch {
+                            return null;
+                        }
+                    }),
+                ]) {
+                    if (!isEncryptedReasoningDetail(detail))
+                        continue;
+                    const serializedDetail = JSON.stringify(detail);
+                    if (seenReasoningDetails.has(serializedDetail))
+                        continue;
+                    seenReasoningDetails.add(serializedDetail);
+                    reasoningDetails.push(detail);
+                }
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+				"Gemini encrypted-reasoning candidate migration",
+			);
+		}
+		assertPiAiForwardFixSource(relativePath, upgraded);
+		return upgraded;
+	}
+	const originalNormalize = `    const normalizeToolCallId = (id) => {
+        // Handle pipe-separated IDs from OpenAI Responses API
+        // Format: {call_id}|{id} where {id} can be 400+ chars with special chars (+, /, =)
+        // These come from providers like github-copilot, openai-codex, opencode
+        // Extract just the call_id part and normalize it
+        // Multiple tool calls in the same turn can share call_id but differ by item_id.
+        // Preserve item-level uniqueness when replaying into Chat Completions, which
+        // requires distinct tool call ids.
+        if (id.includes("|")) {
+            // Sanitize to allowed chars and truncate to 40 chars (OpenAI limit)
+            const separatorIndex = id.indexOf("|");
+            const callId = id.slice(0, separatorIndex).replace(/[^a-zA-Z0-9_-]/g, "_");
+            const itemId = id.slice(separatorIndex + 1).replace(/[^a-zA-Z0-9_-]/g, "_");
+            const combinedId = itemId.length > 0 ? \`\${callId}_\${itemId}\` : callId;
+            if (combinedId.length <= 40) {
+                return combinedId;
+            }
+            const hash = shortHash(id).slice(0, 8);
+            const prefix = callId.slice(0, Math.max(1, 40 - hash.length - 1));
+            return \`\${prefix}_\${hash}\`;
+        }
+        if (model.provider === "openai")
+            return id.length > 40 ? id.slice(0, 40) : id;
+        return id;
+    };`;
+	const patchedNormalize = `    // ${PI_AI_FORWARD_FIX_MARKERS.openAiCompletions}
+    const maxToolCallIdLength = 40;
+    const fitToolCallIdWithHash = (candidate, hashSource) => {
+        if (candidate.length <= maxToolCallIdLength)
+            return candidate;
+        const hash = shortHash(hashSource);
+        const prefix = candidate.slice(0, Math.max(1, maxToolCallIdLength - hash.length - 1));
+        return \`\${prefix}_\${hash}\`;
+    };
+    const normalizeToolCallId = (id) => {
+        if (id.includes("|")) {
+            const separatorIndex = id.indexOf("|");
+            const callId = id.slice(0, separatorIndex).replace(/[^a-zA-Z0-9_-]/g, "_");
+            const itemId = id.slice(separatorIndex + 1).replace(/[^a-zA-Z0-9_-]/g, "_");
+            const combinedId = itemId.length > 0 ? \`\${callId}_\${itemId}\` : callId;
+            return fitToolCallIdWithHash(combinedId, id);
+        }
+        // Gateways can forward foreign Chat Completions history into a Responses
+        // backend. Preserve short native IDs; sanitize and hash only oversized IDs.
+        if (id.length <= maxToolCallIdLength)
+            return id;
+        return fitToolCallIdWithHash(id.replace(/[^a-zA-Z0-9_-]/g, "_"), id);
+    };`;
+	let patched = replaceRequired(
+		source,
+		originalNormalize,
+		patchedNormalize,
+		"OpenAI-compatible tool-call ID normalization",
+	);
+	patched = replaceRequired(
+		patched,
+		'import { retryProviderRequest } from "../utils/provider-retry.js";',
+		'import { isTransientInFlightBudgetError, retryProviderRequest } from "../utils/provider-retry.js";',
+		"OpenRouter retry helper import",
+	);
+	patched = replaceRequired(
+		patched,
+		"export const stream = (model, context, options) => {",
+		`function isFeynmanSerializedReasoningDetail(value) {
+    if (typeof value !== "string")
+        return false;
+    try {
+        return isEncryptedReasoningDetail(JSON.parse(value));
+    }
+    catch {
+        return false;
+    }
+}
+export const stream = (model, context, options) => {`,
+		"Gemini reasoning-signature helper",
+	);
+	patched = replaceRequired(
+		patched,
+		"            const pendingReasoningDetailsByToolCallId = new Map();",
+		`            const pendingReasoningDetailsByToolCallId = new Map();
+            const appendFeynmanEncryptedReasoningDetail = (serializedDetail) => {
+                try {
+                    const detail = JSON.parse(serializedDetail);
+                    if (!isEncryptedReasoningDetail(detail))
+                        return;
+                    output.reasoningDetails ??= [];
+                    if (!output.reasoningDetails.some((existing) => JSON.stringify(existing) === serializedDetail)) {
+                        output.reasoningDetails.push(detail);
+                    }
+                }
+                catch {
+                    // Keep malformed provider metadata out of the replay payload.
+                }
+            };`,
+		"Gemini and encrypted-reasoning state",
+	);
+	patched = replaceRequired(
+		patched,
+		`                            const name = toolCall.function?.name ?? toolCall.custom?.name;`,
+		`                            // Gemini 3 OpenAI-compatible endpoints attach a signature
+                            // to streamed function calls and require it verbatim on replay.
+                            const signature = toolCall.extra_content?.google?.thought_signature;
+                            if (compat.supportsGoogleThoughtSignatures &&
+                                typeof signature === "string" &&
+                                signature.length > 0) {
+                                if (!block.thoughtSignature ||
+                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                        appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                    }
+                                    block.thoughtSignature = signature;
+                                }
+                            }
+                            const name = toolCall.function?.name ?? toolCall.custom?.name;`,
+		"Gemini thought-signature capture",
+	);
+	patched = replaceRequired(
+		patched,
+		`                        function: {
+                            name: tc.name,
+                            arguments: JSON.stringify(tc.arguments),
+                        },
+                    };`,
+		`                        function: {
+                            name: tc.name,
+                            arguments: JSON.stringify(tc.arguments),
+                        },
+                        ...(compat.supportsGoogleThoughtSignatures &&
+                            tc.thoughtSignature &&
+                            !isFeynmanSerializedReasoningDetail(tc.thoughtSignature)
+                            ? { extra_content: { google: { thought_signature: tc.thoughtSignature } } }
+                            : {}),
+                    };`,
+		"Gemini thought-signature replay",
+	);
+	patched = replaceRequired(
+		patched,
+		`                const reasoningDetails = toolCalls
+                    .filter((tc) => tc.thoughtSignature)
+                    .map((tc) => {
+                    try {
+                        return JSON.parse(tc.thoughtSignature);
+                    }
+                    catch {
+                        return null;
+                    }
+                })
+                    .filter(Boolean);
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+		`                const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)
+                    ? msg.reasoningDetails
+                    : [];
+                const reasoningDetails = [];
+                const seenReasoningDetails = new Set();
+                for (const detail of [
+                    ...preservedReasoningDetails,
+                    ...toolCalls.map((tc) => {
+                        if (!tc.thoughtSignature)
+                            return null;
+                        try {
+                            return JSON.parse(tc.thoughtSignature);
+                        }
+                        catch {
+                            return null;
+                        }
+                    }),
+                ]) {
+                    if (!isEncryptedReasoningDetail(detail))
+                        continue;
+                    const serializedDetail = JSON.stringify(detail);
+                    if (seenReasoningDetails.has(serializedDetail))
+                        continue;
+                    seenReasoningDetails.add(serializedDetail);
+                    reasoningDetails.push(detail);
+                }
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+		"Gemini encrypted-reasoning replay",
+	);
+	patched = replaceRequired(
+		patched,
+		"    if (options?.toolChoice) {\n        params.tool_choice = options.toolChoice;\n    }",
+		"    if (options?.toolChoice && params.tools?.length) {\n        params.tool_choice = options.toolChoice;\n    }",
+		"OpenAI-compatible tool choice without tools",
+	);
+	patched = replaceRequired(
+		patched,
+		`        supportsLongCacheRetention: !(isTogether ||
+            isCloudflareWorkersAI ||
+            isCloudflareAiGateway ||
+            isNvidia ||
+            isAntLing),
+    };`,
+		`        supportsLongCacheRetention: !(isTogether ||
+            isCloudflareWorkersAI ||
+            isCloudflareAiGateway ||
+            isNvidia ||
+            isAntLing),
+        supportsGoogleThoughtSignatures: ((model.provider === "openrouter" && /^~?google\\/gemini-3(?:[.:-]|$)/.test(model.id)) ||
+            (model.provider === "github-copilot" && /^gemini-3(?:[.:-]|$)/.test(model.id))),
+    };`,
+		"Gemini thought-signature runtime detection",
+	);
+	patched = replaceRequired(
+		patched,
+		`        supportsLongCacheRetention: model.compat.supportsLongCacheRetention ?? detected.supportsLongCacheRetention,
+    };`,
+		`        supportsLongCacheRetention: model.compat.supportsLongCacheRetention ?? detected.supportsLongCacheRetention,
+        supportsGoogleThoughtSignatures: model.compat.supportsGoogleThoughtSignatures ??
+            detected.supportsGoogleThoughtSignatures,
+    };`,
+		"Gemini thought-signature compatibility override",
+	);
+	patched = replaceRequired(
+		patched,
+		`                                if (matchingToolCall) {
+                                    matchingToolCall.thoughtSignature = serializedDetail;
+                                }`,
+		`                                if (matchingToolCall) {
+                                    if (compat.supportsGoogleThoughtSignatures &&
+                                        matchingToolCall.thoughtSignature &&
+                                        !isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
+                                        appendFeynmanEncryptedReasoningDetail(serializedDetail);
+                                    }
+                                    else {
+                                        if (isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
+                                            appendFeynmanEncryptedReasoningDetail(matchingToolCall.thoughtSignature);
+                                        }
+                                        matchingToolCall.thoughtSignature = serializedDetail;
+                                    }
+                                }`,
+		"Gemini encrypted-reasoning coexistence",
+	);
+	patched = replaceRequired(
+		patched,
+		`            const { data: openaiStream, response } = await retryProviderRequest(() => client.chat.completions.create(params, requestOptions).withResponse(), {
+                maxRetries: options?.maxRetries,
+                maxRetryDelayMs: options?.maxRetryDelayMs,
+                signal: options?.signal,
+            });`,
+		`            const openRouterBudgetRetry = model.provider === "openrouter";
+            const { data: openaiStream, response } = await retryProviderRequest(() => client.chat.completions.create(params, requestOptions).withResponse(), {
+                maxRetries: openRouterBudgetRetry ? (options?.maxRetries ?? 2) : options?.maxRetries,
+                maxRetryDelayMs: openRouterBudgetRetry
+                    ? (options?.maxRetryDelayMs ?? 120_000)
+                    : options?.maxRetryDelayMs,
+                retryOn: openRouterBudgetRetry ? isTransientInFlightBudgetError : undefined,
+                signal: options?.signal,
+            });`,
+		"OpenRouter retry layout",
+	);
+	assertPiAiForwardFixSource(relativePath, patched);
+	return patched;
+}
+
+function patchProviderRetry(source) {
+	const relativePath = "dist/utils/provider-retry.js";
+	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.providerRetry)) {
+		let upgraded = source;
+		upgraded = upgraded.replace(
+			`    if (error.status !== 402 || !error.headers?.get("retry-after"))
+        return false;`,
+			`    if (error.status !== 402 ||
+        error.headers?.get("x-should-retry") === "false" ||
+        !error.headers?.get("retry-after"))
+        return false;`,
+		);
+		upgraded = upgraded.replace(
+			`    if (error.status !== 402 ||
+        error.headers?.get("x-should-retry") === "false" ||
+        !error.headers?.get("retry-after"))
+        return false;`,
+			`    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        typeof error.headers?.get !== "function" ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
+        return false;`,
+		);
+		upgraded = upgraded.replace(
+			`    if (isTransientInFlightBudgetError(error))
+        return true;
+`,
+			"",
+		);
+		upgraded = upgraded.replace(
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                (options.retryOn ? !options.retryOn(error) : !isRetryableProviderError(error)))
+                throw error;`,
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
+                throw error;`,
+		);
+		assertPiAiForwardFixSource(relativePath, upgraded);
+		return upgraded;
+	}
+	const helper = `// ${PI_AI_FORWARD_FIX_MARKERS.providerRetry}
+function getFeynmanStructuredErrorCode(error) {
+    for (const candidate of [error.error, error.body, error.response?.data]) {
+        if (!candidate || typeof candidate !== "object")
+            continue;
+        const code = candidate.code ?? candidate.error?.code;
+        if (typeof code === "string")
+            return code;
+    }
+    return undefined;
+}
+export function isTransientInFlightBudgetError(error) {
+    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        typeof error.headers?.get !== "function" ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
+        return false;
+    return getFeynmanStructuredErrorCode(error) === "in_flight_budget_exhausted";
+}
+`;
+	let patched = replaceRequired(
+		source,
+		"/** Mirrors the pinned OpenAI/Anthropic SDK retry policy; review when either SDK is upgraded. */\n",
+		`${helper}/** Mirrors the pinned OpenAI/Anthropic SDK retry policy; review when either SDK is upgraded. */\n`,
+		"transient in-flight budget helper",
+	);
+	patched = replaceRequired(
+		patched,
+		`            if (retriesRemaining <= 0 || !isProviderError(error) || !isRetryableProviderError(error))
+                throw error;`,
+		`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
+                throw error;`,
+		"scoped retry predicate",
+	);
+	assertPiAiForwardFixSource(relativePath, patched);
+	return patched;
+}
+
+function patchProviderRetryDeclaration(source) {
+	let patched = source;
+	if (!patched.includes("retryOn?: (error: unknown) => boolean;")) {
+		patched = patched.replace(
+			"    signal?: AbortSignal;\n",
+			"    signal?: AbortSignal;\n    retryOn?: (error: unknown) => boolean;\n",
+		);
+	}
+	if (!patched.includes("export declare function isTransientInFlightBudgetError(error: unknown): boolean;")) {
+		patched = patched.replace(
+			"/**\n * Reproduce the retry behavior used by the OpenAI and Anthropic SDKs",
+			"export declare function isTransientInFlightBudgetError(error: unknown): boolean;\n/**\n * Reproduce the retry behavior used by the OpenAI and Anthropic SDKs",
+		);
+	}
+	return patched;
+}
+
+function patchPiAiTypesDeclaration(source) {
+	let patched = source;
+	if (!patched.includes("supportsGoogleThoughtSignatures?: boolean;")) {
+		patched = patched.replace(
+			"    supportsLongCacheRetention?: boolean;\n",
+			"    supportsLongCacheRetention?: boolean;\n    /** Whether OpenAI-compatible Gemini 3 tool calls require Google thought-signature replay. */\n    supportsGoogleThoughtSignatures?: boolean;\n",
+		);
+	}
+	if (!patched.includes("reasoningDetails?: JsonValue[];")) {
+		patched = patched.replace(
+			"    rawStopReason?: string;\n",
+			"    rawStopReason?: string;\n    /** Provider-encrypted reasoning metadata retained alongside Gemini tool signatures. */\n    reasoningDetails?: JsonValue[];\n",
+		);
+	}
+	return patched;
+}
+
 export function patchPiAiForwardFixSource(relativePath, source) {
 	if (relativePath.includes("/providers/data/")) {
 		if (relativePath.endsWith("/.manifest.json")) {
@@ -570,20 +1128,34 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 		}
 		return patchModelCatalog(relativePath, source);
 	}
-	let patched = relativePath in TOOL_CHOICE_BASE_OPTIONS
-		? patchProviderNeutralToolChoice(relativePath, source)
-		: source;
+	let patched = stripStaleSourceMapDirective(source, relativePath);
+	patched = relativePath in TOOL_CHOICE_BASE_OPTIONS
+		? patchProviderNeutralToolChoice(relativePath, patched)
+		: patched;
 	switch (relativePath) {
 		case "dist/api/google-generative-ai.js":
 			patched = patchGoogleGenerativeAi(patched);
 			break;
 		case "dist/api/google-shared.js":
-			return patchGoogleShared(patched);
+			patched = patchGoogleShared(patched);
+			break;
 		case "dist/api/google-vertex.js":
 			patched = patchGoogleVertex(patched);
 			break;
 		case "dist/api/bedrock-converse-stream.js":
 			patched = patchBedrock(patched);
+			break;
+		case "dist/api/openai-completions.js":
+			patched = patchOpenAiCompletions(patched);
+			break;
+		case "dist/utils/provider-retry.js":
+			patched = patchProviderRetry(patched);
+			break;
+		case "dist/utils/provider-retry.d.ts":
+			patched = patchProviderRetryDeclaration(patched);
+			break;
+		case "dist/types.d.ts":
+			patched = patchPiAiTypesDeclaration(patched);
 			break;
 		case "dist/api/anthropic-messages.js":
 		case "dist/api/azure-openai-responses.js":
