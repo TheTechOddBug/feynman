@@ -6,6 +6,21 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.42 - 2026-08-25
+
+### Reasoning integrity
+
+- Same-model research turns now preserve structured reasoning metadata through session persistence and tool-call replay instead of flattening or dropping it.
+- When research history crosses a provider boundary, Feynman strips provider-private reasoning fields before forwarding it, preventing incompatible metadata from leaking into the next model's context.
+
+### Runtime reliability
+
+- Runtime preparation now repairs stale Pi AgentCore copies to the current maintained patch before verification, so restored and installed research runtimes cannot retain an older patch shape.
+
+### Validation
+
+- Reasoning and AgentCore patch validators now fail closed on missing, mixed, or stale transformations across source, bundled, restored, installed, and package-artifact copies.
+
 ## v0.3.41 - 2026-08-25
 
 ### Research continuity
