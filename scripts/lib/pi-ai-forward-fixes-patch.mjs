@@ -1,3 +1,9 @@
+import {
+	assertPiOpenAiStructuredReasoningSource,
+	isPiOpenAiStructuredReasoningPatched,
+	patchPiOpenAiStructuredReasoningSource,
+} from "./pi-openai-reasoning-patch.mjs";
+
 /**
  * Temporary Pi 0.84.2 forward patches for upstream commits:
  * - af2c352238cffd12d404d5a4cd35a21f93a78fe0 (Google thinking maps)
@@ -67,137 +73,6 @@ const TOOL_CHOICE_BASE_OPTIONS = Object.freeze({
 	"dist/api/openai-codex-responses.js": "    const base = buildBaseOptions(model, context, options, apiKey);",
 	"dist/api/openai-responses.js": "    const base = buildBaseOptions(model, context, options, options?.apiKey);",
 });
-
-const OPENAI_REASONING_DETAIL_HELPERS = `function isReasoningDetailObject(detail) {
-    return typeof detail === "object" && detail !== null && !Array.isArray(detail);
-}
-function hasValidCommonReasoningDetailFields(candidate) {
-    return ((candidate.id === undefined || candidate.id === null || typeof candidate.id === "string") &&
-        (candidate.format === undefined || typeof candidate.format === "string") &&
-        (candidate.index === undefined || typeof candidate.index === "number"));
-}
-function isOpenAIReasoningDetail(detail) {
-    if (!isReasoningDetailObject(detail) || !hasValidCommonReasoningDetailFields(detail)) {
-        return false;
-    }
-    switch (detail.type) {
-        case "reasoning.summary":
-            return typeof detail.summary === "string";
-        case "reasoning.encrypted":
-            return typeof detail.data === "string";
-        case "reasoning.text":
-            return (typeof detail.text === "string" &&
-                (detail.signature === undefined || detail.signature === null || typeof detail.signature === "string"));
-        default:
-            return false;
-    }
-}
-function parseOpenAIReasoningDetails(signature) {
-    if (!signature)
-        return undefined;
-    try {
-        const parsed = JSON.parse(signature);
-        return Array.isArray(parsed) && parsed.length > 0 && parsed.every(isOpenAIReasoningDetail)
-            ? parsed
-            : undefined;
-    }
-    catch {
-        return undefined;
-    }
-}
-function parseLegacyEncryptedReasoningDetail(signature) {
-    if (!signature)
-        return undefined;
-    try {
-        const parsed = JSON.parse(signature);
-        return isOpenAIReasoningDetail(parsed) &&
-            parsed.type === "reasoning.encrypted" &&
-            typeof parsed.id === "string" &&
-            parsed.id.length > 0 &&
-            parsed.data.length > 0
-            ? parsed
-            : undefined;
-    }
-    catch {
-        return undefined;
-    }
-}
-function fillMissingCommonReasoningDetailFields(target, source) {
-    target.id ??= source.id;
-    target.format ||= source.format;
-    target.index ??= source.index;
-}
-function appendOpenAIReasoningDetail(details, detail) {
-    const lastDetail = details[details.length - 1];
-    if (detail.type === "reasoning.text" && lastDetail?.type === "reasoning.text") {
-        lastDetail.text += detail.text;
-        lastDetail.signature ||= detail.signature;
-        fillMissingCommonReasoningDetailFields(lastDetail, detail);
-        return;
-    }
-    if (detail.type === "reasoning.summary" && lastDetail?.type === "reasoning.summary") {
-        lastDetail.summary += detail.summary;
-        fillMissingCommonReasoningDetailFields(lastDetail, detail);
-        return;
-    }
-    details.push({ ...detail });
-}
-const OPENAI_COMPLETIONS_REASONING_FIELDS = ["reasoning", "reasoning_content", "reasoning_text"];
-function isOpenAICompletionsReasoningField(field) {
-    return OPENAI_COMPLETIONS_REASONING_FIELDS.includes(field);
-}`;
-
-const OPENAI_REASONING_STREAM_CAPTURE = `                    const reasoningDetails = choice.delta.reasoning_details;
-                    if (Array.isArray(reasoningDetails)) {
-                        for (const detail of reasoningDetails) {
-                            if (!isOpenAIReasoningDetail(detail))
-                                continue;
-                            const block = ensureThinkingBlock("");
-                            const preservedDetails = parseOpenAIReasoningDetails(block.thinkingSignature) ?? [];
-                            appendOpenAIReasoningDetail(preservedDetails, detail);
-                            // Keep provider replay data in the existing signature slot. OpenRouter streams
-                            // reasoning_details as deltas: consecutive text/summary deltas are merged into
-                            // logical entries, while encrypted entries remain opaque and discrete.
-                            block.thinkingSignature = JSON.stringify(preservedDetails);
-                        }
-                    }`;
-
-const OPENAI_REASONING_REPLAY_SETUP = `            const thinkingBlocks = msg.content.filter(isThinkingContentBlock);
-            const toolCalls = msg.content.filter(isToolCallBlock);
-            const signedReasoningDetails = thinkingBlocks
-                .map((block) => parseOpenAIReasoningDetails(block.thinkingSignature))
-                .find((details) => details !== undefined);
-            const legacyMessageReasoningDetails = msg.provider === model.provider &&
-                msg.api === model.api &&
-                msg.model === model.id &&
-                Array.isArray(msg.reasoningDetails) &&
-                msg.reasoningDetails.length > 0 &&
-                msg.reasoningDetails.every(isOpenAIReasoningDetail)
-                ? msg.reasoningDetails
-                : undefined;
-            const legacyReasoningDetails = toolCalls
-                .map((toolCall) => parseLegacyEncryptedReasoningDetail(toolCall.thoughtSignature))
-                .filter((detail) => detail !== undefined);
-            const preservedReasoningDetails = signedReasoningDetails ??
-                legacyMessageReasoningDetails ??
-                (legacyReasoningDetails.length > 0 ? legacyReasoningDetails : undefined);
-            const nonEmptyThinkingBlocks = thinkingBlocks.filter((block) => block.thinking.trim().length > 0);`;
-
-const OPENAI_REASONING_RAW_REPLAY = `                    // reasoning_details is the structured alternative to a raw reasoning field.
-                    if (!preservedReasoningDetails) {
-                        // Use the signature from the first thinking block if available (for llama.cpp server + gpt-oss)
-                        let signature = nonEmptyThinkingBlocks[0].thinkingSignature;
-                        if (model.provider === "opencode-go" && signature === "reasoning") {
-                            signature = "reasoning_content";
-                        }
-                        if (signature && isOpenAICompletionsReasoningField(signature)) {
-                            assistantMsg[signature] = nonEmptyThinkingBlocks.map((block) => block.thinking).join("\\n");
-                        }
-                    }`;
-
-const OPENAI_REASONING_REPLAY_ASSIGNMENT = `            if (preservedReasoningDetails) {
-                assistantMsg.reasoning_details = preservedReasoningDetails;
-            }`;
 
 const XIAOMI_DEPRECATED_MODEL_IDS = Object.freeze([
 	"mimo-v2-flash",
@@ -481,17 +356,6 @@ function assertSourceFragments(source, relativePath, fragments) {
 	}
 }
 
-function assertExactSourceFragments(source, relativePath, fragments) {
-	for (const fragment of fragments) {
-		const count = countOccurrences(source, fragment);
-		if (count !== 1) {
-			throw new Error(
-				`Incomplete Pi AI forward patch ${relativePath}: expected exactly one semantic fragment, found ${count}: ${fragment}`,
-			);
-		}
-	}
-}
-
 export function assertPiAiForwardFixSource(relativePath, source) {
 	if (!relativePath.endsWith(".json") && source.includes("//# sourceMappingURL=")) {
 		throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained stale source map directive`);
@@ -574,24 +438,7 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				"maxRetries: openRouterBudgetRetry ?",
 				"retryOn: openRouterBudgetRetry ? isTransientInFlightBudgetError : undefined",
 			]);
-			assertExactSourceFragments(source, relativePath, [
-				OPENAI_REASONING_DETAIL_HELPERS,
-				OPENAI_REASONING_STREAM_CAPTURE,
-				OPENAI_REASONING_REPLAY_SETUP,
-				OPENAI_REASONING_RAW_REPLAY,
-				OPENAI_REASONING_REPLAY_ASSIGNMENT,
-				"function isFeynmanSerializedReasoningDetail(value) {\n    return parseLegacyEncryptedReasoningDetail(value) !== undefined;\n}",
-			]);
-			for (const forbidden of [
-				"output.reasoningDetails",
-				"pendingReasoningDetailsByToolCallId",
-				"appendFeynmanEncryptedReasoningDetail",
-				"function isEncryptedReasoningDetail(",
-			]) {
-				if (source.includes(forbidden)) {
-					throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained ${forbidden}`);
-				}
-			}
+			assertPiOpenAiStructuredReasoningSource(source, relativePath);
 			if (/model\.provider === "openai"\)\s*\n?\s*return id\.length > 40 \? id\.slice/.test(source)) {
 				throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained provider-only truncation`);
 			}
@@ -814,222 +661,10 @@ export const streamSimple`;
 	return patched;
 }
 
-function patchOpenAiStructuredReasoning(source) {
-	if (source.includes(OPENAI_REASONING_DETAIL_HELPERS)) {
-		return source;
-	}
-
-	let patched = replaceRequired(
-		source,
-		`function isEncryptedReasoningDetail(detail) {
-    if (typeof detail !== "object" || detail === null) {
-        return false;
-    }
-    const candidate = detail;
-    return (candidate.type === "reasoning.encrypted" &&
-        typeof candidate.id === "string" &&
-        candidate.id.length > 0 &&
-        typeof candidate.data === "string" &&
-        candidate.data.length > 0);
-}`,
-		OPENAI_REASONING_DETAIL_HELPERS,
-		"OpenAI structured reasoning detail parsers",
-	);
-	patched = replaceRequired(
-		patched,
-		`function isFeynmanSerializedReasoningDetail(value) {
-    if (typeof value !== "string")
-        return false;
-    try {
-        return isEncryptedReasoningDetail(JSON.parse(value));
-    }
-    catch {
-        return false;
-    }
-}`,
-		`function isFeynmanSerializedReasoningDetail(value) {
-    return parseLegacyEncryptedReasoningDetail(value) !== undefined;
-}`,
-		"OpenAI legacy encrypted reasoning parser",
-	);
-	patched = replaceRequired(
-		patched,
-		`            const toolCallBlocksById = new Map();
-            const pendingReasoningDetailsByToolCallId = new Map();
-            const appendFeynmanEncryptedReasoningDetail = (serializedDetail) => {
-                try {
-                    const detail = JSON.parse(serializedDetail);
-                    if (!isEncryptedReasoningDetail(detail))
-                        return;
-                    output.reasoningDetails ??= [];
-                    if (!output.reasoningDetails.some((existing) => JSON.stringify(existing) === serializedDetail)) {
-                        output.reasoningDetails.push(detail);
-                    }
-                }
-                catch {
-                    // Keep malformed provider metadata out of the replay payload.
-                }
-            };`,
-		"            const toolCallBlocksById = new Map();",
-		"OpenAI structured reasoning stream state",
-	);
-	patched = replaceRequired(
-		patched,
-		`            const applyPendingReasoningDetail = (block) => {
-                if (!block.id) {
-                    return;
-                }
-                const pendingReasoningDetail = pendingReasoningDetailsByToolCallId.get(block.id);
-                if (pendingReasoningDetail) {
-                    block.thoughtSignature = pendingReasoningDetail;
-                    pendingReasoningDetailsByToolCallId.delete(block.id);
-                }
-            };
-`,
-		"",
-		"OpenAI legacy pending reasoning attachment",
-	);
-	patched = replaceRequired(
-		patched,
-		"                applyPendingReasoningDetail(block);\n",
-		"",
-		"OpenAI legacy pending reasoning application",
-	);
-	patched = replaceRequired(
-		patched,
-		`                            if (compat.supportsGoogleThoughtSignatures &&
-                                typeof signature === "string" &&
-                                signature.length > 0) {
-                                if (!block.thoughtSignature ||
-                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
-                                    if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
-                                        appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
-                                    }
-                                    block.thoughtSignature = signature;
-                                }
-                            }`,
-		`                            if (compat.supportsGoogleThoughtSignatures &&
-                                typeof signature === "string" &&
-                                signature.length > 0) {
-                                if (!block.thoughtSignature ||
-                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
-                                    block.thoughtSignature = signature;
-                                }
-                            }`,
-		"Gemini thought-signature coexistence with structured reasoning",
-	);
-	patched = replaceRequired(
-		patched,
-		`                    const reasoningDetails = choice.delta.reasoning_details;
-                    if (Array.isArray(reasoningDetails)) {
-                        for (const detail of reasoningDetails) {
-                            if (isEncryptedReasoningDetail(detail)) {
-                                const serializedDetail = JSON.stringify(detail);
-                                const matchingToolCall = toolCallBlocksById.get(detail.id);
-                                if (matchingToolCall) {
-                                    if (compat.supportsGoogleThoughtSignatures &&
-                                        matchingToolCall.thoughtSignature &&
-                                        !isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
-                                        appendFeynmanEncryptedReasoningDetail(serializedDetail);
-                                    }
-                                    else {
-                                        if (isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
-                                            appendFeynmanEncryptedReasoningDetail(matchingToolCall.thoughtSignature);
-                                        }
-                                        matchingToolCall.thoughtSignature = serializedDetail;
-                                    }
-                                }
-                                else {
-                                    pendingReasoningDetailsByToolCallId.set(detail.id, serializedDetail);
-                                }
-                            }
-                        }
-                    }`,
-		OPENAI_REASONING_STREAM_CAPTURE,
-		"OpenAI structured reasoning stream capture",
-	);
-	patched = replaceRequired(
-		patched,
-		`            const nonEmptyThinkingBlocks = msg.content
-                .filter(isThinkingContentBlock)
-                .filter((block) => block.thinking.trim().length > 0);`,
-		OPENAI_REASONING_REPLAY_SETUP,
-		"OpenAI structured reasoning replay setup",
-	);
-	patched = replaceRequired(
-		patched,
-		`                    // Use the signature from the first thinking block if available (for llama.cpp server + gpt-oss)
-                    let signature = nonEmptyThinkingBlocks[0].thinkingSignature;
-                    if (model.provider === "opencode-go" && signature === "reasoning") {
-                        signature = "reasoning_content";
-                    }
-                    if (signature && signature.length > 0) {
-                        assistantMsg[signature] = nonEmptyThinkingBlocks.map((block) => block.thinking).join("\\n");
-                    }`,
-		OPENAI_REASONING_RAW_REPLAY,
-		"OpenAI structured reasoning raw field exclusion",
-	);
-	patched = replaceRequired(
-		patched,
-		`            const toolCalls = msg.content.filter(isToolCallBlock);
-            if (toolCalls.length > 0) {`,
-		"            if (toolCalls.length > 0) {",
-		"OpenAI structured reasoning shared tool calls",
-	);
-	patched = replaceRequired(
-		patched,
-		`                const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)
-                    ? msg.reasoningDetails
-                    : [];
-                const reasoningDetails = [];
-                const seenReasoningDetails = new Set();
-                for (const detail of [
-                    ...preservedReasoningDetails,
-                    ...toolCalls.map((tc) => {
-                        if (!tc.thoughtSignature)
-                            return null;
-                        try {
-                            return JSON.parse(tc.thoughtSignature);
-                        }
-                        catch {
-                            return null;
-                        }
-                    }),
-                ]) {
-                    if (!isEncryptedReasoningDetail(detail))
-                        continue;
-                    const serializedDetail = JSON.stringify(detail);
-                    if (seenReasoningDetails.has(serializedDetail))
-                        continue;
-                    seenReasoningDetails.add(serializedDetail);
-                    reasoningDetails.push(detail);
-                }
-                if (reasoningDetails.length > 0) {
-                    assistantMsg.reasoning_details = reasoningDetails;
-                }
-`,
-		"",
-		"OpenAI legacy reasoning replay aggregation",
-	);
-	patched = replaceRequired(
-		patched,
-		`            if (compat.requiresReasoningContentOnAssistantMessages &&
-                model.reasoning &&
-                assistantMsg.reasoning_content === undefined) {`,
-		`${OPENAI_REASONING_REPLAY_ASSIGNMENT}
-            if (compat.requiresReasoningContentOnAssistantMessages &&
-                model.reasoning &&
-                assistantMsg.reasoning_content === undefined) {`,
-		"OpenAI structured reasoning replay assignment",
-	);
-	return patched;
-}
-
-
 function patchOpenAiCompletions(source) {
 	const relativePath = "dist/api/openai-completions.js";
 	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.openAiCompletions)) {
-		if (source.includes(OPENAI_REASONING_DETAIL_HELPERS)) {
+		if (isPiOpenAiStructuredReasoningPatched(source)) {
 			assertPiAiForwardFixSource(relativePath, source);
 			return source;
 		}
@@ -1120,7 +755,7 @@ function patchOpenAiCompletions(source) {
 				"Gemini encrypted-reasoning candidate migration",
 			);
 			}
-			upgraded = patchOpenAiStructuredReasoning(upgraded);
+			upgraded = patchPiOpenAiStructuredReasoningSource(upgraded);
 			assertPiAiForwardFixSource(relativePath, upgraded);
 			return upgraded;
 	}
@@ -1378,7 +1013,7 @@ export const stream = (model, context, options) => {`,
             });`,
 		"OpenRouter retry layout",
 	);
-	patched = patchOpenAiStructuredReasoning(patched);
+	patched = patchPiOpenAiStructuredReasoningSource(patched);
 	assertPiAiForwardFixSource(relativePath, patched);
 	return patched;
 }
