@@ -36,6 +36,24 @@ function readPiAiSource(root: string, relativePath: string): string {
 	return readFileSync(resolve(root, ...relativePath.split("/")), "utf8");
 }
 
+async function importPatchedOpenAiCompletions(label: string) {
+	const relativePath = "dist/api/openai-completions.js";
+	const modulePath = resolve(piAiRoot, ...relativePath.split("/"));
+	const moduleUrl = pathToFileURL(modulePath);
+	const patched = patchPiAiForwardFixSource(relativePath, readFileSync(modulePath, "utf8"));
+	assert.doesNotThrow(() => assertPiAiForwardFixSource(relativePath, patched));
+	const linked = patched.replace(
+		/from "([^"]+)";/g,
+		(_match, specifier: string) => {
+			const resolved = specifier.startsWith(".")
+				? new URL(specifier, moduleUrl).href
+				: import.meta.resolve(specifier);
+			return `from ${JSON.stringify(resolved)};`;
+		},
+	);
+	return import(`data:text/javascript;base64,${Buffer.from(linked).toString("base64")}#${label}-${Date.now()}`);
+}
+
 function googleModel(
 	api: "google-generative-ai" | "google-vertex",
 	id: string,
@@ -113,6 +131,9 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		"ad58801",
 		"e5dde9a",
 		"fe37e9f",
+		"4ca636c5",
+		"b7bb00b9",
+		"c5ad7c1b",
 	]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
@@ -131,6 +152,56 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 			}
 		}
 	}
+	const patchedTypes = patchPiAiForwardFixSource(
+		"dist/types.d.ts",
+		readPiAiSource(piAiRoot, "dist/types.d.ts"),
+	);
+	assert.doesNotMatch(patchedTypes, /reasoningDetails\?: JsonValue\[\];/);
+});
+
+test("structured reasoning assertions reject no-op and mutated semantics", () => {
+	const relativePath = "dist/api/openai-completions.js";
+	const patched = patchPiAiForwardFixSource(relativePath, readPiAiSource(piAiRoot, relativePath));
+	for (const [name, original, mutation] of [
+		["text merge", "        lastDetail.text += detail.text;", "        void detail.text;"],
+		["summary merge", "        lastDetail.summary += detail.summary;", "        void detail.summary;"],
+		["encrypted append", "    details.push({ ...detail });", "    void detail;"],
+		[
+			"ordered storage",
+			"                            block.thinkingSignature = JSON.stringify(preservedDetails);",
+			"                            block.thinkingSignature = block.thinkingSignature;",
+		],
+		[
+			"provider identity gate",
+			"            const legacyMessageReasoningDetails = msg.provider === model.provider &&",
+			"            const legacyMessageReasoningDetails = true &&",
+		],
+		[
+			"detail validation",
+			"                            if (!isOpenAIReasoningDetail(detail))\n                                continue;",
+			"                            if (false)\n                                continue;",
+		],
+	] as const) {
+		const mutated = patched.replace(original, mutation);
+		assert.notEqual(mutated, patched, name);
+		assert.throws(
+			() => assertPiAiForwardFixSource(relativePath, mutated),
+			/semantic fragment|retained|missing/,
+			name,
+		);
+	}
+
+	const typesPath = "dist/types.d.ts";
+	const patchedTypes = patchPiAiForwardFixSource(typesPath, readPiAiSource(piAiRoot, typesPath));
+	const mutatedTypes = patchedTypes.replace(
+		"    rawStopReason?: string;\n",
+		"    rawStopReason?: string;\n    reasoningDetails?: JsonValue[];\n",
+	);
+	assert.notEqual(mutatedTypes, patchedTypes);
+	assert.throws(
+		() => assertPiAiForwardFixSource(typesPath, mutatedTypes),
+		/retained top-level reasoningDetails/,
+	);
 });
 
 test("pruned native Pi AI verification does not require declaration files", () => {
@@ -457,9 +528,7 @@ function openAiCompletionsModel(provider: string, id: string, baseUrl: string) {
 }
 
 test("OpenAI-compatible history bounds foreign tool IDs and preserves result pairing", async () => {
-	const openAiCompletions = await import(
-		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-ids=${Date.now()}`
-	);
+	const openAiCompletions = await importPatchedOpenAiCompletions("tool-ids");
 	const ids = [
 		"a".repeat(40),
 		"a".repeat(41),
@@ -526,9 +595,7 @@ test("OpenAI-compatible history bounds foreign tool IDs and preserves result pai
 });
 
 test("OpenAI-compatible compaction omits tool_choice when no tools are available", async () => {
-	const openAiCompletions = await import(
-		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-choice=${Date.now()}`
-	);
+	const openAiCompletions = await importPatchedOpenAiCompletions("tool-choice");
 	let payload: any;
 	const response = await openAiCompletions.streamSimple(
 		openAiCompletionsModel("custom-gateway", "proxy-model", "https://gateway.example/v1"),
@@ -617,9 +684,7 @@ test("Gemini signatures and encrypted reasoning coexist across JSON replay", asy
 	const address = server.address();
 	assert.ok(address && typeof address !== "string");
 
-	const openAiCompletions = await import(
-		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?signature=${Date.now()}`
-	);
+	const openAiCompletions = await importPatchedOpenAiCompletions("signature");
 	const model = openAiCompletionsModel(
 		"openrouter",
 		"google/gemini-3-test",
@@ -637,9 +702,15 @@ test("Gemini signatures and encrypted reasoning coexist across JSON replay", asy
 		},
 		{ apiKey: "test" },
 	).result();
+	const thinking = first.content.find((block: any) => block.type === "thinking") as any;
 	const toolCall = first.content.find((block: any) => block.type === "toolCall") as any;
+	assert.deepEqual(thinking, {
+		type: "thinking",
+		thinking: "",
+		thinkingSignature: JSON.stringify([encryptedDetail]),
+	});
 	assert.equal(toolCall?.thoughtSignature, firstSignature);
-	assert.deepEqual((first as any).reasoningDetails, [encryptedDetail]);
+	assert.equal("reasoningDetails" in first, false);
 
 	let replayPayload: any;
 	const persisted = JSON.parse(JSON.stringify(first));
@@ -658,6 +729,206 @@ test("Gemini signatures and encrypted reasoning coexist across JSON replay", asy
 		google: { thought_signature: firstSignature },
 	});
 	assert.deepEqual(replayPayload.messages[0].reasoning_details, [encryptedDetail]);
+});
+
+test("structured reasoning merges ordered deltas and replays only to the same model", async (t) => {
+	const textDelta = { type: "reasoning.text", text: "The", index: 0 };
+	const textDeltaWithSignature = {
+		type: "reasoning.text",
+		text: " answer",
+		id: "reasoning-text-1",
+		format: "openai-responses-v1",
+		index: 0,
+		signature: "sha256:text-signature",
+	};
+	const summaryDelta = { type: "reasoning.summary", summary: "Checked", index: 1 };
+	const summaryDeltaWithFormat = {
+		type: "reasoning.summary",
+		summary: " sources.",
+		id: "reasoning-summary-1",
+		format: "openai-responses-v1",
+		index: 1,
+	};
+	const encryptedFirst = {
+		type: "reasoning.encrypted",
+		id: "encrypted-1",
+		data: "ciphertext-1",
+		index: 2,
+	};
+	const encryptedSecond = {
+		type: "reasoning.encrypted",
+		id: "encrypted-2",
+		data: "ciphertext-2",
+		index: 3,
+	};
+	const summaryAfterEncrypted = {
+		type: "reasoning.summary",
+		summary: "Kept separate after encryption.",
+		index: 4,
+	};
+	const expectedReasoningDetails = [
+		{
+			type: "reasoning.text",
+			text: "The answer",
+			index: 0,
+			signature: "sha256:text-signature",
+			id: "reasoning-text-1",
+			format: "openai-responses-v1",
+		},
+		{
+			type: "reasoning.summary",
+			summary: "Checked sources.",
+			index: 1,
+			id: "reasoning-summary-1",
+			format: "openai-responses-v1",
+		},
+		encryptedFirst,
+		encryptedSecond,
+		summaryAfterEncrypted,
+	];
+	const server = createServer((_request, response) => {
+		response.writeHead(200, { "content-type": "text/event-stream" });
+		for (const delta of [
+			{ reasoning: "The answer", reasoning_details: [textDelta] },
+			{ reasoning_details: [textDeltaWithSignature] },
+			{ reasoning_details: [summaryDelta, summaryDeltaWithFormat] },
+			{ reasoning_details: [encryptedFirst, encryptedSecond] },
+			{
+				reasoning_details: [
+					summaryAfterEncrypted,
+					{ type: "reasoning.text", text: 42 },
+					{ type: "reasoning.unknown", text: "ignored" },
+				],
+			},
+			{ content: "Verified answer." },
+		]) {
+			response.write(`data: ${JSON.stringify({
+				id: "chatcmpl-reasoning",
+				model: "research-model",
+				choices: [{ index: 0, delta, finish_reason: null }],
+			})}\n\n`);
+		}
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-reasoning",
+			model: "research-model",
+			choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+		})}\n\n`);
+		response.end("data: [DONE]\n\n");
+	});
+	t.after(async () => {
+		await new Promise<void>((resolveClose, rejectClose) =>
+			server.close((error) => error ? rejectClose(error) : resolveClose())
+		);
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+
+	const openAiCompletions = await importPatchedOpenAiCompletions("structured-reasoning");
+	const model = openAiCompletionsModel(
+		"custom-gateway",
+		"research-model",
+		`http://127.0.0.1:${address.port}`,
+	);
+	const first = await openAiCompletions.streamSimple(
+		model,
+		{ messages: [{ role: "user", content: "research", timestamp: 0 }] },
+		{ apiKey: "test" },
+	).result();
+	const thinking = first.content.find((block: any) => block.type === "thinking") as any;
+	assert.deepEqual(thinking, {
+		type: "thinking",
+		thinking: "The answer",
+		thinkingSignature: JSON.stringify(expectedReasoningDetails),
+	});
+	assert.equal("reasoningDetails" in first, false);
+
+	let replayPayload: any;
+	await openAiCompletions.streamSimple(
+		model,
+		{ messages: [JSON.parse(JSON.stringify(first))] },
+		{
+			apiKey: "test",
+			onPayload: (next: unknown) => {
+				replayPayload = next;
+				throw new Error("captured structured reasoning replay");
+			},
+		},
+	).result();
+	const replayAssistant = replayPayload.messages.find((message: any) => message.role === "assistant");
+	assert.deepEqual(replayAssistant.reasoning_details, expectedReasoningDetails);
+	assert.equal("reasoning" in replayAssistant, false);
+	assert.equal("reasoning_content" in replayAssistant, false);
+	assert.equal("reasoning_text" in replayAssistant, false);
+
+	for (const target of [
+		openAiCompletionsModel("other-gateway", "research-model", "https://gateway.example/v1"),
+		openAiCompletionsModel("custom-gateway", "other-model", "https://gateway.example/v1"),
+	]) {
+		let payload: any;
+		await openAiCompletions.streamSimple(
+			target,
+			{ messages: [JSON.parse(JSON.stringify(first))] },
+			{
+				apiKey: "test",
+				onPayload: (next: unknown) => {
+					payload = next;
+					throw new Error("captured cross-model replay");
+				},
+			},
+		).result();
+		const assistant = payload.messages.find((message: any) => message.role === "assistant");
+		assert.equal("reasoning_details" in assistant, false);
+	}
+});
+
+test("legacy top-level reasoning details require exact provider api and model identity", async () => {
+	const openAiCompletions = await importPatchedOpenAiCompletions("legacy-reasoning-gate");
+	const model = openAiCompletionsModel("custom-gateway", "research-model", "https://gateway.example/v1");
+	const legacyDetails = [
+		{ type: "reasoning.text", text: "legacy text", signature: "signed" },
+		{ type: "reasoning.summary", summary: "legacy summary" },
+		{ type: "reasoning.encrypted", id: "legacy-1", data: "legacy-ciphertext" },
+	];
+	const baseMessage = {
+		role: "assistant",
+		content: [{ type: "text", text: "answer" }],
+		api: model.api,
+		provider: model.provider,
+		model: model.id,
+		reasoningDetails: legacyDetails,
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "stop",
+		timestamp: 1,
+	};
+	for (const [name, message, expected] of [
+		["same", baseMessage, legacyDetails],
+		["provider", { ...baseMessage, provider: "other-gateway" }, undefined],
+		["api", { ...baseMessage, api: "other-api" }, undefined],
+		["model", { ...baseMessage, model: "other-model" }, undefined],
+	] as const) {
+		let payload: any;
+		await openAiCompletions.streamSimple(
+			model,
+			{ messages: [message as any] },
+			{
+				apiKey: "test",
+				onPayload: (next: unknown) => {
+					payload = next;
+					throw new Error(`captured ${name} legacy replay`);
+				},
+			},
+		).result();
+		const assistant = payload.messages.find((candidate: any) => candidate.role === "assistant");
+		assert.deepEqual(assistant.reasoning_details, expected, name);
+	}
 });
 
 test("provider retry handles only Retry-After in-flight budget 402 errors", async () => {

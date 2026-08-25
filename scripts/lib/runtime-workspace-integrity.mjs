@@ -19,6 +19,7 @@ export const RUNTIME_INPUT_FILES = Object.freeze([
 	".feynman/settings.json",
 	"scripts/lib/pi-agent-core-patch.mjs",
 	"scripts/lib/pi-ai-forward-fixes-patch.mjs",
+	"scripts/lib/pi-openai-reasoning-patch.mjs",
 	"scripts/lib/pi-cli-args-patch.mjs",
 	"scripts/lib/pi-compaction-tools-patch.mjs",
 	"scripts/lib/pi-edit-line-endings-patch.mjs",

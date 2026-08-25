@@ -1,3 +1,9 @@
+import {
+	assertPiOpenAiStructuredReasoningSource,
+	isPiOpenAiStructuredReasoningPatched,
+	patchPiOpenAiStructuredReasoningSource,
+} from "./pi-openai-reasoning-patch.mjs";
+
 /**
  * Temporary Pi 0.84.2 forward patches for upstream commits:
  * - af2c352238cffd12d404d5a4cd35a21f93a78fe0 (Google thinking maps)
@@ -9,10 +15,13 @@
  * - 94f6e7c9ffdb9a57fabdc39fb6b12ee54fa05ee6 (Gemini thought signatures)
  * - d8def8121bcb4d4e2cce16d12a521347559329ce (OpenAI-compatible tool-call IDs)
  * - fe37e9f9b5fb2e7bd9ff504e678f08d115375230 (omit tool_choice without tools)
+ * - 4ca636c5e07eb1e0fbc6be6c11c720d1a8856daa (structured reasoning details)
+ * - b7bb00b936dbe21b8e160b3e89efdec361846699 (reasoning signature storage)
+ * - c5ad7c1b0f7623bbfdf64dd4967fa6e99c15c01a (reasoning delta concatenation)
  * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all ten fixes.
+ * version that contains all thirteen fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -418,9 +427,6 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				"const signature = toolCall.extra_content?.google?.thought_signature;",
 				"compat.supportsGoogleThoughtSignatures",
 				"isFeynmanSerializedReasoningDetail",
-				"appendFeynmanEncryptedReasoningDetail",
-				"output.reasoningDetails ??= []",
-				"const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)",
 				"if (!block.thoughtSignature ||",
 				"isFeynmanSerializedReasoningDetail(block.thoughtSignature))",
 				"extra_content: { google: { thought_signature: tc.thoughtSignature } }",
@@ -432,6 +438,7 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				"maxRetries: openRouterBudgetRetry ?",
 				"retryOn: openRouterBudgetRetry ? isTransientInFlightBudgetError : undefined",
 			]);
+			assertPiOpenAiStructuredReasoningSource(source, relativePath);
 			if (/model\.provider === "openai"\)\s*\n?\s*return id\.length > 40 \? id\.slice/.test(source)) {
 				throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained provider-only truncation`);
 			}
@@ -462,10 +469,10 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 			]);
 			return;
 		case "dist/types.d.ts":
-			assertSourceFragments(source, relativePath, [
-				"supportsGoogleThoughtSignatures?: boolean;",
-				"reasoningDetails?: JsonValue[];",
-			]);
+			assertSourceFragments(source, relativePath, ["supportsGoogleThoughtSignatures?: boolean;"]);
+			if (source.includes("reasoningDetails?: JsonValue[];")) {
+				throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained top-level reasoningDetails`);
+			}
 			return;
 		case "dist/api/anthropic-messages.js":
 		case "dist/api/azure-openai-responses.js":
@@ -654,10 +661,13 @@ export const streamSimple`;
 	return patched;
 }
 
-
 function patchOpenAiCompletions(source) {
 	const relativePath = "dist/api/openai-completions.js";
 	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.openAiCompletions)) {
+		if (isPiOpenAiStructuredReasoningPatched(source)) {
+			assertPiAiForwardFixSource(relativePath, source);
+			return source;
+		}
 		let upgraded = source
 			.replaceAll("output.reasoning_details", "output.reasoningDetails")
 			.replace(
@@ -744,9 +754,10 @@ function patchOpenAiCompletions(source) {
                 }`,
 				"Gemini encrypted-reasoning candidate migration",
 			);
-		}
-		assertPiAiForwardFixSource(relativePath, upgraded);
-		return upgraded;
+			}
+			upgraded = patchPiOpenAiStructuredReasoningSource(upgraded);
+			assertPiAiForwardFixSource(relativePath, upgraded);
+			return upgraded;
 	}
 	const originalNormalize = `    const normalizeToolCallId = (id) => {
         // Handle pipe-separated IDs from OpenAI Responses API
@@ -1002,6 +1013,7 @@ export const stream = (model, context, options) => {`,
             });`,
 		"OpenRouter retry layout",
 	);
+	patched = patchPiOpenAiStructuredReasoningSource(patched);
 	assertPiAiForwardFixSource(relativePath, patched);
 	return patched;
 }
@@ -1112,12 +1124,10 @@ function patchPiAiTypesDeclaration(source) {
 			"    supportsLongCacheRetention?: boolean;\n    /** Whether OpenAI-compatible Gemini 3 tool calls require Google thought-signature replay. */\n    supportsGoogleThoughtSignatures?: boolean;\n",
 		);
 	}
-	if (!patched.includes("reasoningDetails?: JsonValue[];")) {
-		patched = patched.replace(
-			"    rawStopReason?: string;\n",
-			"    rawStopReason?: string;\n    /** Provider-encrypted reasoning metadata retained alongside Gemini tool signatures. */\n    reasoningDetails?: JsonValue[];\n",
-		);
-	}
+	patched = patched.replace(
+		"    /** Provider-encrypted reasoning metadata retained alongside Gemini tool signatures. */\n    reasoningDetails?: JsonValue[];\n",
+		"",
+	);
 	return patched;
 }
 
