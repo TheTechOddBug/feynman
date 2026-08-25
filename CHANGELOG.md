@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 16:25 EDT — pi-reasoning-integrity-0.3.42
+
+- Objective: Repair the released `0.3.41` OpenAI-compatible reasoning loss and provider-boundary leak, then make the exact-version Pi patch validators reject stale or semantically disabled runtime copies.
+- Changed: Structured `reasoning.text`, `reasoning.summary`, and `reasoning.encrypted` deltas now persist in ordered thinking signatures, merge consecutive text and summary deltas, and replay only to the same model. Legacy `0.3.41` top-level reasoning metadata requires an exact provider/API/model match. AgentCore repairs stale marker-bearing copies before validation, and AgentCore, interleaved-content, EXIF, and reasoning assertions now require their exact safety-critical transformations.
+- Verified: Adversarial focused coverage passed `58/58`. The first full run exposed only a new architecture limit (`934/935`); extracting the reasoning transformer into its own runtime-hashed helper repaired that release gate. The final full suite passed `935/935`; root typecheck/build/architecture, website lint/typecheck/build (`34` pages), root/runtime/website production audits, freshness review, and `git diff --check` passed.
+- State: `unverified` for final package/consumer proof, exact-head Daytona, pull-request CI, merge, publication, and post-release identity. Next: build and verify the exact tarball locally and in Daytona, then push, merge, publish, and reconcile `0.3.42`.
+
 ### 2026-08-25 14:11 EDT — pi-runtime-forward-fixes-0.3.41-release
 
 - Persistence: PR `#253` exact tested head `2b26f7133ba4425a7cb8a377b2b528f0c6b7d78a` merged as `08d5c0873303de7417b56158b87de4621f6a14dc`; the owning branch was deleted and pruned. Open issues and PRs are empty, and no new contributor branch or fork exposed an actionable research-loop port target.

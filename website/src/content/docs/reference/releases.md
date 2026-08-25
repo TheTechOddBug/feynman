@@ -13,7 +13,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ### Reasoning integrity
 
-- Same-model research turns now preserve structured reasoning metadata through session persistence and tool-call replay instead of flattening or dropping it.
+- Same-model research turns now preserve structured reasoning metadata through session persistence and model replay instead of flattening or dropping it.
 - When research history crosses a provider boundary, Feynman strips provider-private reasoning fields before forwarding it, preventing incompatible metadata from leaking into the next model's context.
 
 ### Runtime reliability
