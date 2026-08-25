@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 14:11 EDT — pi-runtime-forward-fixes-0.3.41-release
+
+- Persistence: PR `#253` exact tested head `2b26f7133ba4425a7cb8a377b2b528f0c6b7d78a` merged as `08d5c0873303de7417b56158b87de4621f6a14dc`; the owning branch was deleted and pruned. Open issues and PRs are empty, and no new contributor branch or fork exposed an actionable research-loop port target.
+- Verification: PR run `32848564567`, CodeQL, Vercel, and the six supported-node consumers passed. Disposable Daytona `feynman-intake-0341-large-114354` passed the exact merge-parent candidate on Node `25.9.0` / npm `11.12.1`, including `929/929` tests, typecheck, build, architecture, website checks (`34` pages), audits, package budget, clean installed consumer/runtime/global verifiers, extension/tool/provider checks, and document parsing. The `118,167,272`-byte, `29,180`-file tarball passed; runtime archive SHA-256 was `dbaabfbe4edcc51d45fee024760e97b95e07675f140f520d469d7130abc6930f`. The sandbox was deleted after terminal verification.
+- Publication: Main run `32871584576` passed source verification, all six package consumers, all five native bundles, npm publication, GitHub release creation, and published-state verification. GitHub release/tag `v0.3.41` targets `08d5c0873303de7417b56158b87de4621f6a14dc` with six assets and committed digests; npm latest is `0.3.41`, published by GitHub Actions with integrity `sha512-oev9pQexC6hBWWzqX5diqjKwU7b3uNUYY33AdkAfPQd4l+H88zsftDug1zm6qz20IXMvqXyLgsLL6yaqsFQLxw==` and shasum `012f09511540615cb4aeefcf738cbf0236a6ec8e`. A fresh registry-tarball consumer passed `0` vulnerabilities, version/help, runtime, and docparser verification.
+- Preservation: Root `main` is clean and synchronized at `08d5c087`; the independently dirty nested `website` checkout remains untouched at `67186845cd89772a24fd20b9f5239457aeedcbcf`. State: `verified`. Next: monitor the published runtime and continue normal intake.
+
 ### 2026-08-25 08:06 EDT — pi-runtime-forward-fixes-0.3.41
 
 - Intake: Open Feynman issues remain empty and PR `#253` remains the only open PR. Recent contributor branches and forks expose no new port target; security queues and production audits remain clear. Upstream Pi PRs `#8615` and `#8616` reproduced against both bundled `0.84.2` trees and directly affect research figures, so both are ported rather than deferred.
