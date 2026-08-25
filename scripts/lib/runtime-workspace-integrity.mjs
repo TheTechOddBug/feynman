@@ -25,6 +25,7 @@ export const RUNTIME_INPUT_FILES = Object.freeze([
 	"scripts/lib/pi-docparser-invisible-text-patch.mjs",
 	"scripts/lib/pi-docparser-runtime-patch.mjs",
 	"scripts/lib/pi-runtime-correctness-patch.mjs",
+	"scripts/lib/pi-interleaved-user-content-patch.mjs",
 	"scripts/lib/pi-llama-usage-patch.mjs",
 	"scripts/lib/pi-extension-loader-patch.mjs",
 	"scripts/lib/pi-tui-patch.mjs",

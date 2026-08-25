@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 08:06 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Intake: Open Feynman issues remain empty and PR `#253` remains the only open PR. Recent contributor branches and forks expose no new port target; security queues and production audits remain clear. Upstream Pi PRs `#8615` and `#8616` reproduced against both bundled `0.84.2` trees and directly affect research figures, so both are ported rather than deferred.
+- Changed: Extension messages retain interleaved text/image order through idle, steering, follow-up, agent state, and session persistence. JPEG conversion and provider-bound resizing scan past XMP APP1 metadata to apply later EXIF orientation. Exact source, package, installed-runtime, and image-path regressions cover both fixes.
+- Prior clean proof preserved: exact `a8fd30b` passed `922/922` on Daytona Node `25.9.0` plus root, website, audit, package, installed-consumer, runtime, and document checks; the sandbox was deleted. Successor `684c875` then passed `927/927`, was committed and pushed, and its PR/CodeQL/Vercel checks are running.
+- Current local proof: focused runtime/package/image tests pass `30/30`; after adding the helper to the runtime input hash and rebuilding the archive, the full suite passes `929/929`. Root and website typechecks/builds, architecture check, production audits, and diff checks pass; package and clean-machine proof remain next.
+- State: `unverified` for the dirty successor's exact commit, package artifact, Daytona proof, CI, merge, publication, and release identity. Next: persist this tested tree, pack and prove the exact commit, then require all PR checks green before merge.
+
 ### 2026-08-25 07:56 EDT — pi-runtime-forward-fixes-0.3.41
 
 - Repaired the forward-fix candidate after adversarial review: stale Pi source-map directives are stripped fail-closed, provider `in_flight_budget_exhausted` retries are caller-scoped with explicit no-retry handling, non-cooperative stream iterators no longer block watchdog settlement, Gemini encrypted reasoning and thought signatures survive persistence, and tool-free compaction omits `tool_choice`.
@@ -4852,11 +4860,3 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Package proof: Typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, freshness review, and `git diff --check` pass. Dry and real packs match at `107,684,607` bytes, `287,530,283` unpacked bytes, and `29,128` entries; SHA-256 is `cbfe3653ca23930342e2c55544ad1ffe49e7bc64fa38cdc5f6e83f6ff38eb201`.
 - Installed proof: A clean tarball consumer passes version/help, package and search status, stale-Pi repair, package/archive verification, RPC extension and TypeBox checks, document parse/search/screenshot, and zero-vulnerability audits. Direct installed-runtime probes remove inline data URIs in readable mode, preserve raw responses, allow same-origin loopback Firecrawl redirects, and reject cross-origin loopback redirects plus loopback research targets.
 - State: `unverified` for exact committed Daytona, pull-request CI, merge, publication, and release identity. Next: commit the candidate, run the clean-machine ladder, then merge, publish, and reconcile `0.3.30`.
-
-### 2026-08-25 06:00 EDT — pi-runtime-forward-fixes-0.3.41
-
-- Objective: Finish the `0.3.41` Pi runtime forward-fix candidate through clean validation, CI repair, merge, and publication.
-- Clean proof: The exact `a8fd30b` source ladder passed all `922` tests on Node `25.9.0`; the initial run exposed one transient workbench-ledger `500`, and the immediate focused rerun plus a complete second run passed `922/922`. A high-memory Daytona sandbox passed root typecheck, build, architecture, audits, website lint/typecheck/build, package budget, source artifact verification, and a clean installed `0.3.41` consumer with runtime and document-parser verifiers.
-- CI failure: GitHub run `32827924973` failed only in the Windows native build because pruned native bundles legitimately omit Pi declaration files while `assertPiAiForwardFixPackageTree` still required them.
-- Fixed: Forward-fix package-tree verification now selects declaration-free runtime targets for `--pruned-native`; added a declaration and focused regression coverage. This fix is local and requires a new exact-head package/native/CI pass.
-- State: `unverified` for the successor commit, Windows native installer, merge, publication, and release identity. Next: run the focused/full local gates, commit and push the verifier repair, then require all successor CI and native checks green.

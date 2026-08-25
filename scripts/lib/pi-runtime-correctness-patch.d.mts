@@ -7,6 +7,7 @@ export declare const PI_CODING_AGENT_FORWARD_FIX_TARGETS: readonly string[];
 export declare const PI_CODING_AGENT_FORWARD_FIX_MARKERS: Readonly<{
 	largeToolRender: string;
 	toolReleaseRedirect: string;
+	exifAfterXmp: string;
 }>;
 export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	agentSession: string;
@@ -16,6 +17,7 @@ export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	githubCopilotOAuth: string;
 	imageQueue: string;
 	turnEndMessages: string;
+	interleavedUserContent: string;
 }>;
 export declare const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS: Readonly<{
 	agentSession: readonly string[];

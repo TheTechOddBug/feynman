@@ -12,10 +12,16 @@
  * triggerTurn-false custom messages as in commits 7b1dcfd and 240eb29c.
  *
  * The coding-agent forward fixes port commits 8c16a558 (bounded large-tool
- * rendering) and 6d05adb (quota-free GitHub release lookup). Remove each only
- * after the supported released Pi version contains its corresponding commit
- * and the executable regressions below continue to pass without the patch.
+ * rendering), 6d05adb (quota-free GitHub release lookup), 27115254
+ * (interleaved user content), and 86c42324 (EXIF after XMP). Remove each only
+ * after the supported released Pi version contains its corresponding commit and
+ * the executable regressions below continue to pass without the patch.
  */
+import {
+	PI_INTERLEAVED_USER_CONTENT_MARKER,
+	patchPiInterleavedUserContentSource,
+} from "./pi-interleaved-user-content-patch.mjs";
+
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
 		"dist/core/agent-session.js",
@@ -31,10 +37,12 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.2";
 export const PI_CODING_AGENT_FORWARD_FIX_TARGETS = Object.freeze([
 	"dist/modes/interactive/components/tool-execution.js",
 	"dist/utils/tools-manager.js",
+	"dist/utils/exif-orientation.js",
 ]);
 export const PI_CODING_AGENT_FORWARD_FIX_MARKERS = Object.freeze({
 	largeToolRender: "Feynman Pi 0.84.2 forward patch: large tool render #8036",
 	toolReleaseRedirect: "Feynman Pi 0.84.2 forward patch: GitHub release redirect #8594",
+	exifAfterXmp: "Feynman Pi 0.84.2 forward patch: EXIF after XMP #8616",
 });
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
@@ -44,6 +52,7 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	githubCopilotOAuth: "Feynman Pi 0.84.2 correctness patch: upstream #8121",
 	imageQueue: "Feynman Pi 0.84.2 correctness patch: image-only queue delivery #8581",
 	turnEndMessages: "Feynman Pi 0.84.2 correctness patch: defer custom messages #8166",
+	interleavedUserContent: PI_INTERLEAVED_USER_CONTENT_MARKER,
 });
 
 function stripStaleSourceMapDirective(source, surface) {
@@ -67,6 +76,7 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession,
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue,
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.turnEndMessages,
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.interleavedUserContent,
 		"const steeringIndex = this._steeringMessages.indexOf(messageText);",
 		"const followUpIndex = this._followUpMessages.indexOf(messageText);",
 		"_pendingNextTurnMessages = [];\n    _pendingTurnEndMessages = [];",
@@ -74,6 +84,15 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 		"const messages = this._pendingTurnEndMessages.splice(0);",
 		"this._flushPendingTurnEndMessages();",
 		"this._pendingTurnEndMessages.push(appMessage);",
+		"async _prompt(text, options, orderedContent)",
+		"currentImages = inputResult.images ?? currentImages;\n                    orderedContent = undefined;",
+		"if (expandedText !== currentText)",
+		"this._createUserContent(expandedText, currentImages, orderedContent)",
+		"async _queueSteer(text, images, orderedContent)",
+		"async _queueFollowUp(text, images, orderedContent)",
+		"    _createUserContent(text, images, orderedContent)",
+		'const orderedContent = typeof content === "string" ? undefined : [...content];',
+		"await this._prompt(text, options);",
 		"if (this._isAgentRunActive) {",
 		'const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"',
 		"const entryId = this.sessionManager.appendMessage(toolResult);",
@@ -233,6 +252,22 @@ export function assertPiCodingAgentForwardFixSource(relativePath, source, surfac
 				throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: retained GitHub API lookup`);
 			}
 			return;
+		case "dist/utils/exif-orientation.js":
+			for (const fragment of [
+				PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp,
+				"if (hasExifHeader(bytes, segmentStart))",
+				"return segmentStart + 6;",
+			]) {
+				if (!source.includes(fragment)) {
+					throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: missing ${fragment}`);
+				}
+			}
+			if (source.includes("if (!hasExifHeader(bytes, segmentStart))")) {
+				throw new Error(
+					`Incomplete Pi coding-agent forward patch ${surface}: retained first-APP1 early return`,
+				);
+			}
+			return;
 		default:
 			throw new Error(`Unknown Pi coding-agent forward patch target: ${relativePath}`);
 	}
@@ -363,6 +398,26 @@ export async function getLatestVersion(repo) {
         return undefined;
     }`,
 			"tool download cause-chain diagnostics",
+		);
+		assertPiCodingAgentForwardFixSource(relativePath, patched);
+		return patched;
+	}
+
+	if (relativePath === "dist/utils/exif-orientation.js") {
+		if (source.includes(PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp)) {
+			assertPiCodingAgentForwardFixSource(relativePath, source);
+			return source;
+		}
+		const patched = replaceRequired(
+			source,
+			`            if (!hasExifHeader(bytes, segmentStart))
+                return -1;
+            return segmentStart + 6;`,
+			`            // ${PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp}
+            // APP1 may contain XMP before a later EXIF segment.
+            if (hasExifHeader(bytes, segmentStart))
+                return segmentStart + 6;`,
+			"EXIF scan after non-EXIF APP1",
 		);
 		assertPiCodingAgentForwardFixSource(relativePath, patched);
 		return patched;
@@ -701,6 +756,7 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
 
 export function patchPiAgentSessionSource(source) {
 	source = stripStaleSourceMapDirective(source, "agent-session");
+	source = patchPiInterleavedUserContentSource(source);
 	source = patchPiImageQueueDeliverySource(source);
 	source = patchPiDeferredTurnEndMessagesSource(source);
 	if (source.includes(AGENT_SESSION_MARKER)) {

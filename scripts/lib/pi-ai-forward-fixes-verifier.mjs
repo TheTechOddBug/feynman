@@ -16,6 +16,32 @@ import {
 	verifyPiSubagentUsageLimitFallbackBehavior,
 } from "./pi-subagents-verification.mjs";
 
+const TINY_JPEG_2X1 =
+	"/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCAABAAIDAREAAhEBAxEB/9sAQwADAgIDAgIDAwMDBAMDBAUIBQUEBAUKBwcGCAwKDAwLCgsLDQ4SEA0OEQ4LCxAWEBETFBUVFQwPFxgWFBgSFBUU/9sAQwEDBAQFBAUJBQUJFA0LDRQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD4H8Q/8h/Uv+vmX/0M1/o1wJ/ySWU/9g1D/wBNRMOM/wDkp8z/AOv9b/05I//Z";
+
+function app1Segment(payload) {
+	const segment = Buffer.alloc(payload.length + 4);
+	segment[0] = 0xff;
+	segment[1] = 0xe1;
+	segment.writeUInt16BE(payload.length + 2, 2);
+	segment.set(payload, 4);
+	return segment;
+}
+
+function jpegWithXmpBeforeOrientation() {
+	const jpeg = Buffer.from(TINY_JPEG_2X1, "base64");
+	const xmp = app1Segment(
+		Buffer.from('http://ns.adobe.com/xap/1.0/\0<x:xmpmeta xmlns:x="adobe:ns:meta/"/>'),
+	);
+	const orientation6 = app1Segment(
+		Buffer.concat([
+			Buffer.from("Exif\0\0"),
+			Buffer.from("49492a0008000000010012010300010000000600000000000000", "hex"),
+		]),
+	);
+	return Buffer.concat([jpeg.subarray(0, 2), xmp, orientation6, jpeg.subarray(2)]);
+}
+
 function sortedRecord(entries) {
 	return Object.fromEntries([...entries].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)));
 }
@@ -146,6 +172,12 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 		"@earendil-works",
 		"pi-ai",
 	);
+	const codingAgentRoot = resolve(
+		packageRoot,
+		"node_modules",
+		"@earendil-works",
+		"pi-coding-agent",
+	);
 	assertPiAiForwardFixCopies(
 		(relativePath, copy) =>
 			readFileSync(
@@ -155,6 +187,53 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 		"installed",
 		resolvePiAiForwardFixVerificationTargets({ prunedNative }),
 	);
+
+	const codingAgent = await import(
+		`${pathToFileURL(resolve(codingAgentRoot, "dist", "index.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	const orderedContent = [
+		{ type: "text", text: "Figure A:" },
+		{ type: "image", mimeType: "image/png", data: "Zmlyc3Q=" },
+		{ type: "text", text: "Figure B:" },
+		{ type: "image", mimeType: "image/png", data: "c2Vjb25k" },
+	];
+	let orderedHandoff;
+	await codingAgent.AgentSession.prototype.sendUserMessage.call(
+		{
+			_prompt: async (_text, _options, content) => {
+				orderedHandoff = content;
+			},
+		},
+		orderedContent,
+	);
+	assert.deepEqual(orderedHandoff, orderedContent);
+	assert.deepEqual(
+		codingAgent.AgentSession.prototype._createUserContent(
+			"normalized",
+			orderedContent.filter((part) => part.type === "image"),
+			orderedHandoff,
+		),
+		orderedContent,
+	);
+
+	const [{ convertToPng }, { resizeImage }] = await Promise.all([
+		import(
+			`${pathToFileURL(resolve(codingAgentRoot, "dist", "utils", "image-convert.js")).href}?installed-forward-fix=${Date.now()}`
+		),
+		import(
+			`${pathToFileURL(resolve(codingAgentRoot, "dist", "utils", "image-resize.js")).href}?installed-forward-fix=${Date.now()}`
+		),
+	]);
+	const orientedJpeg = jpegWithXmpBeforeOrientation();
+	const converted = await convertToPng(orientedJpeg.toString("base64"), "image/jpeg");
+	assert.ok(converted);
+	const convertedPng = Buffer.from(converted.data, "base64");
+	assert.equal(convertedPng.readUInt32BE(16), 1);
+	assert.equal(convertedPng.readUInt32BE(20), 2);
+	const resized = await resizeImage(orientedJpeg, "image/jpeg");
+	assert.ok(resized);
+	assert.equal(resized.originalWidth, 1);
+	assert.equal(resized.originalHeight, 2);
 
 	const googleShared = await import(
 		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "google-shared.js")).href}?installed-forward-fix=${Date.now()}`
