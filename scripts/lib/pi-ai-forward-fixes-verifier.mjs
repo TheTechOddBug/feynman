@@ -366,14 +366,60 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 	try {
 		const firstSignature = "installed-first-signature";
 		const laterSignature = "installed-later-signature";
+		const textDelta = {
+			type: "reasoning.text",
+			text: "Checked",
+			index: 0,
+		};
+		const textDeltaWithSignature = {
+			type: "reasoning.text",
+			text: " sources.",
+			id: "reasoning-text-1",
+			format: "openai-responses-v1",
+			index: 0,
+			signature: "installed-text-signature",
+		};
+		const summaryDelta = {
+			type: "reasoning.summary",
+			summary: "Verified",
+			index: 1,
+		};
+		const summaryDeltaWithFormat = {
+			type: "reasoning.summary",
+			summary: " evidence.",
+			id: "reasoning-summary-1",
+			format: "openai-responses-v1",
+			index: 1,
+		};
 		const encryptedDetail = {
 			type: "reasoning.encrypted",
 			id: "call_1",
 			data: "installed-encrypted-reasoning",
 		};
+		const expectedReasoningDetails = [
+			{
+				type: "reasoning.text",
+				text: "Checked sources.",
+				index: 0,
+				id: "reasoning-text-1",
+				format: "openai-responses-v1",
+				signature: "installed-text-signature",
+			},
+			{
+				type: "reasoning.summary",
+				summary: "Verified evidence.",
+				index: 1,
+				id: "reasoning-summary-1",
+				format: "openai-responses-v1",
+			},
+			encryptedDetail,
+		];
 		geminiServer = createServer((_request, response) => {
 			response.writeHead(200, { "content-type": "text/event-stream" });
 			for (const delta of [
+				{ reasoning: "Checked sources.", reasoning_details: [textDelta] },
+				{ reasoning_details: [textDeltaWithSignature] },
+				{ reasoning_details: [summaryDelta, summaryDeltaWithFormat] },
 				{ reasoning_details: [encryptedDetail] },
 				{
 					tool_calls: [{
@@ -428,9 +474,16 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 			},
 			{ apiKey: "test" },
 		).result();
+		const thinking = geminiResult.content.find((block) => block.type === "thinking");
 		const toolCall = geminiResult.content.find((block) => block.type === "toolCall");
+		assert.equal(thinking?.type, "thinking");
+		assert.equal(thinking?.thinking, "Checked sources.");
+		assert.deepEqual(
+			JSON.parse(thinking?.thinkingSignature ?? "null"),
+			expectedReasoningDetails,
+		);
 		assert.equal(toolCall?.thoughtSignature, firstSignature);
-		assert.deepEqual(geminiResult.reasoningDetails, [encryptedDetail]);
+		assert.equal("reasoningDetails" in geminiResult, false);
 
 		let replayPayload;
 		await openAiCompletions.streamSimple(
@@ -444,10 +497,49 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 				},
 			},
 		).result();
-		assert.deepEqual(replayPayload.messages[0].reasoning_details, [encryptedDetail]);
+		assert.deepEqual(replayPayload.messages[0].reasoning_details, expectedReasoningDetails);
+		assert.equal("reasoning" in replayPayload.messages[0], false);
+		assert.equal("reasoning_content" in replayPayload.messages[0], false);
+		assert.equal("reasoning_text" in replayPayload.messages[0], false);
 		assert.deepEqual(replayPayload.messages[0].tool_calls[0].extra_content, {
 			google: { thought_signature: firstSignature },
 		});
+
+		let crossProviderPayload;
+		await openAiCompletions.streamSimple(
+			{ ...geminiModel, provider: "custom-gateway" },
+			{ messages: [JSON.parse(JSON.stringify(geminiResult))] },
+			{
+				apiKey: "test",
+				onPayload: (payload) => {
+					crossProviderPayload = payload;
+					throw new Error("installed cross-provider replay captured");
+				},
+			},
+		).result();
+		assert.equal("reasoning_details" in crossProviderPayload.messages[0], false);
+
+		const legacyMessage = {
+			...JSON.parse(JSON.stringify(geminiResult)),
+			content: [{ type: "text", text: "legacy result" }],
+			reasoningDetails: expectedReasoningDetails,
+		};
+		let legacyReplayPayload;
+		await openAiCompletions.streamSimple(
+			geminiModel,
+			{ messages: [legacyMessage] },
+			{
+				apiKey: "test",
+				onPayload: (payload) => {
+					legacyReplayPayload = payload;
+					throw new Error("installed legacy reasoning replay captured");
+				},
+			},
+		).result();
+		assert.deepEqual(
+			legacyReplayPayload.messages[0].reasoning_details,
+			expectedReasoningDetails,
+		);
 	} finally {
 		if (geminiServer) {
 			await new Promise((resolveClose, rejectClose) => {
