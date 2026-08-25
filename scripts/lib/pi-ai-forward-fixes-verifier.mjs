@@ -68,7 +68,7 @@ export function assertPiAiForwardFixCopies(readSource, surface, targets = PI_AI_
 	}
 }
 
-export function assertPiAiForwardFixPackageTree(packageRoot, readText) {
+export function assertPiAiForwardFixPackageTree(packageRoot, readText, { prunedNative = false } = {}) {
 	assertPiAiForwardFixCopies(
 		(relativePath, copy) =>
 			readText(
@@ -84,6 +84,7 @@ export function assertPiAiForwardFixPackageTree(packageRoot, readText) {
 				`bundled ${copy} Pi AI ${relativePath}`,
 			),
 		"bundled",
+		prunedNative ? PI_AI_FORWARD_FIX_RUNTIME_TARGETS : PI_AI_FORWARD_FIX_TARGETS,
 	);
 	const nestedManifest = JSON.parse(
 		readText(

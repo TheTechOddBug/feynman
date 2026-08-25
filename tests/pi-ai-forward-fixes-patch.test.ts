@@ -11,6 +11,7 @@ import {
 	PI_AI_FORWARD_FIX_TARGETS,
 	patchPiAiForwardFixSource,
 } from "../scripts/lib/pi-ai-forward-fixes-patch.mjs";
+import { assertPiAiForwardFixPackageTree } from "../scripts/lib/pi-ai-forward-fixes-verifier.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const appRoot = process.cwd();
@@ -115,6 +116,23 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 			assert.equal(patchPiAiForwardFixSource(relativePath, source), source);
 		}
 	}
+});
+
+test("pruned native Pi AI verification does not require declaration files", () => {
+	const readText = (path: string, label: string): string => {
+		if (path.endsWith(".d.ts")) {
+			throw new Error(`${label} is missing`);
+		}
+		return readFileSync(path, "utf8");
+	};
+
+	assert.doesNotThrow(() =>
+		assertPiAiForwardFixPackageTree(appRoot, readText, { prunedNative: true }),
+	);
+	assert.throws(
+		() => assertPiAiForwardFixPackageTree(appRoot, readText),
+		/bundled root Pi AI dist\/utils\/provider-retry\.d\.ts is missing/,
+	);
 });
 
 test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", () => {

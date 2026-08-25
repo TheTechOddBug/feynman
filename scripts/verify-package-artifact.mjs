@@ -315,7 +315,7 @@ for (const [target, relativePath] of [
 		assertPiRuntimeCorrectnessPatchSource(readText(path, label), target, label);
 	}
 }
-assertPiAiForwardFixPackageTree(packageRoot, readText);
+assertPiAiForwardFixPackageTree(packageRoot, readText, { prunedNative });
 assertPiCompactionToolsPackageTree(packageRoot, readText, { prunedNative });
 assertPiStateFilePermissionsPatchSource(
 	readText(
