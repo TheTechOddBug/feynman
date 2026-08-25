@@ -24,7 +24,9 @@ import { PI_AI_FORWARD_FIX_TARGETS, patchPiAiForwardFixSource } from "./lib/pi-a
 import { PI_COMPACTION_TOOLS_PATCH_TARGETS, patchPiCompactionToolsSource } from "./lib/pi-compaction-tools-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessVersion,
+	PI_CODING_AGENT_FORWARD_FIX_TARGETS,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
+	patchPiCodingAgentForwardFixSource,
 	patchPiAgentSessionSource,
 	patchPiGithubCopilotDeviceCodeSource,
 	patchPiGithubCopilotOAuthSource,
@@ -198,6 +200,9 @@ const githubCopilotOAuthPaths = resolvePiAiRuntimeFiles(
 const piAiForwardFixPaths = PI_AI_FORWARD_FIX_TARGETS.flatMap((relativePath) =>
 	resolvePiAiRuntimeFiles(...relativePath.split("/")).map((entryPath) => ({ entryPath, relativePath }))
 );
+const piCodingAgentForwardFixPaths = PI_CODING_AGENT_FORWARD_FIX_TARGETS.flatMap((relativePath) =>
+	[piPackageRoot ? resolve(piPackageRoot, ...relativePath.split("/")) : null, resolveWorkspacePiFile("pi-coding-agent", ...relativePath.split("/"))]
+		.filter(Boolean).map((entryPath) => ({ entryPath, relativePath })));
 const compactionToolsPaths = PI_COMPACTION_TOOLS_PATCH_TARGETS.flatMap((relativePath) =>
 	[piPackageRoot ? resolve(piPackageRoot, ...relativePath.split("/")) : null, resolveWorkspacePiFile("pi-coding-agent", ...relativePath.split("/"))]
 		.filter(Boolean).map((entryPath) => ({ entryPath, relativePath })));
@@ -1008,6 +1013,10 @@ for (const [entryPath, patchSource] of [
 	...piAiForwardFixPaths.map(({ entryPath, relativePath }) => [
 		entryPath,
 		(source) => patchPiAiForwardFixSource(relativePath, source),
+	]),
+	...piCodingAgentForwardFixPaths.map(({ entryPath, relativePath }) => [
+		entryPath,
+		(source) => patchPiCodingAgentForwardFixSource(relativePath, source),
 	]),
 	...compactionToolsPaths.map(({ entryPath, relativePath }) => [entryPath, (source) => patchPiCompactionToolsSource(relativePath, source)]),
 ]) {

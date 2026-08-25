@@ -9,6 +9,27 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.41 - 2026-08-25
+
+### Research continuity
+
+- Custom research messages queued while a Pi turn is active now wait until the turn settles before they are persisted and emitted. Tool results remain adjacent to their calls, and `triggerTurn: false` notifications no longer corrupt resumable session history.
+- Large rendered tool diffs no longer hit V8's argument-count limit. Feynman's Pi runtime also resolves `fd` and `rg` releases through GitHub's public redirect without spending anonymous API quota.
+
+### Model reliability
+
+- OpenAI-compatible Gemini 3 streams now preserve Google thought signatures during tool-call replay, including when encrypted reasoning details are present.
+- Foreign OpenAI-compatible tool-call IDs now retain the full hash when they must be sanitized and bounded, reducing cross-provider replay collisions.
+- OpenRouter's structured `in_flight_budget_exhausted` 402 responses can use their `Retry-After` budget through the provider retry path without treating arbitrary error text as retryable.
+
+### Runtime reliability
+
+- An opt-in `FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS` watchdog can terminate a provider stream that stops producing Pi events, while remaining disabled by default for local and private models that legitimately spend time in silent prefills.
+
+### Validation
+
+- Ported the focused Pi fixes from commits `7b1dcfd`, `8c16a558`, `6d05adb`, `94f6e7c`, and `d8def812`, plus the structured OpenRouter retry correction, across source, bundled, restored, installed, and package-artifact copies. Added fail-closed source checks, restored-runtime coverage, provider regressions, and clean installed-package verification.
+
 ## v0.3.40 - 2026-08-24
 
 ### Research continuity

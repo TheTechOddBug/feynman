@@ -24,6 +24,8 @@ import {
 	assertPiRuntimeCorrectnessPatchSource,
 	PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION,
 } from "./lib/pi-runtime-correctness-patch.mjs";
+import { assertPiCodingAgentForwardFixArchive, assertPiCodingAgentForwardFixPackageTree } from "./lib/pi-coding-agent-forward-fixes-verifier.mjs";
+import { assertPiAgentCorePatchSource } from "./lib/pi-agent-core-patch.mjs";
 import {
 	computeFileSha256,
 	computeRuntimeArchiveTreeHash,
@@ -243,11 +245,7 @@ for (const [label, path] of [
 		),
 	],
 ]) {
-	requireMarkers(readText(path, label), label, [
-		"function normalizeFeynmanToolAlias",
-		'["search_web", "web_search"]',
-		"prepareToolCallArguments(tool, effectiveToolCall)",
-	]);
+	assertPiAgentCorePatchSource(readText(path, label), label);
 }
 
 assertPiRuntimeCorrectnessPatchSource(
@@ -266,6 +264,8 @@ assertPiRuntimeCorrectnessPatchSource(
 	"sessionManager",
 	"bundled Pi SessionManager",
 );
+assertPiCodingAgentForwardFixPackageTree((relativePath, label) =>
+	readText(resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", ...relativePath.split("/")), label));
 for (const [label, path] of [
 	[
 		"bundled root Pi AI",
@@ -692,6 +692,8 @@ for (const [target, relativePath] of [
 	}
 }
 assertPiAiForwardFixArchive((entryPath) => readArchivedText(archivePath, entryPath));
+assertPiCodingAgentForwardFixArchive((relativePath, label) =>
+	readArchivedText(archivePath, `npm/node_modules/@earendil-works/pi-coding-agent/${relativePath}`));
 assertPiCompactionToolsArchive((entryPath) => readArchivedText(archivePath, entryPath));
 for (const [label, entryPath] of [
 	[
@@ -703,11 +705,7 @@ for (const [label, entryPath] of [
 		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
 	],
 ]) {
-	requireMarkers(readArchivedText(archivePath, entryPath), label, [
-		"function normalizeFeynmanToolAlias",
-		'["search_web", "web_search"]',
-		"prepareToolCallArguments(tool, effectiveToolCall)",
-	]);
+	assertPiAgentCorePatchSource(readArchivedText(archivePath, entryPath), label);
 }
 for (const name of ["pi-agent-core", "pi-tui"]) {
 	if (

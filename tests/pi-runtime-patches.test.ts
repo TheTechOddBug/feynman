@@ -32,6 +32,30 @@ function writePiCliArgsFixture(piCodingAgentRoot: string): void {
 }
 
 const SOURCE = `
+async function streamAssistantResponse(context, config, signal, emit, streamFunction) {
+    const llmContext = { systemPrompt: "", messages: [], tools: [] };
+    const resolvedApiKey = config.apiKey;
+    const response = await streamFunction(config.model, llmContext, {
+        ...config,
+        apiKey: resolvedApiKey,
+        signal,
+    });
+    let partialMessage = null;
+    let addedPartial = false;
+    for await (const event of response) {
+        if (event.type === "start") {
+            partialMessage = event.partial;
+            context.messages.push(partialMessage);
+            addedPartial = true;
+        }
+    }
+    const finalMessage = await response.result();
+    if (addedPartial) {
+        context.messages[context.messages.length - 1] = finalMessage;
+    }
+    return finalMessage;
+}
+
 async function prepareToolCall(currentContext, assistantMessage, toolCall, config, signal) {
     const tool = currentContext.tools?.find((t) => t.name === toolCall.name);
     if (!tool) {

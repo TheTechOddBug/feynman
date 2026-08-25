@@ -2,12 +2,14 @@
  * Temporary Pi 0.84.2 correctness patches for:
  * - https://github.com/earendil-works/pi/issues/7053
  * - https://github.com/earendil-works/pi/issues/8121
+ * - https://github.com/earendil-works/pi/issues/8166
  * - https://github.com/earendil-works/pi/issues/8581
  *
  * Removal condition: delete this patch once a supported released Pi version
  * eagerly persists finalized parallel tool results while restoring them in
  * tool-call order, includes upstream commits d5278ea and 086c32e, and clears
- * delivered image-only queue entries as in commit b67b3db.
+ * delivered image-only queue entries as in commit b67b3db. It also defers
+ * triggerTurn-false custom messages as in commit 7b1dcfd.
  */
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
@@ -21,6 +23,14 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	]),
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION = "0.84.2";
+export const PI_CODING_AGENT_FORWARD_FIX_TARGETS = Object.freeze([
+	"dist/modes/interactive/components/tool-execution.js",
+	"dist/utils/tools-manager.js",
+]);
+export const PI_CODING_AGENT_FORWARD_FIX_MARKERS = Object.freeze({
+	largeToolRender: "Feynman Pi 0.84.2 forward patch: large tool render #8036",
+	toolReleaseRedirect: "Feynman Pi 0.84.2 forward patch: GitHub release redirect #8594",
+});
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
 	sessionManager: "Feynman Pi 0.84.2 correctness patch: restore eager tool results",
@@ -28,13 +38,21 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	githubCopilotDeviceCode: "Feynman Pi 0.84.2 correctness patch: export abortableSleep for upstream #8121",
 	githubCopilotOAuth: "Feynman Pi 0.84.2 correctness patch: upstream #8121",
 	imageQueue: "Feynman Pi 0.84.2 correctness patch: image-only queue delivery #8581",
+	turnEndMessages: "Feynman Pi 0.84.2 correctness patch: defer custom messages #8166",
 });
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession,
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue,
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.turnEndMessages,
 		"const steeringIndex = this._steeringMessages.indexOf(messageText);",
 		"const followUpIndex = this._followUpMessages.indexOf(messageText);",
+		"_pendingNextTurnMessages = [];\n    _pendingTurnEndMessages = [];",
+		"_flushPendingTurnEndMessages() {",
+		"const messages = this._pendingTurnEndMessages.splice(0);",
+		"this._flushPendingTurnEndMessages();",
+		"this._pendingTurnEndMessages.push(appMessage);",
+		"if (this._isAgentRunActive) {",
 		'const feynmanToolResultIdBeforeExtensions = event.type === "message_end" && event.message.role === "toolResult"',
 		"const entryId = this.sessionManager.appendMessage(toolResult);",
 		"this._feynmanEagerlyPersistedToolResults.set(event.toolCallId, {",
@@ -99,12 +117,15 @@ export const PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS = Object.freeze({
 
 const PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.turnEndMessages,
+		"this._flushPendingTurnEndMessages();",
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.imageQueue,
 		"const entryId = this.sessionManager.appendMessage(toolResult);",
 		"await this._emitExtensionEvent(event);",
 		"event.message.toolCallId = feynmanToolResultIdBeforeExtensions;",
 		"const eagerToolCallId = feynmanToolResultIdBeforeExtensions ?? event.message.toolCallId;",
 		"this.sessionManager.replaceMessage(eagerlyPersisted.entryId, event.message);",
+		"this._pendingTurnEndMessages.push(appMessage);",
 	]),
 	sessionManager: Object.freeze([
 		"function restoreFeynmanToolResultsInSourceOrder(messages) {",
@@ -141,6 +162,187 @@ export function assertPiRuntimeCorrectnessVersion(version, surface) {
 			`Unsupported Pi runtime correctness patch ${surface}: expected ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION}, found ${version ?? "missing"}`,
 		);
 	}
+}
+
+export function assertPiCodingAgentForwardFixSource(relativePath, source, surface = relativePath) {
+	switch (relativePath) {
+		case "dist/modes/interactive/components/tool-execution.js":
+			for (const fragment of [
+				PI_CODING_AGENT_FORWARD_FIX_MARKERS.largeToolRender,
+				"for (const line of contentLines)",
+				"for (const line of spacer.render(width))",
+				"for (const line of imageComponent.render(width))",
+			]) {
+				if (!source.includes(fragment)) {
+					throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: missing ${fragment}`);
+				}
+			}
+			for (const fragment of [
+				"lines.push(...contentLines)",
+				"lines.push(...spacer.render(width))",
+				"lines.push(...imageComponent.render(width))",
+			]) {
+				if (source.includes(fragment)) {
+					throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: retained ${fragment}`);
+				}
+			}
+			return;
+		case "dist/utils/tools-manager.js":
+			for (const fragment of [
+				PI_CODING_AGENT_FORWARD_FIX_MARKERS.toolReleaseRedirect,
+				"`https://github.com/${repo}/releases/latest`",
+				"export async function getLatestVersion(repo)",
+				'redirect: "manual"',
+				"await response.body?.cancel()",
+				'resolved.origin !== "https://github.com"',
+				"decodeURIComponent(tag)",
+				'tool === "fd" && plat === "darwin" && architecture === "x64"',
+				"Download failed with HTTP ${response.status}: ${url}",
+				"messages.join(\": \")",
+			]) {
+				if (!source.includes(fragment)) {
+					throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: missing ${fragment}`);
+				}
+			}
+			if (source.includes("https://api.github.com/repos/${repo}/releases/latest")) {
+				throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: retained GitHub API lookup`);
+			}
+			return;
+		default:
+			throw new Error(`Unknown Pi coding-agent forward patch target: ${relativePath}`);
+	}
+}
+
+export function patchPiCodingAgentForwardFixSource(relativePath, source) {
+	if (relativePath === "dist/modes/interactive/components/tool-execution.js") {
+		if (source.includes(PI_CODING_AGENT_FORWARD_FIX_MARKERS.largeToolRender)) {
+			assertPiCodingAgentForwardFixSource(relativePath, source);
+			return source;
+		}
+		let patched = replaceRequired(
+			source,
+			`                lines.push("");
+                lines.push(...contentLines);`,
+			`                lines.push("");
+                // ${PI_CODING_AGENT_FORWARD_FIX_MARKERS.largeToolRender}
+                // Avoid V8's function-argument ceiling for very large rendered diffs.
+                for (const line of contentLines)
+                    lines.push(line);`,
+			"large tool content render",
+		);
+		patched = replaceRequired(
+			patched,
+			"                    lines.push(...spacer.render(width));",
+			"                    for (const line of spacer.render(width))\n                        lines.push(line);",
+			"large tool spacer render",
+		);
+		patched = replaceRequired(
+			patched,
+			"                    lines.push(...imageComponent.render(width));",
+			"                    for (const line of imageComponent.render(width))\n                        lines.push(line);",
+			"large tool image render",
+		);
+		assertPiCodingAgentForwardFixSource(relativePath, patched);
+		return patched;
+	}
+
+	if (relativePath === "dist/utils/tools-manager.js") {
+		if (source.includes(PI_CODING_AGENT_FORWARD_FIX_MARKERS.toolReleaseRedirect)) {
+			assertPiCodingAgentForwardFixSource(relativePath, source);
+			return source;
+		}
+		const original = `// Fetch latest release version from GitHub
+async function getLatestVersion(repo) {
+    const response = await fetchWithRetry(\`https://api.github.com/repos/\${repo}/releases/latest\`, {
+        headers: { "User-Agent": \`\${APP_NAME}-coding-agent\` },
+    }, { timeoutMs: NETWORK_TIMEOUT_MS });
+    if (!response.ok) {
+        throw new Error(\`GitHub API error: \${response.status}\`);
+    }
+    const data = (await response.json());
+    return data.tag_name.replace(/^v/, "");
+}`;
+		const replacement = `// Fetch latest release version without consuming the anonymous GitHub API quota.
+// ${PI_CODING_AGENT_FORWARD_FIX_MARKERS.toolReleaseRedirect}
+export async function getLatestVersion(repo) {
+    const latestUrl = \`https://github.com/\${repo}/releases/latest\`;
+    const response = await fetchWithRetry(latestUrl, {
+        headers: { "User-Agent": \`\${APP_NAME}-coding-agent\` },
+        redirect: "manual",
+    }, { timeoutMs: NETWORK_TIMEOUT_MS });
+    try {
+        await response.body?.cancel();
+    }
+    catch {
+        // Releasing the redirect body is best-effort.
+    }
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status >= 400 || !location) {
+        throw new Error(\`Failed to resolve latest \${repo} release: HTTP \${response.status} without redirect\`);
+    }
+    const resolved = new URL(location, latestUrl);
+    const prefix = \`/\${repo}/releases/tag/\`;
+    if (resolved.origin !== "https://github.com" || !resolved.pathname.startsWith(prefix)) {
+        throw new Error(\`Unexpected GitHub release redirect: \${resolved.href}\`);
+    }
+    const tag = resolved.pathname.slice(prefix.length);
+    if (!tag || tag.includes("/")) {
+        throw new Error(\`Invalid GitHub release tag redirect: \${resolved.href}\`);
+    }
+    const version = decodeURIComponent(tag).replace(/^v/, "");
+    if (!/^[0-9][0-9A-Za-z._-]*$/.test(version)) {
+        throw new Error(\`Invalid GitHub release version: \${version}\`);
+    }
+    return version;
+}`;
+		let patched = replaceRequired(source, original, replacement, "tool release version lookup");
+		patched = replaceRequired(
+			patched,
+			`    // Get latest version
+    let version = await getLatestVersion(config.repo);
+    if (tool === "fd" && plat === "darwin" && architecture === "x64") {
+        version = "10.3.0";
+    }`,
+			`    // fd is pinned on darwin/x64, so do not perform an unnecessary lookup.
+    const version = tool === "fd" && plat === "darwin" && architecture === "x64"
+        ? "10.3.0"
+        : await getLatestVersion(config.repo);`,
+			"pinned fd release lookup bypass",
+		);
+		patched = replaceRequired(
+			patched,
+			"        throw new Error(`Failed to download: ${response.status}`);",
+			"        throw new Error(`Download failed with HTTP ${response.status}: ${url}`);",
+			"tool download diagnostics",
+		);
+		patched = replaceRequired(
+			patched,
+			`    catch (e) {
+        onStatus?.({
+            type: "warning",
+            message: \`Failed to download \${config.name}: \${e instanceof Error ? e.message : e}\`,
+        });
+        return undefined;
+    }`,
+			`    catch (e) {
+        const messages = [];
+        for (let current = e, depth = 0; current instanceof Error && depth < 5; current = current.cause, depth++) {
+            if (!messages.includes(current.message))
+                messages.push(current.message);
+        }
+        onStatus?.({
+            type: "warning",
+            message: \`Failed to download \${config.name}: \${messages.length > 0 ? messages.join(": ") : String(e)}\`,
+        });
+        return undefined;
+    }`,
+			"tool download cause-chain diagnostics",
+		);
+		assertPiCodingAgentForwardFixSource(relativePath, patched);
+		return patched;
+	}
+
+	throw new Error(`Unknown Pi coding-agent forward patch target: ${relativePath}`);
 }
 
 export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = target) {
@@ -244,6 +446,117 @@ function patchPiImageQueueDeliverySource(source) {
 		PATCHED_IMAGE_QUEUE_DELIVERY,
 		"agent-session image-only queue delivery",
 	);
+}
+
+const TURN_END_MESSAGE_HELPER = `    /** Append deferred triggerTurn-false custom messages after the active run settles. */
+    _flushPendingTurnEndMessages() {
+        // ${PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.turnEndMessages}
+        // Snapshot first: a listener may synchronously start another run and
+        // messages queued by that run must wait for its own settlement.
+        const messages = this._pendingTurnEndMessages.splice(0);
+        for (const message of messages) {
+            if (this._disposed)
+                break;
+            try {
+                this.agent.state.messages.push(message);
+                this.sessionManager.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
+            }
+            catch {
+                // A failed persisted parent makes later entries unsafe to append.
+                break;
+            }
+            try {
+                this._emit({ type: "message_start", message });
+                this._emit({ type: "message_end", message });
+            }
+            catch {
+                // Listener failures must not deadlock waitForIdle or drop later messages.
+            }
+        }
+    }
+`;
+
+const TURN_END_DISPOSE_SAFETY = `        // Persist deferred notifications only when no run is active. During a run
+        // the transcript may end on tool calls without their results; appending a
+        // custom message there would recreate the ordering corruption.
+        if (this._isAgentRunActive) {
+            this._pendingTurnEndMessages = [];
+        }
+        else {
+            while (this._pendingTurnEndMessages.length > 0) {
+                const message = this._pendingTurnEndMessages.shift();
+                if (!message)
+                    break;
+                try {
+                    this.sessionManager.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
+                }
+                catch {
+                    // Dispose must remain best-effort.
+                }
+            }
+        }
+`;
+
+function patchPiDeferredTurnEndMessagesSource(source) {
+	if (source.includes(PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.turnEndMessages)) {
+		return source;
+	}
+	let patched = replaceRequired(
+		source,
+		"    _pendingNextTurnMessages = [];\n",
+		"    _pendingNextTurnMessages = [];\n    _pendingTurnEndMessages = [];\n    _disposed = false;\n",
+		"agent-session deferred turn-end state",
+	);
+	patched = replaceRequired(
+		patched,
+		"    async _emitAgentSettled() {\n",
+		`${TURN_END_MESSAGE_HELPER}    async _emitAgentSettled() {\n`,
+		"agent-session deferred turn-end helper",
+	);
+	patched = replaceRequired(
+		patched,
+		"    async _emitAgentSettled() {\n        this._isAgentRunActive = false;\n",
+		"    async _emitAgentSettled() {\n        this._isAgentRunActive = false;\n        this._flushPendingTurnEndMessages();\n",
+		"agent-session deferred turn-end drain",
+	);
+	patched = replaceRequired(
+		patched,
+		"    dispose() {\n        try {\n",
+		"    dispose() {\n        this._disposed = true;\n        try {\n",
+		"agent-session disposed state",
+	);
+	patched = replaceRequired(
+		patched,
+		`        catch {
+            // Dispose must succeed even if an abort hook throws.
+        }
+        this._extensionRunner.invalidate(`,
+		`        catch {
+            // Dispose must succeed even if an abort hook throws.
+        }
+${TURN_END_DISPOSE_SAFETY}        this._extensionRunner.invalidate(`,
+		"agent-session deferred turn-end disposal",
+	);
+	patched = replaceRequired(
+		patched,
+		`        else if (options?.triggerTurn) {
+            await this._runAgentPrompt(appMessage);
+        }
+        else {
+            this.agent.state.messages.push(appMessage);`,
+		`        else if (options?.triggerTurn) {
+            await this._runAgentPrompt(appMessage);
+        }
+        else if (this.isStreaming) {
+            // Never insert a custom/user-converted message between assistant tool
+            // calls and their results. Deliver it after this run settles instead.
+            this._pendingTurnEndMessages.push(appMessage);
+        }
+        else {
+            this.agent.state.messages.push(appMessage);`,
+		"agent-session deferred turn-end enqueue",
+	);
+	return patched;
 }
 
 const AGENT_SESSION_HELPERS = `
@@ -359,11 +672,17 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
 
 export function patchPiAgentSessionSource(source) {
 	source = patchPiImageQueueDeliverySource(source);
+	source = patchPiDeferredTurnEndMessagesSource(source);
 	if (source.includes(AGENT_SESSION_MARKER)) {
 		try {
 			assertPiRuntimeCorrectnessPatchSource(source, "agentSession");
 			return source;
-		} catch {
+		} catch (error) {
+			if (!source.includes(`        // Emit to extensions first
+        await this._emitExtensionEvent(event);
+${AGENT_SESSION_LEGACY_EAGER_PERSISTENCE}`)) {
+				throw error;
+			}
 			let upgraded = replaceRequired(
 				source,
 				`        // Emit to extensions first

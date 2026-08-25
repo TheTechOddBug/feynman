@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import {
 	assertPiAiForwardFixSource,
 	PI_AI_FORWARD_FIX_REQUIRED_VERSION,
+	PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
 	PI_AI_FORWARD_FIX_TARGETS,
 } from "./pi-ai-forward-fixes-patch.mjs";
 import {
@@ -49,8 +50,8 @@ function assertPiAiModelDataManifest(readSource, copy, surface) {
 	);
 }
 
-export function assertPiAiForwardFixCopies(readSource, surface) {
-	for (const relativePath of PI_AI_FORWARD_FIX_TARGETS) {
+export function assertPiAiForwardFixCopies(readSource, surface, targets = PI_AI_FORWARD_FIX_TARGETS) {
+	for (const relativePath of targets) {
 		for (const copy of ["root", "nested"]) {
 			try {
 				assertPiAiForwardFixSource(relativePath, readSource(relativePath, copy));
@@ -111,6 +112,7 @@ export function assertPiAiForwardFixArchive(readEntry) {
 					: `npm/node_modules/@earendil-works/pi-ai/${relativePath}`,
 			),
 		"runtime archive",
+		PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
 	);
 	const nestedManifest = JSON.parse(
 		readEntry(

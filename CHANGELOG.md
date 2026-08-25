@@ -4,6 +4,15 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 04:25 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Objective: Forward only Pi fixes that improve research-session continuity, provider replay, runtime reliability, or package/runtime integrity; reject freshness-only and adjacent workflow changes.
+- Intake: Live GitHub issue and PR queues are empty; the only parent branch is `main`; recent forks expose no contributor-only port target; root and website production audits report zero vulnerabilities. Pi `0.84.3` remains a coordinated migration rather than a safe pin-only upgrade because it omits maintained `0.84.2` correctness patches.
+- Changed: Added deferred `triggerTurn: false` custom-message persistence, large-tool render loops, GitHub release-redirect lookup, opt-in provider-stream idle watchdog, Gemini thought-signature replay with encrypted reasoning coexistence, full-hash cross-provider tool IDs, and structured OpenRouter in-flight-budget retries. Added exact source/installed/runtime/package checks and release notes for `0.3.41`.
+- Repaired: Reduced `scripts/verify-package-artifact.mjs` from `1,215` to `1,198` lines by extracting the coding-agent forward-fix verifier. The first real artifact check caught declarations being required from the pruned runtime archive; archive verification now checks executable Pi AI targets while source/npm trees still require declarations.
+- Verified locally: Focused forward-fix tests pass `16/16`; full `npm test` passes `922/922`; root typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site audits, `git diff --check`, package artifact verification, real tarball packaging, clean installed-consumer audit, installed runtime/tool/model checks, and document-parser checks pass.
+- State: `unverified` for the exact committed SHA, Daytona clean-machine proof, pull-request CI, merge, publication, and post-release identity. Next: commit and push the candidate, run the exact clean-machine and CI ladders, then merge and publish `0.3.41`.
+
 ### 2026-08-24 20:35 EDT — pi-image-queue-0.3.40-release
 
 - Persistence: PR `#252` merged exact tested head `9e6b80a32fc9c95cfcf854b819292e978f7f3656` as release commit `5d1d3d8bced23d0f05bc15da9b4660edea61ab06`; the candidate and merge trees match, and the owning branch was deleted. The repository does not define `codex` or `codex-automation` labels.

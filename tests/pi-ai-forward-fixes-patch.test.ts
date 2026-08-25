@@ -388,3 +388,209 @@ test("patched Xiaomi and China ZAI catalogs expose only current provider models"
 		assert.deepEqual(providers.getBuiltinModel("baseten", id).input, ["text", "image"]);
 	}
 });
+
+function openAiCompletionsModel(provider: string, id: string, baseUrl: string) {
+	return {
+		id,
+		name: id,
+		api: "openai-completions" as const,
+		provider,
+		baseUrl,
+		reasoning: true,
+		input: ["text" as const],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128_000,
+		maxTokens: 4096,
+	};
+}
+
+test("OpenAI-compatible history bounds foreign tool IDs and preserves result pairing", async () => {
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-ids=${Date.now()}`
+	);
+	const ids = [
+		"a".repeat(40),
+		"a".repeat(41),
+		`${"same-prefix-".repeat(6)}first`,
+		`${"same-prefix-".repeat(6)}second`,
+		"short.native:1",
+	];
+	const assistant = {
+		role: "assistant" as const,
+		content: ids.map((id, index) => ({
+			type: "toolCall" as const,
+			id,
+			name: "read",
+			arguments: { path: `file-${index}` },
+		})),
+		api: "other",
+		provider: "other",
+		model: "other",
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: "toolUse" as const,
+		timestamp: 1,
+	};
+	const results = ids.map((toolCallId, index) => ({
+		role: "toolResult" as const,
+		toolCallId,
+		toolName: "read",
+		content: [{ type: "text" as const, text: `result-${index}` }],
+		isError: false,
+		timestamp: 2 + index,
+	}));
+	let payload: any;
+	const response = await openAiCompletions.streamSimple(
+		openAiCompletionsModel("custom-gateway", "proxy-model", "https://gateway.example/v1"),
+		{ messages: [{ role: "user", content: "read", timestamp: 0 }, assistant, ...results] },
+		{
+			apiKey: "test",
+			onPayload: (next: unknown) => {
+				payload = next;
+				throw new Error("captured tool IDs");
+			},
+		},
+	).result();
+	assert.match(response.errorMessage ?? "", /captured tool IDs/);
+	const callIds = payload.messages.find((message: any) => message.role === "assistant")
+		.tool_calls.map((call: any) => call.id);
+	const resultIds = payload.messages.filter((message: any) => message.role === "tool")
+		.map((message: any) => message.tool_call_id);
+	assert.deepEqual(callIds, resultIds);
+	assert.equal(callIds[0], ids[0]);
+	assert.equal(callIds[4], ids[4]);
+	assert.equal(callIds[1].length, 40);
+	assert.equal(new Set(callIds).size, ids.length);
+	for (const id of callIds.slice(1, 4)) {
+		assert.match(id, /^[A-Za-z0-9_-]+$/);
+		assert.ok(id.length <= 40);
+	}
+});
+
+test("Gemini 3 thought signatures are captured from SSE and replayed verbatim", async (t) => {
+	const signature = "AgGDja8BCEmVrN0base64sig";
+	const server = createServer((_request, response) => {
+		response.writeHead(200, { "content-type": "text/event-stream" });
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: {
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "{\"path\":\"README.md\"}" },
+						extra_content: { google: { thought_signature: signature } },
+					}],
+				},
+				finish_reason: null,
+			}],
+		})}\n\n`);
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+		})}\n\n`);
+		response.end("data: [DONE]\n\n");
+	});
+	t.after(async () => {
+		await new Promise<void>((resolveClose, rejectClose) =>
+			server.close((error) => error ? rejectClose(error) : resolveClose())
+		);
+	});
+	await new Promise<void>((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
+	const address = server.address();
+	assert.ok(address && typeof address !== "string");
+
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?signature=${Date.now()}`
+	);
+	const model = openAiCompletionsModel(
+		"openrouter",
+		"google/gemini-3-test",
+		`http://127.0.0.1:${address.port}`,
+	);
+	const first = await openAiCompletions.streamSimple(
+		model,
+		{
+			messages: [{ role: "user", content: "read", timestamp: 0 }],
+			tools: [{
+				name: "read",
+				description: "Read",
+				parameters: { type: "object", properties: { path: { type: "string" } } },
+			}],
+		},
+		{ apiKey: "test" },
+	).result();
+	const toolCall = first.content.find((block: any) => block.type === "toolCall") as any;
+	assert.equal(toolCall?.thoughtSignature, signature);
+
+	let replayPayload: any;
+	await openAiCompletions.streamSimple(
+		model,
+		{ messages: [first] },
+		{
+			apiKey: "test",
+			onPayload: (next: unknown) => {
+				replayPayload = next;
+				throw new Error("captured signature replay");
+			},
+		},
+	).result();
+	assert.deepEqual(replayPayload.messages[0].tool_calls[0].extra_content, {
+		google: { thought_signature: signature },
+	});
+});
+
+test("provider retry handles only Retry-After in-flight budget 402 errors", async () => {
+	const { retryProviderRequest } = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "utils", "provider-retry.js")).href}?budget=${Date.now()}`
+	);
+	const transient = Object.assign(
+		new Error("OpenRouter in_flight_budget_exhausted"),
+		{
+			status: 402,
+			headers: new Headers({ "retry-after": "0" }),
+			error: { code: "in_flight_budget_exhausted" },
+		},
+	);
+	let transientAttempts = 0;
+	assert.equal(
+		await retryProviderRequest(async () => {
+			transientAttempts++;
+			if (transientAttempts === 1) throw transient;
+			return "recovered";
+		}, { maxRetries: 1 }),
+		"recovered",
+	);
+	assert.equal(transientAttempts, 2);
+
+	for (const error of [
+		Object.assign(new Error("payment required"), {
+			status: 402,
+			headers: new Headers({ "retry-after": "0" }),
+		}),
+		Object.assign(new Error("in_flight_budget_exhausted"), {
+			status: 402,
+			headers: new Headers(),
+		}),
+	]) {
+		let attempts = 0;
+		await assert.rejects(
+			retryProviderRequest(async () => {
+				attempts++;
+				throw error;
+			}, { maxRetries: 1 }),
+			new RegExp((error as Error).message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+		);
+		assert.equal(attempts, 1);
+	}
+});

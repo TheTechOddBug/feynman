@@ -156,3 +156,131 @@ test("real image-only steering and follow-up delivery clears colliding empty que
 		{ steering: [], followUp: [] },
 	]);
 });
+
+test("triggerTurn-false custom messages wait until tool results and the run settle", async (t) => {
+	const [{ Agent }, codingAgent, piAi] = await Promise.all([
+		import("@earendil-works/pi-agent-core"),
+		import("@earendil-works/pi-coding-agent"),
+		import("@earendil-works/pi-ai/compat"),
+	]);
+	const { AgentSession, SessionManager, SettingsManager, convertToLlm } = codingAgent;
+	const { fauxAssistantMessage, fauxToolCall, registerFauxProvider, streamSimple } = piAi;
+	const faux = registerFauxProvider({ models: [{ id: "faux-custom-order" }] });
+	let session: InstanceType<typeof AgentSession> | undefined;
+	t.after(() => {
+		session?.dispose();
+		faux.unregister();
+	});
+
+	let markToolStarted: (() => void) | undefined;
+	const toolStarted = new Promise<void>((resolveStarted) => {
+		markToolStarted = resolveStarted;
+	});
+	let releaseTool: (() => void) | undefined;
+	const toolGate = new Promise<void>((resolveTool) => {
+		releaseTool = resolveTool;
+	});
+	const waitTool = {
+		name: "wait",
+		label: "wait",
+		description: "Hold the turn while a custom message arrives",
+		parameters: Type.Object({}),
+		execute: async () => {
+			markToolStarted?.();
+			await toolGate;
+			return { content: [{ type: "text" as const, text: "released" }], details: {} };
+		},
+	};
+	const model = faux.getModel();
+	const sessionManager = SessionManager.inMemory(appRoot);
+	const agent = new Agent({
+		getApiKey: () => "faux-key",
+		streamFn: streamSimple,
+		initialState: { model, systemPrompt: "test", tools: [] },
+		convertToLlm,
+	});
+	session = new AgentSession({
+		agent,
+		sessionManager,
+		settingsManager: SettingsManager.inMemory({ compaction: { enabled: false } }),
+		cwd: appRoot,
+		modelRuntime: {
+			hasConfiguredAuth: () => true,
+			checkAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+			getAuth: async () => ({ auth: { apiKey: "faux-key" } }),
+			isUsingOAuth: () => false,
+		} as never,
+		resourceLoader: createResourceLoader(codingAgent.createExtensionRuntime()) as never,
+		baseToolsOverride: { wait: waitTool },
+	});
+	let agentEndMessage: Promise<void> | undefined;
+	let sentAtAgentEnd = false;
+	session.subscribe((event) => {
+		if (
+			event.type === "message_end" &&
+			event.message.role === "custom" &&
+			event.message.customType === "research-progress"
+		) {
+			throw new Error("listener failure must not stop the deferred drain");
+		}
+		if (event.type === "agent_end" && !sentAtAgentEnd) {
+			sentAtAgentEnd = true;
+			agentEndMessage = session?.sendCustomMessage(
+				{ customType: "run-complete", content: "done", display: true },
+				{ triggerTurn: false },
+			);
+		}
+	});
+
+	let resumedMessages: Context["messages"] = [];
+	faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("wait", {}, { id: "wait-order" }), {
+			stopReason: "toolUse",
+		}),
+		fauxAssistantMessage("original turn complete"),
+		(context) => {
+			resumedMessages = [...context.messages];
+			return fauxAssistantMessage("resume complete");
+		},
+	]);
+
+	const prompt = session.prompt("run tool");
+	await toolStarted;
+	await session.sendCustomMessage(
+		{ customType: "research-progress", content: "deferred", display: true },
+		{ triggerTurn: false, deliverAs: "followUp" },
+	);
+	await session.sendCustomMessage(
+		{ customType: "after-progress", content: "still deferred", display: true },
+		{ triggerTurn: false },
+	);
+	assert.equal(session.messages.some((message) => message.role === "custom"), false);
+	releaseTool?.();
+	await prompt;
+	await agentEndMessage;
+
+	const roles = session.messages.map((message) => message.role);
+	assert.ok(roles.indexOf("custom") > roles.indexOf("toolResult"));
+	assert.ok(roles.indexOf("custom") > roles.lastIndexOf("assistant"));
+	assert.deepEqual(
+		session.messages
+			.filter((message) => message.role === "custom")
+			.map((message) => message.customType),
+		["research-progress", "after-progress", "run-complete"],
+	);
+	assert.deepEqual(
+		sessionManager.getEntries()
+			.filter((entry) => entry.type === "custom_message")
+			.map((entry) => entry.customType),
+		["research-progress", "after-progress", "run-complete"],
+	);
+
+	await session.prompt("continue");
+	const resumedRoles = resumedMessages.map((message) => message.role);
+	const toolResultIndex = resumedRoles.indexOf("toolResult");
+	assert.equal(resumedRoles[toolResultIndex - 1], "assistant");
+	const deferredIndex = resumedMessages.findIndex((message) =>
+		message.role === "user" && JSON.stringify(message.content).includes("deferred")
+	);
+	assert.ok(deferredIndex > toolResultIndex);
+});
