@@ -109,12 +109,135 @@ function patchExecutor(source) {
 	return patched;
 }
 
+function patchLegacyManagement(source) {
+	const legacyListAnchor = [
+		"\t\t...(diagnostics.length ? [",
+		"\t\t\t\"\",",
+		"\t\t\t\"Chain diagnostics:\",",
+		"\t\t\t...diagnostics.map((entry) => `- ${entry.filePath}: ${entry.error}`),",
+		"\t\t] : []),",
+	].join("\n");
+	const compactLegacyListAnchor =
+		"\t\t...(diagnostics.length ? [\"\", \"Chain diagnostics:\", ...diagnostics.map((entry) => `- ${entry.filePath}: ${entry.error}`)] : []),";
+	const legacyGetAnchor = [
+		"\t\tconst raw = params.agent.trim();",
+		"\t\tconst sanitized = sanitizeName(raw);",
+		"\t\tconst d = discoverAgentsAll(ctx.cwd);",
+		"\t\tconst matches = mergeAgentsForScope(scope, d.user, d.project, d.builtin, d.package)",
+		"\t\t\t.filter((agent) => agent.name === raw || agent.name === sanitized);",
+		"\t\tif (!matches.length) {",
+		"\t\t\tconst msg = `Agent '${params.agent}' not found. Available: ${availableNames(ctx.cwd, \"agent\").join(\", \") || \"none\"}.`;",
+		"\t\t\tif (!hasBoth) return result(msg, true);",
+		"\t\t\tblocks.push(msg);",
+		"\t\t} else {",
+	].join("\n");
+	const listAnchor = source.includes(legacyListAnchor)
+		? legacyListAnchor
+		: source.includes(compactLegacyListAnchor)
+			? compactLegacyListAnchor
+			: undefined;
+
+	if (!listAnchor || !source.includes(legacyGetAnchor)) {
+		return source;
+	}
+
+	let patched = replaceRequired(
+		source,
+		[
+			"\ttype AgentConfig,",
+			"\ttype AgentScope,",
+		].join("\n"),
+		[
+			"\ttype AgentConfig,",
+			"\ttype AgentDiscoveryDiagnostic,",
+			"\ttype AgentScope,",
+		].join("\n"),
+		"legacy management diagnostic type import",
+	);
+	patched = replaceRequired(
+		patched,
+		[
+			"\tdiscoverAgentsAll,",
+			"\tbuildRuntimeName,",
+		].join("\n"),
+		[
+			"\tdiscoverAgentsAll,",
+			"\tfindBlockingAgentDiagnostic,",
+			"\tbuildRuntimeName,",
+		].join("\n"),
+		"legacy management diagnostic import",
+	);
+	patched = replaceRequired(
+		patched,
+		"function findChains(name: string, cwd: string, scope: AgentScope = \"both\"): ChainConfig[] {",
+		[
+			"function diagnosticsForScope(diagnostics: AgentDiscoveryDiagnostic[] | undefined, scope: AgentScope): AgentDiscoveryDiagnostic[] | undefined {",
+			"\tif (scope === \"both\") return diagnostics;",
+			"\tconst excludedSource = scope === \"user\" ? \"project\" : \"user\";",
+			"\treturn diagnostics?.filter((diagnostic) => diagnostic.source !== excludedSource);",
+			"}",
+			"",
+			"function findChains(name: string, cwd: string, scope: AgentScope = \"both\"): ChainConfig[] {",
+		].join("\n"),
+		"legacy management diagnostic scope",
+	);
+	patched = replaceRequired(
+		patched,
+		listAnchor,
+		[
+			listAnchor,
+			"\t\t...(diagnosticsForScope(d.agentDiagnostics, scope)?.length ? [",
+			"\t\t\t\"\",",
+			"\t\t\t\"Invalid agent definitions:\",",
+			"\t\t\t...diagnosticsForScope(d.agentDiagnostics, scope)!.map((diagnostic) => `- ${diagnostic.name ?? diagnostic.filePath} (${diagnostic.source}): ${diagnostic.error}`),",
+			"\t\t] : []),",
+		].join("\n"),
+		"legacy management list diagnostics",
+	);
+	patched = replaceRequired(
+		patched,
+		legacyGetAnchor,
+		[
+			"\t\tconst raw = params.agent.trim();",
+			"\t\tconst sanitized = sanitizeName(raw);",
+			"\t\tconst d = discoverAgentsAll(ctx.cwd);",
+			"\t\tconst matches = mergeAgentsForScope(scope, d.user, d.project, d.builtin, d.package)",
+			"\t\t\t.filter((agent) => agent.name === raw || agent.name === sanitized);",
+			"\t\tconst diagnostics = diagnosticsForScope(d.agentDiagnostics, scope);",
+			"\t\tconst diagnostic = findBlockingAgentDiagnostic(raw, matches, diagnostics)",
+			"\t\t\t?? (sanitized !== raw ? findBlockingAgentDiagnostic(sanitized, matches, diagnostics) : undefined);",
+			"\t\tif (diagnostic) {",
+			"\t\t\tconst msg = `Agent '${params.agent}' has invalid configuration: ${diagnostic.error}`;",
+			"\t\t\tif (!hasBoth) return result(msg, true);",
+			"\t\t\tblocks.push(msg);",
+			"\t\t} else if (!matches.length) {",
+			"\t\t\tconst msg = `Agent '${params.agent}' not found. Available: ${availableNames(ctx.cwd, \"agent\").join(\", \") || \"none\"}.`;",
+			"\t\t\tif (!hasBoth) return result(msg, true);",
+			"\t\t\tblocks.push(msg);",
+			"\t\t} else {",
+		].join("\n"),
+		"legacy management get diagnostics",
+	);
+	return patched;
+}
+
 function patchManagement(source) {
 	if (source.includes("\"Invalid agent definitions:\"")) {
 		return source;
 	}
 	if (!source.includes("export function handleList(params: ManagementParams")) {
 		return source;
+	}
+	const currentListAnchor = [
+		"\t\t...(restrictedAgents.length ? [",
+		"\t\t\t\"\",",
+		"\t\t\t`Restricted agents (not executable in this session${restrictedSources?.length ? `; capability ceiling: ${restrictedSources.join(\", \")}` : \"\"}):`,",
+		"\t\t\t...restrictedAgents.map((a) => `- ${a.name} (${a.source}${a.aliases?.length ? `, aliases: ${a.aliases.join(\", \")}` : \"\"}): ${a.description}`),",
+		"\t\t] : []),",
+		"\t\t\"\",",
+	].join("\n");
+	if (!source.includes(currentListAnchor)) {
+		return patchLegacyManagement(source);
 	}
 	let patched = replaceRequired(
 		source,

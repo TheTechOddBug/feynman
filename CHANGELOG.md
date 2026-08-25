@@ -4,6 +4,13 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 19:32 EDT — pi-subagents-legacy-install-0.3.43
+
+- Objective: Repair issue `#255`, where a native-bundle `--version` check crashed while migrating the legacy `pi-subagents@0.37.2` management source left by an older Feynman installation.
+- Reproduced: The current patch threw `Cannot apply Feynman backport ... missing management list diagnostics` against the published `pi-subagents@0.37.2` source; the bundled `0.40.0` source remained green.
+- Changed: Added a legacy management-layout port for list and get diagnostics, with compact and multiline source anchors, while leaving unsupported layouts unchanged rather than throwing.
+- Verified: Focused `pi-subagents` coverage passed `32/32`; exact `0.37.2` and `0.40.0` source probes both patch and are idempotent. State: `unverified` for exact `0.3.43` package/native/Daytona/CI/release proof. Next: run the cumulative release ladder, then publish and close `#255`.
+
 ### 2026-08-25 16:25 EDT — pi-reasoning-integrity-0.3.42
 
 - Objective: Repair the released `0.3.41` OpenAI-compatible reasoning loss and provider-boundary leak, then make the exact-version Pi patch validators reject stale or semantically disabled runtime copies.

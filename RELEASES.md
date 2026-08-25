@@ -6,6 +6,16 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.43 - 2026-08-25
+
+### Installation reliability
+
+- Upgrading from an older Feynman installation no longer crashes while migrating a legacy `pi-subagents` package's agent diagnostics source. Fresh native-bundle installs and updates now tolerate the older management-source layout while preserving malformed-agent diagnostics.
+
+### Validation
+
+- Added an executable source regression for the `pi-subagents@0.37.2` management layout that previously raised `missing management list diagnostics` during `--version`.
+
 ## v0.3.42 - 2026-08-25
 
 ### Reasoning integrity
