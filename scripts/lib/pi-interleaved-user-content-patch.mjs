@@ -9,6 +9,17 @@
 export const PI_INTERLEAVED_USER_CONTENT_MARKER =
 	"Feynman Pi 0.84.2 correctness patch: interleaved user content #8615";
 
+const PI_INTERLEAVED_CREATE_USER_CONTENT = `    _createUserContent(text, images, orderedContent) {
+        return orderedContent ?? [{ type: "text", text }, ...(images ?? [])];
+    }`;
+
+const PI_INTERLEAVED_SEND_USER_MESSAGE_HANDOFF = `        await this._prompt(text, {
+            expandPromptTemplates: options?.expandPromptTemplates ?? false,
+            streamingBehavior: options?.deliverAs,
+            images,
+            source: "extension",
+        }, orderedContent);`;
+
 function countOccurrences(source, fragment) {
 	return source.split(fragment).length - 1;
 }
@@ -22,8 +33,21 @@ function replaceRequired(source, original, replacement, label) {
 	return source.replace(original, replacement);
 }
 
+export function assertPiInterleavedUserContentSource(source, surface = "Pi interleaved user content") {
+	for (const [label, fragment] of [
+		["marker", PI_INTERLEAVED_USER_CONTENT_MARKER],
+		["exact _createUserContent return", PI_INTERLEAVED_CREATE_USER_CONTENT],
+		["exact sendUserMessage _prompt handoff", PI_INTERLEAVED_SEND_USER_MESSAGE_HANDOFF],
+	]) {
+		if (countOccurrences(source, fragment) !== 1) {
+			throw new Error(`Incomplete ${surface} patch: missing ${label}`);
+		}
+	}
+}
+
 export function patchPiInterleavedUserContentSource(source) {
 	if (source.includes(PI_INTERLEAVED_USER_CONTENT_MARKER)) {
+		assertPiInterleavedUserContentSource(source);
 		return source;
 	}
 	let patched = replaceRequired(
@@ -153,9 +177,7 @@ export function patchPiInterleavedUserContentSource(source) {
             timestamp: Date.now(),
         });
     }
-    _createUserContent(text, images, orderedContent) {
-        return orderedContent ?? [{ type: "text", text }, ...(images ?? [])];
-    }`,
+${PI_INTERLEAVED_CREATE_USER_CONTENT}`,
 		"interleaved content queue construction",
 	);
 	patched = replaceRequired(
@@ -171,7 +193,7 @@ export function patchPiInterleavedUserContentSource(source) {
         if (typeof content === "string") {`,
 		"interleaved content input snapshot",
 	);
-	return replaceRequired(
+	patched = replaceRequired(
 		patched,
 		`        await this.prompt(text, {
             expandPromptTemplates: options?.expandPromptTemplates ?? false,
@@ -187,4 +209,6 @@ export function patchPiInterleavedUserContentSource(source) {
         }, orderedContent);`,
 		"interleaved content sendUserMessage handoff",
 	);
+	assertPiInterleavedUserContentSource(patched);
+	return patched;
 }

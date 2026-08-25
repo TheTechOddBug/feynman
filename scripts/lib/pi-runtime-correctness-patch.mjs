@@ -18,6 +18,7 @@
  * the executable regressions below continue to pass without the patch.
  */
 import {
+	assertPiInterleavedUserContentSource,
 	PI_INTERLEAVED_USER_CONTENT_MARKER,
 	patchPiInterleavedUserContentSource,
 } from "./pi-interleaved-user-content-patch.mjs";
@@ -44,6 +45,10 @@ export const PI_CODING_AGENT_FORWARD_FIX_MARKERS = Object.freeze({
 	toolReleaseRedirect: "Feynman Pi 0.84.2 forward patch: GitHub release redirect #8594",
 	exifAfterXmp: "Feynman Pi 0.84.2 forward patch: EXIF after XMP #8616",
 });
+const PATCHED_EXIF_AFTER_XMP_BLOCK = `            // ${PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp}
+            // APP1 may contain XMP before a later EXIF segment.
+            if (hasExifHeader(bytes, segmentStart))
+                return segmentStart + 6;`;
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
 	sessionManager: "Feynman Pi 0.84.2 correctness patch: restore eager tool results",
@@ -253,14 +258,15 @@ export function assertPiCodingAgentForwardFixSource(relativePath, source, surfac
 			}
 			return;
 		case "dist/utils/exif-orientation.js":
-			for (const fragment of [
-				PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp,
-				"if (hasExifHeader(bytes, segmentStart))",
-				"return segmentStart + 6;",
-			]) {
-				if (!source.includes(fragment)) {
-					throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: missing ${fragment}`);
-				}
+			if (source.split(PATCHED_EXIF_AFTER_XMP_BLOCK).length - 1 !== 1) {
+				throw new Error(
+					`Incomplete Pi coding-agent forward patch ${surface}: missing exact conditional EXIF-after-XMP block`,
+				);
+			}
+			if (source.split("return segmentStart + 6;").length - 1 !== 1) {
+				throw new Error(
+					`Incomplete Pi coding-agent forward patch ${surface}: expected exactly one EXIF TIFF offset return`,
+				);
 			}
 			if (source.includes("if (!hasExifHeader(bytes, segmentStart))")) {
 				throw new Error(
@@ -413,10 +419,7 @@ export async function getLatestVersion(repo) {
 			`            if (!hasExifHeader(bytes, segmentStart))
                 return -1;
             return segmentStart + 6;`,
-			`            // ${PI_CODING_AGENT_FORWARD_FIX_MARKERS.exifAfterXmp}
-            // APP1 may contain XMP before a later EXIF segment.
-            if (hasExifHeader(bytes, segmentStart))
-                return segmentStart + 6;`,
+			PATCHED_EXIF_AFTER_XMP_BLOCK,
 			"EXIF scan after non-EXIF APP1",
 		);
 		assertPiCodingAgentForwardFixSource(relativePath, patched);
@@ -447,6 +450,7 @@ export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = 
 		}
 	}
 	if (target === "agentSession") {
+		assertPiInterleavedUserContentSource(source, surface);
 		if (/\bif\s*\([^{}\n]*\bmessageText\b[^{}\n]*\)\s*\{/.test(source)) {
 			throw new Error(
 				`Incomplete Pi runtime correctness patch ${surface}: retained messageText truthiness guard`,

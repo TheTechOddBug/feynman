@@ -10,6 +10,10 @@ import {
 	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	patchPiWebAccessSources,
 } from "../scripts/lib/pi-web-access-patch.mjs";
+import {
+	assertPiAgentCorePatchSource,
+	patchPiAgentCoreSource,
+} from "../scripts/lib/pi-agent-core-patch.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const PI_CLI_ARGS_SOURCE = readFileSync(
@@ -92,6 +96,53 @@ async function prepareToolCall(currentContext, assistantMessage, toolCall, confi
     }
 }
 `;
+
+test("AgentCore upgrades known stale markers and rejects reordered or no-op rejection handlers", () => {
+	const canonical = patchPiAgentCoreSource(SOURCE);
+	const nextSequence = `        const next = iterator.next();
+        // A timeout or caller abort cannot cancel every provider iterator. Attach a
+        // rejection handler before racing so a late provider failure is not reported
+        // as an unhandled rejection after this turn has already settled.
+        next.catch(() => {});
+        const pending = [next];`;
+	const staleMarkerBearing = canonical
+		.replace(
+			'    const configured = parseFeynmanStreamIdleTimeoutMs(config?.streamIdleTimeoutMs, "streamIdleTimeoutMs");',
+			'    const configured = parseFeynmanStreamIdleTimeoutMs(config.streamIdleTimeoutMs, "streamIdleTimeoutMs");',
+		)
+		.replace(nextSequence, "        const pending = [iterator.next()];");
+	assert.notEqual(staleMarkerBearing, canonical);
+	assert.throws(
+		() => assertPiAgentCorePatchSource(staleMarkerBearing),
+		/missing .*streamIdleTimeoutMs|missing exact provider iterator/,
+	);
+	assert.equal(patchPiAgentCoreSource(staleMarkerBearing), canonical);
+
+	const reorderedCatch = canonical.replace(
+		nextSequence,
+		`        const next = iterator.next();
+        // A timeout or caller abort cannot cancel every provider iterator. Attach a
+        // rejection handler before racing so a late provider failure is not reported
+        // as an unhandled rejection after this turn has already settled.
+        const pending = [next];
+        next.catch(() => {});`,
+	);
+	const noOpCatch = canonical.replace(
+		"        next.catch(() => {});",
+		"        void next.catch;",
+	);
+	for (const mutation of [reorderedCatch, noOpCatch]) {
+		assert.notEqual(mutation, canonical);
+		assert.throws(
+			() => assertPiAgentCorePatchSource(mutation),
+			/missing exact provider iterator next\/catch\/pending sequence/,
+		);
+		assert.throws(
+			() => patchPiAgentCoreSource(mutation),
+			/missing exact provider iterator next\/catch\/pending sequence/,
+		);
+	}
+});
 
 const TUI_SOURCE = `
         const renderEnd = Math.min(lastChanged, newLines.length - 1);

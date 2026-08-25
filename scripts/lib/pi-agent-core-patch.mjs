@@ -135,18 +135,32 @@ const ORIGINAL_STREAM_LOOP_START = `    let partialMessage = null;
     let addedPartial = false;
     for await (const event of response) {`;
 
+const PATCHED_STREAM_NEXT_SEQUENCE = `        const next = iterator.next();
+        // A timeout or caller abort cannot cancel every provider iterator. Attach a
+        // rejection handler before racing so a late provider failure is not reported
+        // as an unhandled rejection after this turn has already settled.
+        next.catch(() => {});
+        const pending = [next];`;
+
+const LEGACY_STREAM_NEXT_SEQUENCES = Object.freeze([
+	"        const pending = [iterator.next()];",
+	`        const next = iterator.next();
+        const pending = [next];`,
+	PATCHED_STREAM_NEXT_SEQUENCE.replace("        next.catch(() => {});\n", ""),
+]);
+
+const PATCHED_STREAM_TIMEOUT_CONFIG =
+	'    const configured = parseFeynmanStreamIdleTimeoutMs(config?.streamIdleTimeoutMs, "streamIdleTimeoutMs");';
+const LEGACY_STREAM_TIMEOUT_CONFIG =
+	'    const configured = parseFeynmanStreamIdleTimeoutMs(config.streamIdleTimeoutMs, "streamIdleTimeoutMs");';
+
 const PATCHED_STREAM_LOOP = `    let partialMessage = null;
     let addedPartial = false;
     const iterator = response[Symbol.asyncIterator]();
     while (true) {
         let idleTimer;
         let abortListener;
-        const next = iterator.next();
-        // A timeout or caller abort cannot cancel every provider iterator. Attach a
-        // rejection handler before racing so a late provider failure is not reported
-        // as an unhandled rejection after this turn has already settled.
-        next.catch(() => {});
-        const pending = [next];
+${PATCHED_STREAM_NEXT_SEQUENCE}
         if (idleTimeoutMs > 0) {
             pending.push(new Promise((resolve) => {
                 idleTimer = setTimeout(() => resolve("feynman-idle"), idleTimeoutMs);
@@ -240,6 +254,7 @@ export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 		"AbortSignal.any([signal, watchdogController.signal])",
 		"signal: providerSignal",
 		"response[Symbol.asyncIterator]()",
+		PATCHED_STREAM_TIMEOUT_CONFIG,
 		'settled === "feynman-idle"',
 		"response.end(finalMessage)",
 		"watchdogController.abort()",
@@ -250,6 +265,11 @@ export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 		if (!source.includes(fragment)) {
 			throw new Error(`Incomplete ${surface} patch: missing ${fragment}`);
 		}
+	}
+	if (source.split(PATCHED_STREAM_NEXT_SEQUENCE).length - 1 !== 1) {
+		throw new Error(
+			`Incomplete ${surface} patch: missing exact provider iterator next/catch/pending sequence`,
+		);
 	}
 	if (source.includes("for await (const event of response)")) {
 		throw new Error(`Incomplete ${surface} patch: retained unbounded provider stream loop`);
@@ -289,14 +309,23 @@ function patchToolAliases(source) {
 
 function patchStreamWatchdog(source) {
 	if (source.includes(PI_AGENT_CORE_PATCH_MARKERS.streamWatchdog)) {
+		let upgraded = source.replace(LEGACY_STREAM_TIMEOUT_CONFIG, PATCHED_STREAM_TIMEOUT_CONFIG);
+		if (!upgraded.includes(PATCHED_STREAM_NEXT_SEQUENCE) && !upgraded.includes("next.catch")) {
+			for (const legacySequence of LEGACY_STREAM_NEXT_SEQUENCES) {
+				if (upgraded.includes(legacySequence)) {
+					upgraded = upgraded.replace(legacySequence, PATCHED_STREAM_NEXT_SEQUENCE);
+					break;
+				}
+			}
+		}
 		const legacyReturn = `            try {
                 await iterator.return?.();
             }
             catch {
                 // Some provider iterators do not implement cooperative return.
             }`;
-		if (source.includes(legacyReturn)) {
-			return source.replace(
+		if (upgraded.includes(legacyReturn)) {
+			upgraded = upgraded.replace(
 				legacyReturn,
 				`            try {
                 // Provider iterators can ignore abort and leave return() pending behind
@@ -309,7 +338,7 @@ function patchStreamWatchdog(source) {
             }`,
 			);
 		}
-		return source;
+		return upgraded;
 	}
 	let patched = source.replace(
 		"async function streamAssistantResponse(context, config, signal, emit, streamFunction) {\n",

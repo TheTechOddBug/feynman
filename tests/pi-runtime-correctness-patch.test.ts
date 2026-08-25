@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { Type } from "typebox";
 
 import {
+	assertPiCodingAgentForwardFixSource,
 	assertPiRuntimeCorrectnessPatchSource,
 	assertPiRuntimeCorrectnessVersion,
 	PI_RUNTIME_CORRECTNESS_FORBIDDEN_FRAGMENTS,
@@ -109,6 +110,15 @@ const nestedGithubCopilotOAuthPath = resolve(
 	"auth",
 	"oauth",
 	"github-copilot.js",
+);
+const exifOrientationPath = resolve(
+	appRoot,
+	"node_modules",
+	"@earendil-works",
+	"pi-coding-agent",
+	"dist",
+	"utils",
+	"exif-orientation.js",
 );
 
 function createResourceLoader(runtime: unknown) {
@@ -278,6 +288,155 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 		() => assertPiRuntimeCorrectnessVersion("0.84.0", "test"),
 		/expected 0\.84\.2, found 0\.84\.0/,
 	);
+});
+
+test("runtime semantic validators reject interleaved-content and EXIF fail-open mutations", () => {
+	const agentSessionSource = readFileSync(agentSessionPath, "utf8");
+	const ignoredOrderedContent = agentSessionSource.replace(
+		`    _createUserContent(text, images, orderedContent) {
+        return orderedContent ?? [{ type: "text", text }, ...(images ?? [])];
+    }`,
+		`    _createUserContent(text, images, orderedContent) {
+        return [{ type: "text", text }, ...(images ?? [])];
+    }`,
+	);
+	assert.notEqual(ignoredOrderedContent, agentSessionSource);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(ignoredOrderedContent, "agentSession"),
+		/missing exact _createUserContent return/,
+	);
+
+	const droppedOrderedContentHandoff = agentSessionSource.replace(
+		`        await this._prompt(text, {
+            expandPromptTemplates: options?.expandPromptTemplates ?? false,
+            streamingBehavior: options?.deliverAs,
+            images,
+            source: "extension",
+        }, orderedContent);`,
+		`        await this._prompt(text, {
+            expandPromptTemplates: options?.expandPromptTemplates ?? false,
+            streamingBehavior: options?.deliverAs,
+            images,
+            source: "extension",
+        });`,
+	);
+	assert.notEqual(droppedOrderedContentHandoff, agentSessionSource);
+	assert.throws(
+		() => assertPiRuntimeCorrectnessPatchSource(droppedOrderedContentHandoff, "agentSession"),
+		/missing exact sendUserMessage _prompt handoff/,
+	);
+
+	const exifSource = readFileSync(exifOrientationPath, "utf8");
+	const unconditionalExifReturn = exifSource.replace(
+		`            if (hasExifHeader(bytes, segmentStart))
+                return segmentStart + 6;`,
+		"            return segmentStart + 6;",
+	);
+	assert.notEqual(unconditionalExifReturn, exifSource);
+	assert.throws(
+		() =>
+			assertPiCodingAgentForwardFixSource(
+				"dist/utils/exif-orientation.js",
+				unconditionalExifReturn,
+			),
+		/missing exact conditional EXIF-after-XMP block/,
+	);
+
+	const deadExifCondition = exifSource.replace(
+		"            if (hasExifHeader(bytes, segmentStart))",
+		"            if (false && hasExifHeader(bytes, segmentStart))",
+	);
+	assert.notEqual(deadExifCondition, exifSource);
+	assert.throws(
+		() =>
+			assertPiCodingAgentForwardFixSource(
+				"dist/utils/exif-orientation.js",
+				deadExifCondition,
+			),
+		/missing exact conditional EXIF-after-XMP block/,
+	);
+});
+
+test("late provider rejection after synchronous abort is handled", async (t) => {
+	const originalTimeout = process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS;
+	delete process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS;
+	t.after(() => {
+		if (originalTimeout === undefined) {
+			delete process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS;
+		} else {
+			process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS = originalTimeout;
+		}
+	});
+
+	const unhandledRejections: unknown[] = [];
+	const onUnhandledRejection = (reason: unknown) => {
+		unhandledRejections.push(reason);
+	};
+	process.on("unhandledRejection", onUnhandledRejection);
+	t.after(() => process.off("unhandledRejection", onUnhandledRejection));
+
+	const { agentLoop } = await import("@earendil-works/pi-agent-core");
+	const controller = new AbortController();
+	let settleProviderResult: ((message: unknown) => void) | undefined;
+	const providerResult = new Promise<unknown>((resolveResult) => {
+		settleProviderResult = resolveResult;
+	});
+	let rejectNext: ((error: Error) => void) | undefined;
+	const nextResult = new Promise<never>((_resolveNext, reject) => {
+		rejectNext = reject;
+	});
+	const providerStream = {
+		end(message: unknown) {
+			settleProviderResult?.(message);
+		},
+		result() {
+			return providerResult;
+		},
+		[Symbol.asyncIterator]() {
+			return {
+				next() {
+					controller.abort();
+					setTimeout(() => rejectNext?.(new Error("late provider rejection")), 5);
+					return nextResult;
+				},
+				return() {
+					return Promise.resolve({ done: true as const, value: undefined });
+				},
+			};
+		},
+	};
+	const model = {
+		id: "late-rejection",
+		name: "late-rejection",
+		api: "openai-completions" as const,
+		provider: "remote-test",
+		baseUrl: "https://provider.example/v1",
+		reasoning: false,
+		input: ["text" as const],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1_000,
+		maxTokens: 100,
+	};
+	const stream = agentLoop(
+		[{ role: "user", content: "hello", timestamp: Date.now() }],
+		{ systemPrompt: "", messages: [], tools: [] },
+		{
+			model,
+			convertToLlm: (messages: unknown[]) => messages,
+			streamIdleTimeoutMs: 0,
+		} as never,
+		controller.signal,
+		(() => providerStream) as never,
+	);
+	for await (const _event of stream) {
+		// Drain the real agent loop through its terminal event.
+	}
+	const messages = await stream.result();
+	await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+
+	const final = messages.at(-1);
+	assert.equal(final?.role === "assistant" ? final.stopReason : undefined, "aborted");
+	assert.deepEqual(unhandledRejections, []);
 });
 
 test("GitHub Copilot login serializes policy updates and retries model discovery after 429", async (t) => {
