@@ -105,7 +105,15 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		resolve(appRoot, "scripts", "lib", "pi-ai-forward-fixes-patch.mjs"),
 		"utf8",
 	);
-	for (const commit of ["af2c352", "10acee6", "0e4d495", "8720548", "ad58801", "e5dde9a"]) {
+	for (const commit of [
+		"af2c352",
+		"10acee6",
+		"0e4d495",
+		"8720548",
+		"ad58801",
+		"e5dde9a",
+		"fe37e9f",
+	]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
 	assert.match(
@@ -118,6 +126,9 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 			const source = readPiAiSource(root, relativePath);
 			assert.doesNotThrow(() => assertPiAiForwardFixSource(relativePath, source));
 			assert.equal(patchPiAiForwardFixSource(relativePath, source), source);
+			if (!relativePath.endsWith(".json")) {
+				assert.doesNotMatch(source, /sourceMappingURL/);
+			}
 		}
 	}
 });
@@ -514,10 +525,48 @@ test("OpenAI-compatible history bounds foreign tool IDs and preserves result pai
 	}
 });
 
-test("Gemini 3 thought signatures are captured from SSE and replayed verbatim", async (t) => {
-	const signature = "AgGDja8BCEmVrN0base64sig";
+test("OpenAI-compatible compaction omits tool_choice when no tools are available", async () => {
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?tool-choice=${Date.now()}`
+	);
+	let payload: any;
+	const response = await openAiCompletions.streamSimple(
+		openAiCompletionsModel("custom-gateway", "proxy-model", "https://gateway.example/v1"),
+		{ messages: [{ role: "user", content: "Summarize the conversation", timestamp: 0 }] },
+		{
+			apiKey: "test",
+			toolChoice: "none",
+			onPayload: (next: unknown) => {
+				payload = next;
+				throw new Error("captured compaction payload");
+			},
+		},
+	).result();
+	assert.match(response.errorMessage ?? "", /captured compaction payload/);
+	assert.ok(payload);
+	assert.equal("tool_choice" in payload, false);
+	assert.equal("tools" in payload, false);
+});
+
+test("Gemini signatures and encrypted reasoning coexist across JSON replay", async (t) => {
+	const firstSignature = "AgGDja8BCEmVrN0first";
+	const laterSignature = "AgGDja8BCEmVrN0later";
+	const encryptedDetail = {
+		type: "reasoning.encrypted",
+		id: "call_1",
+		data: "encrypted-reasoning",
+	};
 	const server = createServer((_request, response) => {
 		response.writeHead(200, { "content-type": "text/event-stream" });
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: { reasoning_details: [encryptedDetail] },
+				finish_reason: null,
+			}],
+		})}\n\n`);
 		response.write(`data: ${JSON.stringify({
 			id: "chatcmpl-signature",
 			model: "google/gemini-3-test",
@@ -529,7 +578,24 @@ test("Gemini 3 thought signatures are captured from SSE and replayed verbatim", 
 						id: "call_1",
 						type: "function",
 						function: { name: "read", arguments: "{\"path\":\"README.md\"}" },
-						extra_content: { google: { thought_signature: signature } },
+						extra_content: { google: { thought_signature: firstSignature } },
+					}],
+				},
+				finish_reason: null,
+			}],
+		})}\n\n`);
+		response.write(`data: ${JSON.stringify({
+			id: "chatcmpl-signature",
+			model: "google/gemini-3-test",
+			choices: [{
+				index: 0,
+				delta: {
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "" },
+						extra_content: { google: { thought_signature: laterSignature } },
 					}],
 				},
 				finish_reason: null,
@@ -572,12 +638,14 @@ test("Gemini 3 thought signatures are captured from SSE and replayed verbatim", 
 		{ apiKey: "test" },
 	).result();
 	const toolCall = first.content.find((block: any) => block.type === "toolCall") as any;
-	assert.equal(toolCall?.thoughtSignature, signature);
+	assert.equal(toolCall?.thoughtSignature, firstSignature);
+	assert.deepEqual((first as any).reasoningDetails, [encryptedDetail]);
 
 	let replayPayload: any;
+	const persisted = JSON.parse(JSON.stringify(first));
 	await openAiCompletions.streamSimple(
 		model,
-		{ messages: [first] },
+		{ messages: [persisted] },
 		{
 			apiKey: "test",
 			onPayload: (next: unknown) => {
@@ -587,12 +655,13 @@ test("Gemini 3 thought signatures are captured from SSE and replayed verbatim", 
 		},
 	).result();
 	assert.deepEqual(replayPayload.messages[0].tool_calls[0].extra_content, {
-		google: { thought_signature: signature },
+		google: { thought_signature: firstSignature },
 	});
+	assert.deepEqual(replayPayload.messages[0].reasoning_details, [encryptedDetail]);
 });
 
 test("provider retry handles only Retry-After in-flight budget 402 errors", async () => {
-	const { retryProviderRequest } = await import(
+	const { isTransientInFlightBudgetError, retryProviderRequest } = await import(
 		`${pathToFileURL(resolve(piAiRoot, "dist", "utils", "provider-retry.js")).href}?budget=${Date.now()}`
 	);
 	const transient = Object.assign(
@@ -604,15 +673,43 @@ test("provider retry handles only Retry-After in-flight budget 402 errors", asyn
 		},
 	);
 	let transientAttempts = 0;
+	assert.equal(isTransientInFlightBudgetError(transient), true);
+	assert.equal(isTransientInFlightBudgetError(undefined), false);
+	assert.equal(isTransientInFlightBudgetError({ status: 402 }), false);
 	assert.equal(
 		await retryProviderRequest(async () => {
 			transientAttempts++;
 			if (transientAttempts === 1) throw transient;
 			return "recovered";
-		}, { maxRetries: 1 }),
+		}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
 		"recovered",
 	);
 	assert.equal(transientAttempts, 2);
+
+	let unscopedAttempts = 0;
+	await assert.rejects(
+		retryProviderRequest(async () => {
+			unscopedAttempts++;
+			throw transient;
+		}, { maxRetries: 1 }),
+		/in_flight_budget_exhausted/,
+	);
+	assert.equal(unscopedAttempts, 1);
+
+	const ordinary429 = Object.assign(new Error("rate limited"), {
+		status: 429,
+		headers: new Headers({ "retry-after": "0" }),
+	});
+	let ordinaryAttempts = 0;
+	assert.equal(
+		await retryProviderRequest(async () => {
+			ordinaryAttempts++;
+			if (ordinaryAttempts === 1) throw ordinary429;
+			return "standard retry recovered";
+		}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
+		"standard retry recovered",
+	);
+	assert.equal(ordinaryAttempts, 2);
 
 	for (const error of [
 		Object.assign(new Error("payment required"), {
@@ -623,15 +720,58 @@ test("provider retry handles only Retry-After in-flight budget 402 errors", asyn
 			status: 402,
 			headers: new Headers(),
 		}),
+		Object.assign(new Error("provider explicitly disabled retry"), {
+			status: 402,
+			headers: new Headers({ "retry-after": "120", "x-should-retry": "false" }),
+			error: { code: "in_flight_budget_exhausted" },
+		}),
 	]) {
 		let attempts = 0;
 		await assert.rejects(
 			retryProviderRequest(async () => {
 				attempts++;
 				throw error;
-			}, { maxRetries: 1 }),
+			}, { maxRetries: 1, retryOn: isTransientInFlightBudgetError }),
 			new RegExp((error as Error).message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
 		);
 		assert.equal(attempts, 1);
 	}
+});
+
+test("provider retry patch upgrades the pre-review candidate to caller-scoped policy", () => {
+	const current = readPiAiSource(piAiRoot, "dist/utils/provider-retry.js");
+	const legacyCandidate = current
+		.replace(
+			`    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        !(error.headers instanceof Headers) ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
+        return false;`,
+			`    if (error.status !== 402 || !error.headers?.get("retry-after"))
+        return false;`,
+		)
+		.replace(
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
+                throw error;`,
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                (options.retryOn ? !options.retryOn(error) : !isRetryableProviderError(error)))
+                throw error;`,
+		)
+		.replace(
+			`    if (error.status === undefined)
+        return true;
+`,
+			`    if (error.status === undefined)
+        return true;
+    if (isTransientInFlightBudgetError(error))
+        return true;
+`,
+		);
+	assert.notEqual(legacyCandidate, current);
+	assert.equal(
+		patchPiAiForwardFixSource("dist/utils/provider-retry.js", legacyCandidate),
+		current,
+	);
 });

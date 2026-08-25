@@ -4,6 +4,12 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 07:56 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Repaired the forward-fix candidate after adversarial review: stale Pi source-map directives are stripped fail-closed, provider `in_flight_budget_exhausted` retries are caller-scoped with explicit no-retry handling, non-cooperative stream iterators no longer block watchdog settlement, Gemini encrypted reasoning and thought signatures survive persistence, and tool-free compaction omits `tool_choice`.
+- Verified: focused forward-fix tests pass `20/20`; after rebuilding generated `dist`, the full suite passes `927/927`. The first full-suite attempt used stale generated code and failed 18 subprocess/runtime tests; no source defect remained after the required rebuild.
+- State: `unverified` for the dirty successor's exact commit, clean-machine proof, CI, merge, publication, and release identity. Next: commit and push the corrected candidate, then rerun the complete release ladder.
+
 ### 2026-08-25 06:40 EDT — pi-runtime-forward-fixes-0.3.41
 
 - Reproduced CI run `32834794452`'s Windows native failure: installed-runtime forward-fix verification still required `dist/utils/provider-retry.d.ts` after native dependency pruning.

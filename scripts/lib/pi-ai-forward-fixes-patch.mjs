@@ -8,10 +8,11 @@
  * - e5dde9a76bfec3c4eff764d1b6db3b60e5dd0b30 (provider-neutral tool choice)
  * - 94f6e7c9ffdb9a57fabdc39fb6b12ee54fa05ee6 (Gemini thought signatures)
  * - d8def8121bcb4d4e2cce16d12a521347559329ce (OpenAI-compatible tool-call IDs)
+ * - fe37e9f9b5fb2e7bd9ff504e678f08d115375230 (omit tool_choice without tools)
  * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all nine fixes.
+ * version that contains all ten fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -158,6 +159,23 @@ const ZAI_CHINA_ADDITIONS = Object.freeze({
 
 function countOccurrences(source, fragment) {
 	return source.split(fragment).length - 1;
+}
+
+function stripStaleSourceMapDirective(source, relativePath) {
+	const marker = "//# sourceMappingURL=";
+	const first = source.indexOf(marker);
+	if (first === -1) {
+		return source;
+	}
+	if (
+		source.indexOf(marker, first + marker.length) !== -1 ||
+		!/^\/\/# sourceMappingURL=[^\r\n]*[\r\n]*$/.test(source.slice(first))
+	) {
+		throw new Error(
+			`Unsupported Pi ${PI_AI_FORWARD_FIX_REQUIRED_VERSION} ${relativePath} source map layout`,
+		);
+	}
+	return source.slice(0, first).replace(/\r?\n$/, "");
 }
 
 function replaceRequired(source, original, replacement, label) {
@@ -330,6 +348,9 @@ function assertSourceFragments(source, relativePath, fragments) {
 }
 
 export function assertPiAiForwardFixSource(relativePath, source) {
+	if (!relativePath.endsWith(".json") && source.includes("//# sourceMappingURL=")) {
+		throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained stale source map directive`);
+	}
 	if (relativePath.includes("/providers/data/")) {
 		const catalog = parseCatalog(source, relativePath);
 		if (relativePath.endsWith("/.manifest.json")) {
@@ -398,7 +419,12 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 				"compat.supportsGoogleThoughtSignatures",
 				"isFeynmanSerializedReasoningDetail",
 				"appendFeynmanEncryptedReasoningDetail",
+				"output.reasoningDetails ??= []",
+				"const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)",
+				"if (!block.thoughtSignature ||",
+				"isFeynmanSerializedReasoningDetail(block.thoughtSignature))",
 				"extra_content: { google: { thought_signature: tc.thoughtSignature } }",
+				"if (options?.toolChoice && params.tools?.length)",
 				'model.provider === "openrouter" && /^~?google\\/gemini-3(?:[.:-]|$)/.test(model.id)',
 				'model.provider === "github-copilot" && /^gemini-3(?:[.:-]|$)/.test(model.id)',
 				"retryProviderRequest",
@@ -414,21 +440,31 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 			assertSourceFragments(source, relativePath, [
 				PI_AI_FORWARD_FIX_MARKERS.providerRetry,
 				"function isTransientInFlightBudgetError(error)",
+				"!(error instanceof Error)",
 				"error.status !== 402",
-				'error.headers?.get("retry-after")',
+				'error.headers.get("x-should-retry") === "false"',
+				'error.headers.get("retry-after")',
 				'getFeynmanStructuredErrorCode(error) === "in_flight_budget_exhausted"',
 				"retryOn",
 				"isTransientInFlightBudgetError(error)",
+				"isRetryableProviderError(error) || options.retryOn?.(error) === true",
 			]);
+			if (source.includes("if (isTransientInFlightBudgetError(error))")) {
+				throw new Error(
+					`Incomplete Pi AI forward patch ${relativePath}: leaked OpenRouter budget retries into the provider-global policy`,
+				);
+			}
 			return;
 		case "dist/utils/provider-retry.d.ts":
 			assertSourceFragments(source, relativePath, [
 				"retryOn?: (error: unknown) => boolean;",
+				"export declare function isTransientInFlightBudgetError(error: unknown): boolean;",
 			]);
 			return;
 		case "dist/types.d.ts":
 			assertSourceFragments(source, relativePath, [
 				"supportsGoogleThoughtSignatures?: boolean;",
+				"reasoningDetails?: JsonValue[];",
 			]);
 			return;
 		case "dist/api/anthropic-messages.js":
@@ -622,8 +658,95 @@ export const streamSimple`;
 function patchOpenAiCompletions(source) {
 	const relativePath = "dist/api/openai-completions.js";
 	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.openAiCompletions)) {
-		assertPiAiForwardFixSource(relativePath, source);
-		return source;
+		let upgraded = source
+			.replaceAll("output.reasoning_details", "output.reasoningDetails")
+			.replace(
+				`                            if (compat.supportsGoogleThoughtSignatures &&
+                                typeof signature === "string" &&
+                                signature.length > 0) {
+                                if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                }
+                                block.thoughtSignature = signature;
+                            }`,
+				`                            if (compat.supportsGoogleThoughtSignatures &&
+                                typeof signature === "string" &&
+                                signature.length > 0) {
+                                if (!block.thoughtSignature ||
+                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                        appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                    }
+                                    block.thoughtSignature = signature;
+                                }
+                            }`,
+			)
+			.replace(
+				`                                    else {
+                                        matchingToolCall.thoughtSignature = serializedDetail;
+                                    }`,
+				`                                    else {
+                                        if (isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
+                                            appendFeynmanEncryptedReasoningDetail(matchingToolCall.thoughtSignature);
+                                        }
+                                        matchingToolCall.thoughtSignature = serializedDetail;
+                                    }`,
+				);
+		upgraded = upgraded.replace(
+			"    if (options?.toolChoice) {\n        params.tool_choice = options.toolChoice;\n    }",
+			"    if (options?.toolChoice && params.tools?.length) {\n        params.tool_choice = options.toolChoice;\n    }",
+		);
+		if (!upgraded.includes("const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)")) {
+			upgraded = replaceRequired(
+				upgraded,
+				`                const reasoningDetails = toolCalls
+                    .filter((tc) => tc.thoughtSignature)
+                    .map((tc) => {
+                    try {
+                        return JSON.parse(tc.thoughtSignature);
+                    }
+                    catch {
+                        return null;
+                    }
+                })
+                    .filter(Boolean);
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+				`                const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)
+                    ? msg.reasoningDetails
+                    : [];
+                const reasoningDetails = [];
+                const seenReasoningDetails = new Set();
+                for (const detail of [
+                    ...preservedReasoningDetails,
+                    ...toolCalls.map((tc) => {
+                        if (!tc.thoughtSignature)
+                            return null;
+                        try {
+                            return JSON.parse(tc.thoughtSignature);
+                        }
+                        catch {
+                            return null;
+                        }
+                    }),
+                ]) {
+                    if (!isEncryptedReasoningDetail(detail))
+                        continue;
+                    const serializedDetail = JSON.stringify(detail);
+                    if (seenReasoningDetails.has(serializedDetail))
+                        continue;
+                    seenReasoningDetails.add(serializedDetail);
+                    reasoningDetails.push(detail);
+                }
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+				"Gemini encrypted-reasoning candidate migration",
+			);
+		}
+		assertPiAiForwardFixSource(relativePath, upgraded);
+		return upgraded;
 	}
 	const originalNormalize = `    const normalizeToolCallId = (id) => {
         // Handle pipe-separated IDs from OpenAI Responses API
@@ -710,9 +833,9 @@ export const stream = (model, context, options) => {`,
                     const detail = JSON.parse(serializedDetail);
                     if (!isEncryptedReasoningDetail(detail))
                         return;
-                    output.reasoning_details ??= [];
-                    if (!output.reasoning_details.some((existing) => JSON.stringify(existing) === serializedDetail)) {
-                        output.reasoning_details.push(detail);
+                    output.reasoningDetails ??= [];
+                    if (!output.reasoningDetails.some((existing) => JSON.stringify(existing) === serializedDetail)) {
+                        output.reasoningDetails.push(detail);
                     }
                 }
                 catch {
@@ -730,10 +853,13 @@ export const stream = (model, context, options) => {`,
                             if (compat.supportsGoogleThoughtSignatures &&
                                 typeof signature === "string" &&
                                 signature.length > 0) {
-                                if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
-                                    appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                if (!block.thoughtSignature ||
+                                    isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                    if (isFeynmanSerializedReasoningDetail(block.thoughtSignature)) {
+                                        appendFeynmanEncryptedReasoningDetail(block.thoughtSignature);
+                                    }
+                                    block.thoughtSignature = signature;
                                 }
-                                block.thoughtSignature = signature;
                             }
                             const name = toolCall.function?.name ?? toolCall.custom?.name;`,
 		"Gemini thought-signature capture",
@@ -756,6 +882,59 @@ export const stream = (model, context, options) => {`,
                             : {}),
                     };`,
 		"Gemini thought-signature replay",
+	);
+	patched = replaceRequired(
+		patched,
+		`                const reasoningDetails = toolCalls
+                    .filter((tc) => tc.thoughtSignature)
+                    .map((tc) => {
+                    try {
+                        return JSON.parse(tc.thoughtSignature);
+                    }
+                    catch {
+                        return null;
+                    }
+                })
+                    .filter(Boolean);
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+		`                const preservedReasoningDetails = Array.isArray(msg.reasoningDetails)
+                    ? msg.reasoningDetails
+                    : [];
+                const reasoningDetails = [];
+                const seenReasoningDetails = new Set();
+                for (const detail of [
+                    ...preservedReasoningDetails,
+                    ...toolCalls.map((tc) => {
+                        if (!tc.thoughtSignature)
+                            return null;
+                        try {
+                            return JSON.parse(tc.thoughtSignature);
+                        }
+                        catch {
+                            return null;
+                        }
+                    }),
+                ]) {
+                    if (!isEncryptedReasoningDetail(detail))
+                        continue;
+                    const serializedDetail = JSON.stringify(detail);
+                    if (seenReasoningDetails.has(serializedDetail))
+                        continue;
+                    seenReasoningDetails.add(serializedDetail);
+                    reasoningDetails.push(detail);
+                }
+                if (reasoningDetails.length > 0) {
+                    assistantMsg.reasoning_details = reasoningDetails;
+                }`,
+		"Gemini encrypted-reasoning replay",
+	);
+	patched = replaceRequired(
+		patched,
+		"    if (options?.toolChoice) {\n        params.tool_choice = options.toolChoice;\n    }",
+		"    if (options?.toolChoice && params.tools?.length) {\n        params.tool_choice = options.toolChoice;\n    }",
+		"OpenAI-compatible tool choice without tools",
 	);
 	patched = replaceRequired(
 		patched,
@@ -797,6 +976,9 @@ export const stream = (model, context, options) => {`,
                                         appendFeynmanEncryptedReasoningDetail(serializedDetail);
                                     }
                                     else {
+                                        if (isFeynmanSerializedReasoningDetail(matchingToolCall.thoughtSignature)) {
+                                            appendFeynmanEncryptedReasoningDetail(matchingToolCall.thoughtSignature);
+                                        }
                                         matchingToolCall.thoughtSignature = serializedDetail;
                                     }
                                 }`,
@@ -827,8 +1009,43 @@ export const stream = (model, context, options) => {`,
 function patchProviderRetry(source) {
 	const relativePath = "dist/utils/provider-retry.js";
 	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.providerRetry)) {
-		assertPiAiForwardFixSource(relativePath, source);
-		return source;
+		let upgraded = source;
+		upgraded = upgraded.replace(
+			`    if (error.status !== 402 || !error.headers?.get("retry-after"))
+        return false;`,
+			`    if (error.status !== 402 ||
+        error.headers?.get("x-should-retry") === "false" ||
+        !error.headers?.get("retry-after"))
+        return false;`,
+		);
+		upgraded = upgraded.replace(
+			`    if (error.status !== 402 ||
+        error.headers?.get("x-should-retry") === "false" ||
+        !error.headers?.get("retry-after"))
+        return false;`,
+			`    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        typeof error.headers?.get !== "function" ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
+        return false;`,
+		);
+		upgraded = upgraded.replace(
+			`    if (isTransientInFlightBudgetError(error))
+        return true;
+`,
+			"",
+		);
+		upgraded = upgraded.replace(
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                (options.retryOn ? !options.retryOn(error) : !isRetryableProviderError(error)))
+                throw error;`,
+			`            if (retriesRemaining <= 0 || !isProviderError(error) ||
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
+                throw error;`,
+		);
+		assertPiAiForwardFixSource(relativePath, upgraded);
+		return upgraded;
 	}
 	const helper = `// ${PI_AI_FORWARD_FIX_MARKERS.providerRetry}
 function getFeynmanStructuredErrorCode(error) {
@@ -842,7 +1059,11 @@ function getFeynmanStructuredErrorCode(error) {
     return undefined;
 }
 export function isTransientInFlightBudgetError(error) {
-    if (error.status !== 402 || !error.headers?.get("retry-after"))
+    if (!(error instanceof Error) ||
+        error.status !== 402 ||
+        typeof error.headers?.get !== "function" ||
+        error.headers.get("x-should-retry") === "false" ||
+        !error.headers.get("retry-after"))
         return false;
     return getFeynmanStructuredErrorCode(error) === "in_flight_budget_exhausted";
 }
@@ -855,22 +1076,10 @@ export function isTransientInFlightBudgetError(error) {
 	);
 	patched = replaceRequired(
 		patched,
-		`    if (error.status === undefined)
-        return true;
-    return (error.status === 408 ||`,
-		`    if (error.status === undefined)
-        return true;
-    if (isTransientInFlightBudgetError(error))
-        return true;
-    return (error.status === 408 ||`,
-		"transient in-flight budget retry predicate",
-	);
-	patched = replaceRequired(
-		patched,
 		`            if (retriesRemaining <= 0 || !isProviderError(error) || !isRetryableProviderError(error))
                 throw error;`,
 		`            if (retriesRemaining <= 0 || !isProviderError(error) ||
-                (options.retryOn ? !options.retryOn(error) : !isRetryableProviderError(error)))
+                !(isRetryableProviderError(error) || options.retryOn?.(error) === true))
                 throw error;`,
 		"scoped retry predicate",
 	);
@@ -879,23 +1088,37 @@ export function isTransientInFlightBudgetError(error) {
 }
 
 function patchProviderRetryDeclaration(source) {
-	if (source.includes("retryOn?: (error: unknown) => boolean;")) {
-		return source;
+	let patched = source;
+	if (!patched.includes("retryOn?: (error: unknown) => boolean;")) {
+		patched = patched.replace(
+			"    signal?: AbortSignal;\n",
+			"    signal?: AbortSignal;\n    retryOn?: (error: unknown) => boolean;\n",
+		);
 	}
-	return source.replace(
-		"    signal?: AbortSignal;\n",
-		"    signal?: AbortSignal;\n    retryOn?: (error: unknown) => boolean;\n",
-	);
+	if (!patched.includes("export declare function isTransientInFlightBudgetError(error: unknown): boolean;")) {
+		patched = patched.replace(
+			"/**\n * Reproduce the retry behavior used by the OpenAI and Anthropic SDKs",
+			"export declare function isTransientInFlightBudgetError(error: unknown): boolean;\n/**\n * Reproduce the retry behavior used by the OpenAI and Anthropic SDKs",
+		);
+	}
+	return patched;
 }
 
 function patchPiAiTypesDeclaration(source) {
-	if (source.includes("supportsGoogleThoughtSignatures?: boolean;")) {
-		return source;
+	let patched = source;
+	if (!patched.includes("supportsGoogleThoughtSignatures?: boolean;")) {
+		patched = patched.replace(
+			"    supportsLongCacheRetention?: boolean;\n",
+			"    supportsLongCacheRetention?: boolean;\n    /** Whether OpenAI-compatible Gemini 3 tool calls require Google thought-signature replay. */\n    supportsGoogleThoughtSignatures?: boolean;\n",
+		);
 	}
-	return source.replace(
-		"    supportsLongCacheRetention?: boolean;\n",
-		"    supportsLongCacheRetention?: boolean;\n    /** Whether OpenAI-compatible Gemini 3 tool calls require Google thought-signature replay. */\n    supportsGoogleThoughtSignatures?: boolean;\n",
-	);
+	if (!patched.includes("reasoningDetails?: JsonValue[];")) {
+		patched = patched.replace(
+			"    rawStopReason?: string;\n",
+			"    rawStopReason?: string;\n    /** Provider-encrypted reasoning metadata retained alongside Gemini tool signatures. */\n    reasoningDetails?: JsonValue[];\n",
+		);
+	}
+	return patched;
 }
 
 export function patchPiAiForwardFixSource(relativePath, source) {
@@ -905,15 +1128,17 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 		}
 		return patchModelCatalog(relativePath, source);
 	}
-	let patched = relativePath in TOOL_CHOICE_BASE_OPTIONS
-		? patchProviderNeutralToolChoice(relativePath, source)
-		: source;
+	let patched = stripStaleSourceMapDirective(source, relativePath);
+	patched = relativePath in TOOL_CHOICE_BASE_OPTIONS
+		? patchProviderNeutralToolChoice(relativePath, patched)
+		: patched;
 	switch (relativePath) {
 		case "dist/api/google-generative-ai.js":
 			patched = patchGoogleGenerativeAi(patched);
 			break;
 		case "dist/api/google-shared.js":
-			return patchGoogleShared(patched);
+			patched = patchGoogleShared(patched);
+			break;
 		case "dist/api/google-vertex.js":
 			patched = patchGoogleVertex(patched);
 			break;
@@ -921,9 +1146,11 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 			patched = patchBedrock(patched);
 			break;
 		case "dist/api/openai-completions.js":
-			return patchOpenAiCompletions(patched);
+			patched = patchOpenAiCompletions(patched);
+			break;
 		case "dist/utils/provider-retry.js":
-			return patchProviderRetry(patched);
+			patched = patchProviderRetry(patched);
+			break;
 		case "dist/utils/provider-retry.d.ts":
 			patched = patchProviderRetryDeclaration(patched);
 			break;

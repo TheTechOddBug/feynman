@@ -30,6 +30,7 @@ test("coding-agent forward fixes are complete, fail-closed, and idempotent", () 
 			assertPiCodingAgentForwardFixSource(relativePath, source, relativePath)
 		);
 		assert.equal(patchPiCodingAgentForwardFixSource(relativePath, source), source);
+		assert.doesNotMatch(source, /sourceMappingURL/);
 	}
 
 	const toolExecution = readFileSync(

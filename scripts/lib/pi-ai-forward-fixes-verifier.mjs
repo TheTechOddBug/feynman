@@ -229,6 +229,154 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 		assert.deepEqual(providers.getBuiltinModel("baseten", id).input, ["text", "image"]);
 	}
 
+	const openAiCompletions = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-completions.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	const openAiModel = {
+		id: "proxy-model",
+		name: "proxy-model",
+		api: "openai-completions",
+		provider: "custom-gateway",
+		baseUrl: "https://gateway.example/v1",
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128_000,
+		maxTokens: 4096,
+	};
+	let compactionPayload;
+	const compactionResult = await openAiCompletions.streamSimple(
+		openAiModel,
+		{ messages: [{ role: "user", content: "summarize", timestamp: 0 }] },
+		{
+			apiKey: "test",
+			toolChoice: "none",
+			onPayload: (payload) => {
+				compactionPayload = payload;
+				throw new Error("installed compaction payload captured");
+			},
+		},
+	).result();
+	assert.match(compactionResult.errorMessage ?? "", /installed compaction payload captured/);
+	assert.ok(compactionPayload);
+	assert.equal("tool_choice" in compactionPayload, false);
+	assert.equal("tools" in compactionPayload, false);
+
+	const providerRetry = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "utils", "provider-retry.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	const rateLimit = Object.assign(new Error("rate limited"), {
+		status: 429,
+		headers: new Headers({ "retry-after": "0" }),
+	});
+	let retryAttempts = 0;
+	assert.equal(
+		await providerRetry.retryProviderRequest(
+			async () => {
+				retryAttempts++;
+				if (retryAttempts === 1) throw rateLimit;
+				return "recovered";
+			},
+			{ maxRetries: 1, retryOn: providerRetry.isTransientInFlightBudgetError },
+		),
+		"recovered",
+	);
+	assert.equal(retryAttempts, 2);
+
+	let geminiServer;
+	try {
+		const firstSignature = "installed-first-signature";
+		const laterSignature = "installed-later-signature";
+		const encryptedDetail = {
+			type: "reasoning.encrypted",
+			id: "call_1",
+			data: "installed-encrypted-reasoning",
+		};
+		geminiServer = createServer((_request, response) => {
+			response.writeHead(200, { "content-type": "text/event-stream" });
+			for (const delta of [
+				{ reasoning_details: [encryptedDetail] },
+				{
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "{\"path\":\"README.md\"}" },
+						extra_content: { google: { thought_signature: firstSignature } },
+					}],
+				},
+				{
+					tool_calls: [{
+						index: 0,
+						id: "call_1",
+						type: "function",
+						function: { name: "read", arguments: "" },
+						extra_content: { google: { thought_signature: laterSignature } },
+					}],
+				},
+			]) {
+				response.write(`data: ${JSON.stringify({
+					id: "chatcmpl-installed-signature",
+					model: "google/gemini-3-test",
+					choices: [{ index: 0, delta, finish_reason: null }],
+				})}\n\n`);
+			}
+			response.write(`data: ${JSON.stringify({
+				id: "chatcmpl-installed-signature",
+				model: "google/gemini-3-test",
+				choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+			})}\n\n`);
+			response.end("data: [DONE]\n\n");
+		});
+		await new Promise((resolveListen) => geminiServer.listen(0, "127.0.0.1", resolveListen));
+		const address = geminiServer.address();
+		assert.ok(address && typeof address !== "string");
+		const geminiModel = {
+			...openAiModel,
+			id: "google/gemini-3-test",
+			provider: "openrouter",
+			baseUrl: `http://127.0.0.1:${address.port}`,
+		};
+		const geminiResult = await openAiCompletions.streamSimple(
+			geminiModel,
+			{
+				messages: [{ role: "user", content: "read", timestamp: 0 }],
+				tools: [{
+					name: "read",
+					description: "Read",
+					parameters: { type: "object", properties: { path: { type: "string" } } },
+				}],
+			},
+			{ apiKey: "test" },
+		).result();
+		const toolCall = geminiResult.content.find((block) => block.type === "toolCall");
+		assert.equal(toolCall?.thoughtSignature, firstSignature);
+		assert.deepEqual(geminiResult.reasoningDetails, [encryptedDetail]);
+
+		let replayPayload;
+		await openAiCompletions.streamSimple(
+			geminiModel,
+			{ messages: [JSON.parse(JSON.stringify(geminiResult))] },
+			{
+				apiKey: "test",
+				onPayload: (payload) => {
+					replayPayload = payload;
+					throw new Error("installed Gemini replay captured");
+				},
+			},
+		).result();
+		assert.deepEqual(replayPayload.messages[0].reasoning_details, [encryptedDetail]);
+		assert.deepEqual(replayPayload.messages[0].tool_calls[0].extra_content, {
+			google: { thought_signature: firstSignature },
+		});
+	} finally {
+		if (geminiServer) {
+			await new Promise((resolveClose, rejectClose) => {
+				geminiServer.close((error) => (error ? rejectClose(error) : resolveClose()));
+			});
+		}
+	}
+
 	let server;
 	try {
 		const modelId = "us.anthropic.claude-haiku-4-5-20251001-v1:0";

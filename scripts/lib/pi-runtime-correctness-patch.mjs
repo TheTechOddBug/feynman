@@ -9,7 +9,12 @@
  * eagerly persists finalized parallel tool results while restoring them in
  * tool-call order, includes upstream commits d5278ea and 086c32e, and clears
  * delivered image-only queue entries as in commit b67b3db. It also defers
- * triggerTurn-false custom messages as in commit 7b1dcfd.
+ * triggerTurn-false custom messages as in commits 7b1dcfd and 240eb29c.
+ *
+ * The coding-agent forward fixes port commits 8c16a558 (bounded large-tool
+ * rendering) and 6d05adb (quota-free GitHub release lookup). Remove each only
+ * after the supported released Pi version contains its corresponding commit
+ * and the executable regressions below continue to pass without the patch.
  */
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
@@ -40,6 +45,23 @@ export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	imageQueue: "Feynman Pi 0.84.2 correctness patch: image-only queue delivery #8581",
 	turnEndMessages: "Feynman Pi 0.84.2 correctness patch: defer custom messages #8166",
 });
+
+function stripStaleSourceMapDirective(source, surface) {
+	const marker = "//# sourceMappingURL=";
+	const first = source.indexOf(marker);
+	if (first === -1) {
+		return source;
+	}
+	if (
+		source.indexOf(marker, first + marker.length) !== -1 ||
+		!/^\/\/# sourceMappingURL=[^\r\n]*[\r\n]*$/.test(source.slice(first))
+	) {
+		throw new Error(
+			`Unsupported Pi ${PI_RUNTIME_CORRECTNESS_REQUIRED_VERSION} ${surface} source map layout`,
+		);
+	}
+	return source.slice(0, first).replace(/\r?\n$/, "");
+}
 export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	agentSession: Object.freeze([
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.agentSession,
@@ -165,6 +187,9 @@ export function assertPiRuntimeCorrectnessVersion(version, surface) {
 }
 
 export function assertPiCodingAgentForwardFixSource(relativePath, source, surface = relativePath) {
+	if (source.includes("//# sourceMappingURL=")) {
+		throw new Error(`Incomplete Pi coding-agent forward patch ${surface}: retained stale source map directive`);
+	}
 	switch (relativePath) {
 		case "dist/modes/interactive/components/tool-execution.js":
 			for (const fragment of [
@@ -214,6 +239,7 @@ export function assertPiCodingAgentForwardFixSource(relativePath, source, surfac
 }
 
 export function patchPiCodingAgentForwardFixSource(relativePath, source) {
+	source = stripStaleSourceMapDirective(source, relativePath);
 	if (relativePath === "dist/modes/interactive/components/tool-execution.js") {
 		if (source.includes(PI_CODING_AGENT_FORWARD_FIX_MARKERS.largeToolRender)) {
 			assertPiCodingAgentForwardFixSource(relativePath, source);
@@ -351,6 +377,9 @@ export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = 
 	const ordered = PI_RUNTIME_CORRECTNESS_ORDERED_FRAGMENTS[target];
 	if (!required || !forbidden || !ordered) {
 		throw new Error(`Unknown Pi runtime correctness target: ${target}`);
+	}
+	if (source.includes("//# sourceMappingURL=")) {
+		throw new Error(`Incomplete Pi runtime correctness patch ${surface}: retained stale source map directive`);
 	}
 	for (const fragment of required) {
 		if (!source.includes(fragment)) {
@@ -671,6 +700,7 @@ const PATCHED_MESSAGE_PERSISTENCE = `            else if (event.message.role ===
             }`;
 
 export function patchPiAgentSessionSource(source) {
+	source = stripStaleSourceMapDirective(source, "agent-session");
 	source = patchPiImageQueueDeliverySource(source);
 	source = patchPiDeferredTurnEndMessagesSource(source);
 	if (source.includes(AGENT_SESSION_MARKER)) {
@@ -803,6 +833,7 @@ const SESSION_MANAGER_REPLACE_MESSAGE = `    /**
 `;
 
 export function patchPiSessionManagerSource(source) {
+	source = stripStaleSourceMapDirective(source, "session-manager");
 	if (source.includes(SESSION_MANAGER_MARKER)) {
 		assertPiRuntimeCorrectnessPatchSource(source, "sessionManager");
 		return source;
@@ -954,6 +985,7 @@ const PATCHED_TRANSFORM_SECOND_PASS = `    // ${TRANSFORM_MESSAGES_MARKER}
 `;
 
 export function patchPiTransformMessagesSource(source) {
+	source = stripStaleSourceMapDirective(source, "transform-messages");
 	if (source.includes(TRANSFORM_MESSAGES_MARKER)) {
 		assertPiRuntimeCorrectnessPatchSource(source, "transformMessages");
 		return source;
@@ -1018,6 +1050,7 @@ const PATCHED_COPILOT_POLICY_UPDATES = `    for (const model of Object.values(GI
     }`;
 
 export function patchPiGithubCopilotDeviceCodeSource(source) {
+	source = stripStaleSourceMapDirective(source, "github-copilot device-code");
 	if (source.includes(GITHUB_COPILOT_DEVICE_CODE_MARKER)) {
 		assertPiRuntimeCorrectnessPatchSource(
 			source,
@@ -1042,6 +1075,7 @@ export function abortableSleep(ms, signal, cancelMessage) {`,
 }
 
 export function patchPiGithubCopilotOAuthSource(source) {
+	source = stripStaleSourceMapDirective(source, "github-copilot OAuth");
 	if (source.includes(GITHUB_COPILOT_OAUTH_MARKER)) {
 		assertPiRuntimeCorrectnessPatchSource(
 			source,

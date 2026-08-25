@@ -4,6 +4,11 @@
  * The provider-stream watchdog is disabled by default because local and private
  * models can legitimately remain silent during long prefills. Users can opt in
  * with FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS. Zero disables the watchdog.
+ *
+ * This deliberately ports only the research-session continuity fix from issue
+ * #8331 / closed PR #8593, not its enabled default or adjacent coding-agent UI.
+ * Removal condition: adopt a released Pi watchdog that is safe for silent local
+ * prefills and settles without awaiting a non-cooperative provider iterator.
  */
 
 export const PI_AGENT_CORE_PATCH_MARKERS = Object.freeze({
@@ -186,7 +191,10 @@ const PATCHED_STREAM_LOOP = `    let partialMessage = null;
             response.end(finalMessage);
             watchdogController.abort();
             try {
-                await iterator.return?.();
+                // Provider iterators can ignore abort and leave return() pending behind
+                // the same silent network read. Cleanup is best-effort; the watchdog
+                // must still settle the Pi turn immediately.
+                Promise.resolve(iterator.return?.()).catch(() => {});
             }
             catch {
                 // Some provider iterators do not implement cooperative return.
@@ -205,6 +213,21 @@ const PATCHED_STREAM_LOOP = `    let partialMessage = null;
             break;
         const event = settled.value;`;
 
+function stripStaleSourceMapDirective(source) {
+	const marker = "//# sourceMappingURL=";
+	const first = source.indexOf(marker);
+	if (first === -1) {
+		return source;
+	}
+	if (
+		source.indexOf(marker, first + marker.length) !== -1 ||
+		!/^\/\/# sourceMappingURL=[^\r\n]*[\r\n]*$/.test(source.slice(first))
+	) {
+		throw new Error("Unsupported Pi 0.84.2 AgentCore source map layout");
+	}
+	return source.slice(0, first).replace(/\r?\n$/, "");
+}
+
 export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 	for (const fragment of [
 		PI_AGENT_CORE_PATCH_MARKERS.toolAliases,
@@ -220,7 +243,7 @@ export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 		'settled === "feynman-idle"',
 		"response.end(finalMessage)",
 		"watchdogController.abort()",
-		"await iterator.return?.()",
+		"Promise.resolve(iterator.return?.()).catch(() => {})",
 		"Provider stream event timeout after",
 		"sanitizeFeynmanPartialMessage(partialMessage)",
 	]) {
@@ -230,6 +253,9 @@ export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 	}
 	if (source.includes("for await (const event of response)")) {
 		throw new Error(`Incomplete ${surface} patch: retained unbounded provider stream loop`);
+	}
+	if (source.includes("//# sourceMappingURL=")) {
+		throw new Error(`Incomplete ${surface} patch: retained stale source map directive`);
 	}
 }
 
@@ -263,6 +289,26 @@ function patchToolAliases(source) {
 
 function patchStreamWatchdog(source) {
 	if (source.includes(PI_AGENT_CORE_PATCH_MARKERS.streamWatchdog)) {
+		const legacyReturn = `            try {
+                await iterator.return?.();
+            }
+            catch {
+                // Some provider iterators do not implement cooperative return.
+            }`;
+		if (source.includes(legacyReturn)) {
+			return source.replace(
+				legacyReturn,
+				`            try {
+                // Provider iterators can ignore abort and leave return() pending behind
+                // the same silent network read. Cleanup is best-effort; the watchdog
+                // must still settle the Pi turn immediately.
+                Promise.resolve(iterator.return?.()).catch(() => {});
+            }
+            catch {
+                // Some provider iterators do not implement cooperative return.
+            }`,
+			);
+		}
 		return source;
 	}
 	let patched = source.replace(
@@ -307,7 +353,8 @@ function patchStreamWatchdog(source) {
 }
 
 export function patchPiAgentCoreSource(source) {
-	let patched = patchToolAliases(source);
+	let patched = stripStaleSourceMapDirective(source);
+	patched = patchToolAliases(patched);
 	patched = patchStreamWatchdog(patched);
 	assertPiAgentCorePatchSource(patched);
 	return patched;

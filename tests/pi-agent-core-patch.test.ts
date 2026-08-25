@@ -94,6 +94,26 @@ test("patchPiAgentCoreSource is idempotent", () => {
 	const once = patchPiAgentCoreSource(SOURCE);
 	const twice = patchPiAgentCoreSource(once);
 	assert.equal(twice, once);
+
+	const legacyCandidate = once.replace(
+		`            try {
+                // Provider iterators can ignore abort and leave return() pending behind
+                // the same silent network read. Cleanup is best-effort; the watchdog
+                // must still settle the Pi turn immediately.
+                Promise.resolve(iterator.return?.()).catch(() => {});
+            }
+            catch {
+                // Some provider iterators do not implement cooperative return.
+            }`,
+		`            try {
+                await iterator.return?.();
+            }
+            catch {
+                // Some provider iterators do not implement cooperative return.
+            }`,
+	);
+	assert.notEqual(legacyCandidate, once);
+	assert.equal(patchPiAgentCoreSource(legacyCandidate), once);
 });
 
 test("stream watchdog is default-disabled and fails closed on invalid policy", () => {
@@ -114,6 +134,7 @@ test("stream watchdog is default-disabled and fails closed on invalid policy", (
 	assert.match(source, /Number\.isInteger\(parsed\)/);
 	assert.match(source, /FEYNMAN_MAX_STREAM_EVENT_IDLE_TIMEOUT_MS/);
 	assert.doesNotMatch(source, /isFeynmanLocalStreamModel/);
+	assert.doesNotMatch(source, /sourceMappingURL/);
 });
 
 test("explicit stream watchdog aborts the provider, settles result, and is retryable", async (t) => {
@@ -179,6 +200,77 @@ test("explicit stream watchdog aborts the provider, settles result, and is retry
 	assert.equal(providerAbortCount, 1);
 	assert.equal(events.filter((event: any) => event.type === "message_end").length, 2);
 	t.diagnostic("silent provider stream settled through the 20ms test override");
+});
+
+test("stream watchdog does not wait for a non-cooperative iterator return", async (t) => {
+	const originalTimeout = process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS;
+	process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS = "20";
+	t.after(() => {
+		if (originalTimeout === undefined) {
+			delete process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS;
+		} else {
+			process.env.FEYNMAN_PI_STREAM_EVENT_IDLE_TIMEOUT_MS = originalTimeout;
+		}
+	});
+
+	const { agentLoop } = await import("@earendil-works/pi-agent-core");
+	const never = new Promise<never>(() => {});
+	let settleProviderResult: ((message: unknown) => void) | undefined;
+	const providerResult = new Promise<unknown>((resolveResult) => {
+		settleProviderResult = resolveResult;
+	});
+	let returnCalled = false;
+	const providerStream = {
+		end(message: unknown) {
+			settleProviderResult?.(message);
+		},
+		result() {
+			return providerResult;
+		},
+		[Symbol.asyncIterator]() {
+			return {
+				next: () => never,
+				return: () => {
+					returnCalled = true;
+					return never;
+				},
+			};
+		},
+	};
+	const model = {
+		id: "non-cooperative-stream",
+		name: "non-cooperative-stream",
+		api: "openai-completions" as const,
+		provider: "remote-test",
+		baseUrl: "https://provider.example/v1",
+		reasoning: false,
+		input: ["text" as const],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1000,
+		maxTokens: 100,
+	};
+	const stream = agentLoop(
+		[{ role: "user", content: "hello", timestamp: Date.now() }],
+		{ systemPrompt: "", messages: [], tools: [] },
+		{ model, convertToLlm: (messages: unknown[]) => messages } as never,
+		undefined,
+		(() => providerStream) as never,
+	);
+	const completion = (async () => {
+		for await (const _event of stream) {
+			// Drain the real agent loop.
+		}
+		return stream.result();
+	})();
+	const outcome = await Promise.race([
+		completion.then(() => "settled"),
+		new Promise<string>((resolveTimeout) =>
+			setTimeout(() => resolveTimeout("timed-out"), 250)
+		),
+	]);
+
+	assert.equal(outcome, "settled");
+	assert.equal(returnCalled, true);
 });
 
 test("user abort settles immediately even when the stream watchdog is disabled", async () => {
