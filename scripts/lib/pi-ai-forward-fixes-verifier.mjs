@@ -123,7 +123,11 @@ export function assertPiAiForwardFixArchive(readEntry) {
 	assert.equal(nestedManifest.version, PI_AI_FORWARD_FIX_REQUIRED_VERSION);
 }
 
-export async function verifyRuntimeForwardFixBehavior(packageRoot) {
+export function resolvePiAiForwardFixVerificationTargets({ prunedNative = false } = {}) {
+	return prunedNative ? PI_AI_FORWARD_FIX_RUNTIME_TARGETS : PI_AI_FORWARD_FIX_TARGETS;
+}
+
+export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNative = false } = {}) {
 	assertPiSubagentPatchedSources(
 		(relativePath) => readFileSync(
 			resolve(packageRoot, ".feynman", "npm", "node_modules", "pi-subagents", ...relativePath.split("/")),
@@ -149,6 +153,7 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot) {
 				"utf8",
 			),
 		"installed",
+		resolvePiAiForwardFixVerificationTargets({ prunedNative }),
 	);
 
 	const googleShared = await import(

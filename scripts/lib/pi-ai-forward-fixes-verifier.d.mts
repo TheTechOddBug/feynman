@@ -11,4 +11,10 @@ export declare function assertPiAiForwardFixPackageTree(
 export declare function assertPiAiForwardFixArchive(
 	readEntry: (relativePath: string) => string,
 ): void;
-export declare function verifyRuntimeForwardFixBehavior(packageRoot: string): Promise<void>;
+export declare function resolvePiAiForwardFixVerificationTargets(
+	options?: Readonly<{ prunedNative?: boolean }>,
+): readonly string[];
+export declare function verifyRuntimeForwardFixBehavior(
+	packageRoot: string,
+	options?: Readonly<{ prunedNative?: boolean }>,
+): Promise<void>;

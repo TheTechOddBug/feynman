@@ -9,9 +9,13 @@ import {
 	assertPiAiForwardFixSource,
 	PI_AI_FORWARD_FIX_MARKERS,
 	PI_AI_FORWARD_FIX_TARGETS,
+	PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
 	patchPiAiForwardFixSource,
 } from "../scripts/lib/pi-ai-forward-fixes-patch.mjs";
-import { assertPiAiForwardFixPackageTree } from "../scripts/lib/pi-ai-forward-fixes-verifier.mjs";
+import {
+	assertPiAiForwardFixPackageTree,
+	resolvePiAiForwardFixVerificationTargets,
+} from "../scripts/lib/pi-ai-forward-fixes-verifier.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
 
 const appRoot = process.cwd();
@@ -132,6 +136,25 @@ test("pruned native Pi AI verification does not require declaration files", () =
 	assert.throws(
 		() => assertPiAiForwardFixPackageTree(appRoot, readText),
 		/bundled root Pi AI dist\/utils\/provider-retry\.d\.ts is missing/,
+	);
+});
+
+test("installed Pi AI verification selects executable targets only for native bundles", () => {
+	assert.deepEqual(
+		resolvePiAiForwardFixVerificationTargets(),
+		PI_AI_FORWARD_FIX_TARGETS,
+	);
+	assert.deepEqual(
+		resolvePiAiForwardFixVerificationTargets({ prunedNative: true }),
+		PI_AI_FORWARD_FIX_RUNTIME_TARGETS,
+	);
+	const installedVerifierSource = readFileSync(
+		resolve(appRoot, "scripts", "verify-installed-runtime.mjs"),
+		"utf8",
+	);
+	assert.match(
+		installedVerifierSource,
+		/verifyRuntimeForwardFixBehavior\(packageRoot,\s*\{\s*prunedNative:\s*isNativeBundlePackageRoot\(packageRoot\)/,
 	);
 });
 

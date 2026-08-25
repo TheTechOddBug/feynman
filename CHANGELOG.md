@@ -4,6 +4,12 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 06:40 EDT — pi-runtime-forward-fixes-0.3.41
+
+- Reproduced CI run `32834794452`'s Windows native failure: installed-runtime forward-fix verification still required `dist/utils/provider-retry.d.ts` after native dependency pruning.
+- Changed: `verifyRuntimeForwardFixBehavior` now accepts explicit pruned-native targets; the installed verifier selects that mode only for the bundled native app root. Added declaration coverage and a source-level wiring regression.
+- Verified: focused forward-fix tests pass `10/10`; full `npm test` passes `924/924`; root typecheck/build/architecture, website lint/typecheck, disposable website build (`34` pages), root/site production audits, artifact verification, and `git diff --check` pass. State: `unverified` for exact commit, clean-machine proof, CI, merge, publication, and release identity. Next: commit and push this repair, then rerun the full release ladder.
+
 ### 2026-08-25 04:25 EDT — pi-runtime-forward-fixes-0.3.41
 
 - Objective: Forward only Pi fixes that improve research-session continuity, provider replay, runtime reliability, or package/runtime integrity; reject freshness-only and adjacent workflow changes.
