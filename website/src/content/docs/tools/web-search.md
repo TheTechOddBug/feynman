@@ -53,7 +53,6 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "perplexityApiKey": "pplx-...",
   "tinyfishApiKey": "sk-tinyfish-...",
   "jinaApiKey": "jina_...",
-  "geminiApiKey": "AIza...",
   "geminiAuth": "adc",
   "geminiProject": "research-project",
   "geminiLocation": "us-central1",
@@ -103,13 +102,13 @@ Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust aut
 
 Set `firecrawlBaseUrl` or `FIRECRAWL_BASE_URL` for self-hosted Firecrawl. The configured API may use `localhost`, `127.0.0.0/8`, or `::1`. Loopback redirects must stay on that configured API origin. Submitted fetch and search targets still reject loopback addresses.
 
-Set top-level `proxy`, or pass the `proxy` parameter to `web_search`, `source_check`, or `fetch_content`, to route that research call through an explicit HTTP(S) proxy. The same per-call proxy is passed to GitHub CLI requests. `localhost` (including a trailing dot and subdomains), IPv4 `127.0.0.0/8`, `::1`, IPv4-mapped loopback, and matching `NO_PROXY` domains bypass the proxy. A port-qualified `NO_PROXY` entry applies only to that port, and an empty per-call value forces direct access.
+Set top-level `proxy`, or pass the `proxy` parameter to `web_search`, `source_check`, or `fetch_content`, to route that research call through an explicit HTTP(S) proxy. The same per-call proxy decision is passed to GitHub CLI and repository-clone subprocesses. Proxy credentials, request headers, and target URLs are sent to curl through stdin rather than process arguments. `localhost` (including a trailing dot and subdomains), IPv4 `127.0.0.0/8`, `::1`, IPv4-mapped loopback, and matching `NO_PROXY` domains bypass the proxy. A port-qualified `NO_PROXY` entry applies only to that port, and an empty per-call value forces direct access.
 
 To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint. `openaiSearchProviders` sets the ordered Pi provider IDs considered for credentials and models; it defaults to `["openai-codex", "openai"]`.
 
 Gemini Web browser-cookie access is disabled by default. To opt in, set `"allowBrowserCookies": true` and optionally choose a supported `browserCookies.browser` plus profile directory name; arbitrary profile paths are rejected. The older `"geminiBrowser": true` alias remains accepted during migration. On macOS, browser access can trigger a Keychain prompt. On Windows, the opt-in path can read Chrome or Edge `v10` cookies through current-user DPAPI. Chromium `v20` app-bound cookies are unsupported and fail closed.
 
-For Vertex-backed Gemini generate-content calls, set `"geminiAuth": "adc"` with `geminiProject` and `geminiLocation`, then provide Google Application Default Credentials through the standard gcloud file (`$HOME/.config/gcloud/application_default_credentials.json` on macOS/Linux or `%APPDATA%\gcloud\application_default_credentials.json` on Windows) or `GOOGLE_APPLICATION_CREDENTIALS`. YouTube and local video analysis still require `GEMINI_API_KEY`.
+For Vertex-backed Gemini generate-content calls, set `"geminiAuth": "adc"` with `geminiProject` and `geminiLocation`, then provide Google Application Default Credentials through the standard gcloud file (`$HOME/.config/gcloud/application_default_credentials.json` on macOS/Linux or `%APPDATA%\gcloud\application_default_credentials.json` on Windows) or `GOOGLE_APPLICATION_CREDENTIALS`. ADC and API-key mode are mutually exclusive: omit `geminiApiKey` and `GEMINI_API_KEY` when selecting ADC. YouTube and local video analysis require API-key mode instead.
 
 Set `enabled` to `false` for one `tools` or `commands` entry to skip that registration after restart. `webSearch.enabled: false` remains a legacy shorthand for disabling `web_search` and `source_check` when no tool-specific override exists. Feynman uses the `web-results` command key because `/search` belongs to research-session search. Set `image.enabled: false` to block direct images, video frames, and thumbnails. Set `pdf.enabled: false` to block PDF extraction.
 

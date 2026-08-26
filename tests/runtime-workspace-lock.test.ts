@@ -152,6 +152,8 @@ test("runtime build hashes its lock and pruning logic and installs with npm ci",
 	assert.match(source, /computeRuntimeInputHash/);
 	assert.match(source, /computeRuntimeTreeHash/);
 	assert.match(source, /filesMatch/);
+	assert.match(source, /removeGeneratedHiddenRuntimeLock/);
+	assert.match(source, /node_modules.*\.package-lock\.json/s);
 	assert.match(source, /runtime-workspace\.sha256/);
 	assert.match(source, /createDeterministicTarGz/);
 	assert.match(source, /--rebuild/);

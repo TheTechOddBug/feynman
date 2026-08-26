@@ -239,6 +239,106 @@ test("patched proxy routing covers loopback and port-aware domain NO_PROXY seman
 	}
 });
 
+test("patched curl proxy transport keeps credentials and headers out of process argv", () => {
+	const packageRoot = createPatchedPackageRoot();
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-web-curl-stdin-"));
+	try {
+		const bin = resolve(root, "bin");
+		const logPath = resolve(root, "curl.json");
+		mkdirSync(bin, { recursive: true });
+		const fakeCurlSource = `
+			const fs = require("node:fs");
+			let input = "";
+			process.stdin.setEncoding("utf8");
+			process.stdin.on("data", (chunk) => { input += chunk; });
+			process.stdin.on("end", () => {
+				const args = process.argv.slice(2);
+				fs.writeFileSync(process.env.FEYNMAN_CURL_LOG, JSON.stringify({ args, stdin: input }));
+				const valueAfter = (name) => {
+					const index = args.indexOf(name);
+					return index >= 0 ? args[index + 1] : undefined;
+				};
+				const headerFile = valueAfter("-D");
+				const bodyFile = valueAfter("--output");
+				if (!headerFile || !bodyFile) process.exit(2);
+				fs.writeFileSync(headerFile, "HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\n\\r\\n");
+				fs.writeFileSync(bodyFile, "proxy-ok");
+				process.stdout.write(JSON.stringify({
+					url_effective: "https://research.example/paper?token=url-secret",
+					num_redirects: 0,
+				}));
+			});
+		`;
+		const fakeCurlJs = resolve(bin, "fake-curl.cjs");
+		writeFileSync(fakeCurlJs, fakeCurlSource, "utf8");
+		if (process.platform === "win32") {
+			writeFileSync(
+				resolve(bin, "curl.cmd"),
+				`@echo off\r\n"${process.execPath}" "${fakeCurlJs}" %*\r\n`,
+				"utf8",
+			);
+		} else {
+			const curlPath = resolve(bin, "curl");
+			writeFileSync(curlPath, `#!/usr/bin/env node\n${fakeCurlSource}`, "utf8");
+			chmodSync(curlPath, 0o755);
+		}
+
+		const utilsUrl = pathToFileURL(resolve(packageRoot, "utils.ts")).href;
+		const child = spawnSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module"],
+			{
+				encoding: "utf8",
+				env: {
+					...process.env,
+					PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+					FEYNMAN_CURL_LOG: logPath,
+					NO_PROXY: "",
+					no_proxy: "",
+				},
+				input: `
+					const utils = await import(${JSON.stringify(utilsUrl)});
+					utils.installGlobalProxyFetch();
+					const response = await utils.runWithProxy(
+						"http://proxy-user:proxy-password@proxy.example:8080",
+						() => fetch("https://research.example/paper?token=url-secret", {
+							headers: {
+								Authorization: "Bearer header-secret",
+								Cookie: "browser-secret",
+							},
+						}),
+					);
+					console.log(await response.text());
+				`,
+			},
+		);
+		assert.equal(child.status, 0, child.stderr);
+		assert.equal(child.stdout.trim(), "proxy-ok");
+		const log = JSON.parse(readFileSync(logPath, "utf8")) as {
+			args: string[];
+			stdin: string;
+		};
+		assert.deepEqual(log.args.slice(-2), ["--config", "-"]);
+		const argv = log.args.join("\n");
+		for (const secret of [
+			"proxy-user",
+			"proxy-password",
+			"url-secret",
+			"header-secret",
+			"browser-secret",
+		]) {
+			assert.doesNotMatch(argv, new RegExp(secret));
+			assert.match(log.stdin, new RegExp(secret));
+		}
+		assert.match(log.stdin, /^proxy = /m);
+		assert.match(log.stdin, /^header = /m);
+		assert.match(log.stdin, /^url = /m);
+	} finally {
+		rmSync(packageRoot, { recursive: true, force: true });
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test("patched GitHub issue and PR gh calls inherit the per-call proxy and bypass it via NO_PROXY", () => {
 	const packageRoot = createPatchedPackageRoot();
 	const root = mkdtempSync(resolve(tmpdir(), "feynman-web-gh-proxy-"));

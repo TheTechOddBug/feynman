@@ -600,6 +600,9 @@ for (const [packagePath, entry] of Object.entries(runtimeLock.packages ?? {})) {
 if (readArchivedText(archivePath, "npm/package-lock.json") !== runtimeLockSource) {
 	fail("runtime archive package lock differs from the committed runtime lock");
 }
+if (readArchiveEntry(archivePath, "npm/node_modules/.package-lock.json") !== undefined) {
+	fail("runtime archive retains stale npm hidden lock metadata");
+}
 if (
 	readArchivedJson(archivePath, "npm/node_modules/ip-address/package.json").version !==
 	FEYNMAN_IP_ADDRESS_VERSION

@@ -403,6 +403,87 @@ export function probeEndpoint(endpoint, timeoutMs = 300) {
 	}
 });
 
+test("patched pi-otel executes shutdown and dashboard rewiring in their owning scopes", async () => {
+	const baseline = readFileSync(
+		resolve(import.meta.dirname, "fixtures", "pi-otel-0.1.0", "dist", "index.js"),
+		"utf8",
+	);
+	const patched = patchPiOtelSource("dist/index.js", baseline);
+	const extractHandlerBody = (marker: string): string => {
+		const start = patched.indexOf(marker);
+		assert.ok(start >= 0, `missing ${marker}`);
+		const bodyStart = patched.indexOf("=> {", start);
+		const bodyEnd = patched.indexOf("\n    });", bodyStart);
+		assert.ok(bodyStart >= 0 && bodyEnd > bodyStart, `invalid ${marker} handler`);
+		return patched.slice(bodyStart + "=> {".length, bodyEnd);
+	};
+	const sessionShutdownBody = extractHandlerBody('pi.on("session_shutdown"');
+	const dashboardReadyBody = extractHandlerBody('pi.events.on("pi-otel:dashboard-ready"');
+
+	assert.doesNotMatch(sessionShutdownBody, /\boverride\b|\bcfg\b/);
+	assert.match(dashboardReadyBody, /delete cfg\.feynmanOtlpSignals/);
+
+	const sessionState = {
+		shutdowns: 0,
+		emitted: [] as Array<[string, unknown]>,
+	};
+	const executeSessionShutdown = new Function(
+		"state",
+		`return (async () => {
+			let tracker = { endInteraction() {} };
+			const sessionIdRef = "session-test";
+			const ATTR_SYSTEM = "gen_ai.system";
+			const ATTR_PI_SESSION_ID = "pi.session.id";
+			const GEN_AI_SYSTEM_PI = "pi";
+			const pi = { events: { emit: (...args) => state.emitted.push(args) } };
+			const shutdownSdk = async () => { state.shutdowns += 1; };
+			${sessionShutdownBody}
+		})();`,
+	) as (state: typeof sessionState) => Promise<void>;
+	await executeSessionShutdown(sessionState);
+	assert.equal(sessionState.shutdowns, 1);
+	assert.ok(
+		sessionState.emitted.some(([event, payload]) =>
+			event === "pi-otel:status" &&
+			(payload as { state?: string })?.state === "shutdown"
+		),
+	);
+
+	const dashboardState = {
+		cfg: {
+			enabled: true,
+			endpoint: "https://collector.example/base",
+			protocol: "http/protobuf",
+			feynmanOtlpSignals: {
+				traces: { endpoint: "https://collector.example/base/v1/traces" },
+			},
+		},
+		payload: {
+			endpoint: "https://dashboard.example/otel",
+			protocol: "grpc",
+		},
+		shutdowns: 0,
+		wired: [] as Array<Record<string, unknown>>,
+	};
+	const executeDashboardReady = new Function(
+		"state",
+		`return (async () => {
+			const ctx0 = { cwd: "/tmp/pi-otel-handler-test" };
+			const payload = state.payload;
+			const resolveConfig = () => state.cfg;
+			const shutdownSdk = async () => { state.shutdowns += 1; };
+			const wireSdk = (cfg) => state.wired.push({ ...cfg });
+			${dashboardReadyBody}
+		})();`,
+	) as (state: typeof dashboardState) => Promise<void>;
+	await executeDashboardReady(dashboardState);
+	assert.equal(dashboardState.shutdowns, 1);
+	assert.equal(dashboardState.wired.length, 1);
+	assert.equal(dashboardState.wired[0].endpoint, "https://dashboard.example/otel");
+	assert.equal(dashboardState.wired[0].protocol, "grpc");
+	assert.equal(dashboardState.wired[0].feynmanOtlpSignals, undefined);
+});
+
 test("patchPiOtelSource is idempotent", () => {
 	const source = `import { Resource } from "@opentelemetry/resources";
 import { ATTR_PI_CWD } from "../attrs.js";
@@ -426,6 +507,27 @@ const resource = new Resource({
 	assert.doesNotMatch(once, /ATTR_PI_CWD|cfg\.cwd/);
 	assert.equal(twice, once);
 	assert.equal(configTwice, configOnce);
+});
+
+test("pi-otel repairs the exact pre-release misplaced dashboard reset", () => {
+	const baseline = readFileSync(
+		resolve(import.meta.dirname, "fixtures", "pi-otel-0.1.0", "dist", "index.js"),
+		"utf8",
+	);
+	const correct = patchPiOtelSource("dist/index.js", baseline);
+	const signalReset =
+		'        if (typeof override.endpoint === "string" || typeof override.protocol === "string")\n' +
+		"            delete cfg.feynmanOtlpSignals;\n";
+	const broken = correct
+		.replace(signalReset, "")
+		.replace(
+			"        await shutdownSdk();",
+			`${signalReset}        await shutdownSdk();`,
+		);
+	const repaired = patchPiOtelSource("dist/index.js", broken);
+
+	assert.equal(repaired, correct);
+	assert.equal(patchPiOtelSource("dist/index.js", repaired), repaired);
 });
 
 test("pi-otel 0.1.0 package patch is atomic and rejects fail-open drift", () => {
