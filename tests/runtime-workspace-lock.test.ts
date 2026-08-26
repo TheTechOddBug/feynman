@@ -313,10 +313,13 @@ test("setup lock heartbeats preserve a live owner when process-start lookup is u
 		assert.equal(existsSync(readyPath), true);
 		assert.throws(
 			() =>
-				acquireRuntimeWorkspaceSetupLock(lockDir, {
-					staleMs: 250,
-					readOwnerProcessStartedAt: () => undefined,
-				}),
+					acquireRuntimeWorkspaceSetupLock(lockDir, {
+						// Keep the test below the production five-minute budget while
+						// allowing a loaded CI host to schedule the separate heartbeat
+						// process before stale ownership is evaluated.
+						staleMs: 1_000,
+						readOwnerProcessStartedAt: () => undefined,
+					}),
 			/Timed out waiting/,
 		);
 		assert.equal(existsSync(lockDir), true);
