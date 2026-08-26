@@ -509,7 +509,11 @@ jobs:
           $version = node -p "require('./package.json').version"
           $tmp = Join-Path $env:RUNNER_TEMP ("feynman-smoke-" + [guid]::NewGuid().ToString("N"))
           New-Item -ItemType Directory -Path $tmp | Out-Null
-          Expand-Archive -LiteralPath "dist/release/feynman-$version-win32-x64.zip" -DestinationPath $tmp -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            (Join-Path (Get-Location) "dist/release/feynman-$version-win32-x64.zip"),
+            $tmp
+          )
           $bundleRoot = Join-Path $tmp "feynman-$version-win32-x64"
           & (Join-Path $bundleRoot "feynman.cmd") --help | Select-Object -First 20
           if ($LASTEXITCODE -ne 0) {

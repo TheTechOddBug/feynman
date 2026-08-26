@@ -55,7 +55,10 @@ test("source checkout builds the exact authenticated runtime archive", () => {
 					]);
 					assert.equal(options.cwd, root);
 					assert.deepEqual(options.stdio, ["ignore", "pipe", "pipe"]);
-					assert.equal(options.timeout, 300000);
+					assert.equal(
+						options.timeout,
+						RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS,
+					);
 					assert.equal(
 						options.env.FEYNMAN_RUNTIME_WORKSPACE_TARGET,
 						undefined,

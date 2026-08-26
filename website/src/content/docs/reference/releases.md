@@ -9,6 +9,17 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.45 - 2026-08-26
+
+### Release reliability
+
+- Windows publication smoke tests now use the supported .NET ZIP extractor instead of the pathologically slow PowerShell `Expand-Archive` cmdlet, so large native research bundles complete within the release job budget.
+- Source-checkout runtime archive rebuilds now use the same fifteen-minute process budget as exact locked runtime restores, avoiding premature timeouts on slow clean environments while retaining the existing transactional exact-lock checks.
+
+### Validation
+
+- Added workflow and runtime regressions that bind Windows native extraction and source-archive rebuilding to their supported timeout contracts.
+
 ## v0.3.44 - 2026-08-26
 
 ### Research continuity

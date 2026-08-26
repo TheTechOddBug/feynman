@@ -4,6 +4,21 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-26 08:48 EDT — pi-research-runtime-integrity-0.3.44-release
+
+- Persistence: PR `#257` merged the initial exact candidate `ea8a86ed156034674ec33137d87083e5591af586` as `44cb69406b1b1f0f333f4edcf3e2ee7984ba521f`. Post-merge review cancelled the first publish before publication; PR `#258` then merged exact blocker-repair head `00e8c24536a0e5accae00ca723dc932a36b56c9b` as `999243d042840317d95e153a9b9718f86b9a2fda`.
+- Verification: PR `#258` run `32957057912`, CodeQL, Vercel, all six Node/OS consumers, and Windows native installer passed. Exact-head Daytona proof covered the cumulative runtime plus clean installed telemetry fallback and Bedrock image paths; sandboxes were deleted. Main publish run `32961781923` passed source verification, all six consumers, all five native bundles, npm publication, GitHub release, and published-state verification.
+- Publication: GitHub release `v0.3.44` (`377124175`) and npm latest `0.3.44` agree on merge `999243d`; npm integrity is `sha512-GX1SVLv5P7NJJB7Yzm8mhhC0rzWiC4rSXvGEzaQlETHt4u1ACisC6k8TbDJ0AVbL5IUQnjyk3WeSi7wr7c9Haw==` and shasum `bf58fccabd542c9c9ab884c7a11d3c971ca30108`. All five native asset digests match committed `SHA256SUMS`.
+- Live: A fresh registry consumer passed zero-vulnerability audit, package/runtime/tool/provider verification, and LiteParse `2.14.0` parse/search/screenshot checks. Installer and release-document endpoints return HTTP `200`; main CodeQL passed.
+- Preservation: Root main is clean and synchronized; the independently dirty nested `website` checkout remains preserved at `67186845`. State: `verified`. Next: resume normal intake monitoring.
+
+### 2026-08-26 08:03 EDT — release-runtime-timeouts-0.3.45
+
+- Objective: Remove two release/runtime timeout hazards found during the intake sweep while preserving the independently dirty nested website checkout.
+- Changed: Publish Windows native smoke now extracts with .NET `System.IO.Compression.ZipFile`; source runtime archive rebuilds now use the shared fifteen-minute runtime restore timeout; added focused workflow/runtime regressions and prepared `0.3.45` release notes.
+- Verified: Focused release/runtime/content tests pass `55/55`; full `npm test` passes `971/971`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site audits, and `git diff --check` pass. `npm outdated` reports expected non-security dependency drift only.
+- State: `unverified` for the committed exact head, clean-machine proof, PR CI, merge, publication, and release identity. Next: pack the exact candidate, run clean consumer/Daytona proof, then push, merge, publish, and verify `0.3.45`.
+
 ### 2026-08-26 04:00 EDT — pi-release-blockers-0.3.44
 
 - Intake: Cancelled publish run `32938502008` before npm/GitHub publication after post-merge adversarial and upstream review found new release blockers; npm/GitHub latest remain `0.3.43`.
