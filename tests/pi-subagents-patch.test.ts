@@ -574,6 +574,88 @@ test("patchPiSubagentsSource leaves current getAgentDir agents.ts discovery path
 	assertUserDirLoadsHaveDeclaration(patched);
 });
 
+test("patchPiSubagentsSource upgrades legacy pi-subagents management diagnostics without crashing", () => {
+	const input = [
+		"import {",
+		"\ttype AgentConfig,",
+		"\ttype AgentScope,",
+		"\ttype AgentSource,",
+		"\ttype ChainConfig,",
+		"\tdiscoverAgentsAll,",
+		"\tbuildRuntimeName,",
+		'} from "./agents.ts";',
+		"function sanitizeName(name: string): string { return name; }",
+		"function findChains(name: string, cwd: string, scope: AgentScope = \"both\"): ChainConfig[] { return []; }",
+		"function mergeAgentsForScope(scope: AgentScope, user: AgentConfig[], project: AgentConfig[], builtin: AgentConfig[], pkg: AgentConfig[]): AgentConfig[] { return []; }",
+		"function availableNames(cwd: string, kind: \"agent\"): string[] { return []; }",
+		"function result(text: string, isError = false) { return { text, isError }; }",
+		"export function handleList(params: ManagementParams, ctx: ManagementContext) {",
+		"\tconst scope = normalizeListScope(params.agentScope) ?? \"both\";",
+		"\tconst d = discoverAgentsAll(ctx.cwd);",
+		"\tconst agents = [];",
+		"\tconst chains = [];",
+		"\tconst diagnostics = d.chainDiagnostics.filter((entry) => scope === \"both\" || entry.source === scope);",
+		"\tconst lines = [",
+		"\t\t\"Executable agents:\",",
+		"\t\t...(diagnostics.length ? [",
+		"\t\t\t\"\",",
+		"\t\t\t\"Chain diagnostics:\",",
+		"\t\t\t...diagnostics.map((entry) => `- ${entry.filePath}: ${entry.error}`),",
+		"\t\t] : []),",
+		"\t];",
+		"\treturn result(lines.join(\"\\n\"));",
+		"}",
+		"function findAgents(name: string, cwd: string, scope: AgentScope = \"both\"): AgentConfig[] { return []; }",
+		"function formatAgentDetail(agent: AgentConfig): string { return agent.name; }",
+		"function findChainDetails(name: string, cwd: string, scope: AgentScope): ChainConfig[] { return []; }",
+		"function formatChainDetail(chain: ChainConfig): string { return chain.name; }",
+		"function handleGet(params: ManagementParams, ctx: ManagementContext) {",
+		"\tconst scope = normalizeListScope(params.agentScope);",
+		"\tconst hasBoth = Boolean(params.agent && params.chainName);",
+		"\tconst blocks: string[] = [];",
+		"\tlet anyFound = false;",
+		"\tif (params.agent) {",
+		"\t\tconst raw = params.agent.trim();",
+		"\t\tconst sanitized = sanitizeName(raw);",
+		"\t\tconst d = discoverAgentsAll(ctx.cwd);",
+		"\t\tconst matches = mergeAgentsForScope(scope, d.user, d.project, d.builtin, d.package)",
+		"\t\t\t.filter((agent) => agent.name === raw || agent.name === sanitized);",
+		"\t\tif (!matches.length) {",
+		"\t\t\tconst msg = `Agent '${params.agent}' not found. Available: ${availableNames(ctx.cwd, \"agent\").join(\", \") || \"none\"}.`;",
+		"\t\t\tif (!hasBoth) return result(msg, true);",
+		"\t\t\tblocks.push(msg);",
+		"\t\t} else {",
+		"\t\t\tanyFound = true;",
+		"\t\t\tblocks.push(...matches.map(formatAgentDetail));",
+		"\t\t}",
+		"\t}",
+		"}",
+	].join("\n");
+
+	const patched = patchPiSubagentsSource("src/agents/agent-management.ts", input);
+	assert.match(patched, /Invalid agent definitions:/);
+	assert.match(patched, /findBlockingAgentDiagnostic/);
+	assert.match(patched, /has invalid configuration:/);
+	assert.equal(patchPiSubagentsSource("src/agents/agent-management.ts", patched), patched);
+
+	const compactInput = input.replace(
+		[
+			"\t\t...(diagnostics.length ? [",
+			"\t\t\t\"\",",
+			"\t\t\t\"Chain diagnostics:\",",
+			"\t\t\t...diagnostics.map((entry) => `- ${entry.filePath}: ${entry.error}`),",
+			"\t\t] : []),",
+		].join("\n"),
+		"\t\t...(diagnostics.length ? [\"\", \"Chain diagnostics:\", ...diagnostics.map((entry) => `- ${entry.filePath}: ${entry.error}`)] : []),",
+	);
+	const compactPatched = patchPiSubagentsSource("src/agents/agent-management.ts", compactInput);
+	assert.match(compactPatched, /Invalid agent definitions:/);
+	assert.equal(
+		patchPiSubagentsSource("src/agents/agent-management.ts", compactPatched),
+		compactPatched,
+	);
+});
+
 test("patchPiSubagentsSource repairs current half-patched agents.ts userDir loads", () => {
 	const input = [
 		'import * as fs from "node:fs";',
