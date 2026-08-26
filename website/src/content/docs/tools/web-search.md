@@ -5,7 +5,7 @@ section: Tools
 order: 2
 ---
 
-Feynman's web research tools retrieve current information and source text during research workflows. They support multiple simultaneous queries, simultaneous all-provider search, domain filtering, recency filtering, provider-available page-text retrieval, raw or question-grounded page retrieval, direct images, and passage lookup inside stored page content. The researcher agent uses them alongside AlphaXiv to gather evidence from non-academic sources like blog posts, documentation, news, and code repositories.
+Feynman's web research tools retrieve current information and source text during research workflows. They support multiple simultaneous queries, simultaneous all-provider search, explicit proxy routing, domain and recency filtering, bounded GitHub issue and pull-request documents, provider-available page-text retrieval, raw or question-grounded page retrieval, direct images, and passage lookup inside stored page content. The researcher agent uses them alongside AlphaXiv to gather evidence from non-academic sources like blog posts, documentation, news, and code repositories.
 
 ## Routing modes
 
@@ -14,7 +14,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 | Mode | Description |
 | --- | --- |
 | `auto` | Follow the available-provider fallback route |
-| `all` | Query every eligible provider except explicit-only DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase; preserve partial successes and deduplicate sources |
+| `all` | Query every eligible provider except explicit-only DuckDuckGo, Kimi, AnySearch, xAI, Bright Data, and SerpBase; preserve partial successes and deduplicate sources |
 | `duckduckgo` | Force keyless DuckDuckGo HTML search; also available inside an explicit fallback route |
 | `tinyfish` | Force TinyFish Search; also enables TinyFish Fetch as a hosted extraction fallback |
 | `kagi` | Force Kagi Search; also enables Kagi Extract as a hosted extraction fallback |
@@ -23,6 +23,7 @@ The bundled `pi-web-access` package can choose one provider, follow a configured
 | `perplexity` | Force Perplexity Sonar for all web searches |
 | `exa` | Force Exa for all web searches |
 | `gemini` | Force Gemini API grounding |
+| `kimi` | Explicit-only Kimi Code Plan search using Pi's `kimi-coding` login |
 | `jina` | Force Jina Search; can return provider-fetched page Markdown with results |
 | `xai` | Explicit-only xAI/Grok hosted search |
 | `brightdata` | Explicit-only Bright Data SERP search; requires a SERP zone |
@@ -53,6 +54,15 @@ Edit `~/.feynman/web-search.json` to configure the backend:
   "tinyfishApiKey": "sk-tinyfish-...",
   "jinaApiKey": "jina_...",
   "geminiApiKey": "AIza...",
+  "geminiAuth": "adc",
+  "geminiProject": "research-project",
+  "geminiLocation": "us-central1",
+  "proxy": "http://proxy.example:8080",
+  "allowBrowserCookies": false,
+  "browserCookies": {
+    "browser": "chrome",
+    "profile": "Default"
+  },
   "datalabApiKey": "$DATALAB_API_KEY",
   "kagiApiKey": "kagi-...",
   "bochaApiKey": "sk-bocha-...",
@@ -83,7 +93,7 @@ Edit `~/.feynman/web-search.json` to configure the backend:
 }
 ```
 
-Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `bocha`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. DuckDuckGo, AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
+Set `provider` and `searchProvider` to `all` to query every eligible provider concurrently, or to a specific `pi-web-access` provider such as `tinyfish`, `jina`, `kagi`, `bocha`, `ollama`, `exa`, `perplexity`, or `gemini`. `searchRouting` instead defines an ordered fallback route; `all` is not valid inside that sequential list. DuckDuckGo, Kimi, AnySearch, xAI, Bright Data, and SerpBase must be selected explicitly and do not participate in `all`. Kimi requires Pi's `/login kimi-coding` flow. The `feynman search set <provider> [api-key]` convenience command supports `auto`, `exa`, `perplexity`, and `gemini`; edit the JSON directly for the broader upstream provider set. Jina also accepts `JINA_API_KEY`, supports domain and recency constraints, and can return inline page content.
 
 DuckDuckGo is keyless but explicit-only. Select `"duckduckgo"` directly, or add it to `searchRouting.providers`. It does not run in `auto` or `all`.
 
@@ -93,9 +103,13 @@ Self-hosted SearXNG can use `searxngHeaders` for reverse-proxy or Zero Trust aut
 
 Set `firecrawlBaseUrl` or `FIRECRAWL_BASE_URL` for self-hosted Firecrawl. The configured API may use `localhost`, `127.0.0.0/8`, or `::1`. Loopback redirects must stay on that configured API origin. Submitted fetch and search targets still reject loopback addresses.
 
+Set top-level `proxy`, or pass the `proxy` parameter to `web_search`, `source_check`, or `fetch_content`, to route that research call through an explicit HTTP(S) proxy. The same per-call proxy is passed to GitHub CLI requests. `localhost` (including a trailing dot and subdomains), IPv4 `127.0.0.0/8`, `::1`, IPv4-mapped loopback, and matching `NO_PROXY` domains bypass the proxy. A port-qualified `NO_PROXY` entry applies only to that port, and an empty per-call value forces direct access.
+
 To route OpenAI `web_search` and `source_check` calls through a third-party gateway, set `openaiResponsesUrl` to the gateway's full Responses-compatible endpoint. The default remains OpenAI's official Responses endpoint. `openaiSearchProviders` sets the ordered Pi provider IDs considered for credentials and models; it defaults to `["openai-codex", "openai"]`.
 
-Gemini Web browser-cookie access is disabled by default. To opt into that legacy fallback, add `"geminiBrowser": true` to `~/.feynman/web-search.json`. On macOS, that can trigger a Keychain prompt from the browser's cookie store. On Windows, the opt-in path can read Chrome or Edge `v10` cookies through current-user DPAPI. Chromium `v20` app-bound cookies are unsupported and fail closed. API keys remain the recommended route.
+Gemini Web browser-cookie access is disabled by default. To opt in, set `"allowBrowserCookies": true` and optionally choose a supported `browserCookies.browser` plus profile directory name; arbitrary profile paths are rejected. The older `"geminiBrowser": true` alias remains accepted during migration. On macOS, browser access can trigger a Keychain prompt. On Windows, the opt-in path can read Chrome or Edge `v10` cookies through current-user DPAPI. Chromium `v20` app-bound cookies are unsupported and fail closed.
+
+For Vertex-backed Gemini generate-content calls, set `"geminiAuth": "adc"` with `geminiProject` and `geminiLocation`, then provide Google Application Default Credentials through the standard gcloud file (`$HOME/.config/gcloud/application_default_credentials.json` on macOS/Linux or `%APPDATA%\gcloud\application_default_credentials.json` on Windows) or `GOOGLE_APPLICATION_CREDENTIALS`. YouTube and local video analysis still require `GEMINI_API_KEY`.
 
 Set `enabled` to `false` for one `tools` or `commands` entry to skip that registration after restart. `webSearch.enabled: false` remains a legacy shorthand for disabling `web_search` and `source_check` when no tool-specific override exists. Feynman uses the `web-results` command key because `/search` belongs to research-session search. Set `image.enabled: false` to block direct images, video frames, and thumbnails. Set `pdf.enabled: false` to block PDF extraction.
 
@@ -111,6 +125,8 @@ The web search tool supports several capabilities that the researcher agent leve
 - **Domain filtering** -- Restrict results to specific domains like `arxiv.org`, `github.com`, or `nature.com`
 - **Recency filtering** -- Filter results by date, useful for fast-moving topics where only recent work matters
 - **Page text retrieval** -- Fetch provider-available page text for the most important results rather than relying only on snippets
+- **GitHub issue and PR documents** -- Fetch bounded metadata, comments, checks, files, commits, and review threads with anchors and escalation commands
+- **Extraction fallback** -- Use Defuddle after ordinary Readability and React Server Component extraction cannot recover useful HTML content
 - **Raw HTTP text** -- Use `fetch_content` with `mode: "raw"` to inspect textual API responses, error pages, or other source bytes without article extraction
 - **Bounded readable text** -- Readable extraction replaces inline `data:` URI payloads with explicit omission markers before model or cache storage; raw mode preserves the exact textual body
 - **Page-grounded answers** -- Use `fetch_content` with `mode: "answer"` and a question to answer against one page while retaining the original page text for inspection
@@ -120,7 +136,7 @@ The web search tool supports several capabilities that the researcher agent leve
 
 Fetched page bodies live for one hour in `~/.feynman/web-search-cache/`, beside `web-search.json`. The cache keeps at most 128 entries and 128 MiB, evicting the oldest entries first. On macOS and Linux, Feynman keeps its directory at mode `0700` and files at `0600`. Session JSONL stores only bounded URL metadata and a private cache reference. Custom `FEYNMAN_WEB_SEARCH_CONFIG` paths move the cache beside that exact file.
 
-For `get_search_content`, `findText` cannot be combined with `offset` or `limit`. `findMode` requires `findText`. Use one of `url`, `urlIndex`, `query`, or `queryIndex` to select stored content when the response contains multiple items.
+For `get_search_content`, `offset` and `limit` are ignored when `findText` is supplied, which keeps bridge-injected pagination defaults from blocking passage lookup. `findMode` requires `findText`. Use one of `url`, `urlIndex`, `query`, or `queryIndex` to select stored content when the response contains multiple items.
 
 ## When it runs
 

@@ -45,6 +45,15 @@ import {
 } from "./lib/pi-extension-handler-timeout-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import {
+	PI_BTW_MODEL_RUNTIME_PATCH_TARGETS,
+	PI_BTW_MODEL_RUNTIME_REQUIRED_VERSION,
+	patchPiBtwModelRuntimeSource,
+} from "./lib/pi-btw-model-runtime-patch.mjs";
+import {
+	applyPackageRootPatchPlans,
+	preflightPackageRootPatch,
+} from "./lib/package-root-patch-utils.mjs";
 import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
@@ -61,7 +70,7 @@ import {
 	syncPiWebAccessForwardFiles,
 } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
-import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
+import { preflightPiOtelPackageRoot } from "./lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import {
@@ -816,26 +825,6 @@ function patchBundledPiWebAccess() {
 	return changed;
 }
 
-function patchBundledPiOtel() {
-	const piOtelRoot = resolve(workspaceNodeModulesDir, "pi-otel");
-	if (!existsSync(piOtelRoot)) {
-		return false;
-	}
-
-	let changed = false;
-	for (const relativePath of PI_OTEL_PATCH_TARGETS) {
-		const entryPath = resolve(piOtelRoot, relativePath);
-		if (!existsSync(entryPath)) continue;
-
-		const source = readFileSync(entryPath, "utf8");
-		const patched = patchPiOtelSource(relativePath, source);
-		if (patched === source) continue;
-		writeFileSync(entryPath, patched, "utf8");
-		changed = true;
-	}
-	return changed;
-}
-
 function patchBundledPiSessionSearch() {
 	const sessionSearchRoot = resolve(workspaceNodeModulesDir, "@kaiserlich-dev", "pi-session-search");
 	if (!existsSync(sessionSearchRoot)) {
@@ -926,7 +915,20 @@ function patchMcpSdkManifest(nodeModulesDir) {
 function patchBundledRuntime(
 	piCliArgsCandidates = collectBundledPiCliArgsCandidates(),
 ) {
-	let changed = false;
+	const piBtwRoot = resolve(workspaceNodeModulesDir, "pi-btw");
+	const researchPackagePatchPlans = [
+		preflightPackageRootPatch({
+			packageRoot: piBtwRoot,
+			packageName: "pi-btw",
+			requiredVersion: PI_BTW_MODEL_RUNTIME_REQUIRED_VERSION,
+			targets: PI_BTW_MODEL_RUNTIME_PATCH_TARGETS,
+			patchSource: patchPiBtwModelRuntimeSource,
+		}),
+		preflightPiOtelPackageRoot(
+			resolve(workspaceNodeModulesDir, "pi-otel"),
+		),
+	];
+	let changed = applyPackageRootPatchPlans(researchPackagePatchPlans);
 	// Fail closed on every matching Pi parser before any runtime patch writes.
 	// This keeps a malformed secondary package from leaving a partially patched
 	// fallback candidate.
@@ -954,7 +956,6 @@ function patchBundledRuntime(
 	changed = patchBundledPiTui() || changed;
 	changed = patchBundledPiWebAccess() || changed;
 	changed = patchBundledPiSubagents() || changed;
-	changed = patchBundledPiOtel() || changed;
 	changed = patchBundledPiSessionSearch() || changed;
 	changed = patchBundledPiDocparser() || changed;
 	changed = patchBundledAlphaHub() || changed;

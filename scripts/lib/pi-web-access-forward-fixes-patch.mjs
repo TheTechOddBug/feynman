@@ -151,8 +151,11 @@ export function assertPiWebAccessForwardFixSources(sources, surface, version) {
 	}
 	requireMarkerCounts(chromeCookiesSource, "chrome-cookies.ts", [
 		['const WINDOWS_BROWSER_CONFIGS: BrowserConfig[] = [', 1],
-		['{ name: "Chrome", baseDir: "Google/Chrome/User Data", usesLocalAppData: true }', 1],
-		['{ name: "Edge", baseDir: "Microsoft/Edge/User Data", usesLocalAppData: true }', 1],
+		['{ id: "chrome", name: "Chrome", baseDir: "Google/Chrome/User Data", usesLocalAppData: true }', 1],
+		['{ id: "edge", name: "Edge", baseDir: "Microsoft/Edge/User Data", usesLocalAppData: true }', 1],
+		["const configs = options.browser ? platformConfigs.filter((config) => config.id === options.browser) : platformConfigs;", 1],
+		["Configured Chromium profile must resolve inside the browser profile root.", 1],
+		["getLastGoogleCookieDiagnosticDetails", 1],
 		['const networkCookies = join(profilePath, "Network", "Cookies");', 1],
 		["function decryptWindowsCookieValue(", 1],
 		['encrypted.subarray(0, 3).toString("utf8") === "v20"', 1],
@@ -288,7 +291,7 @@ function replaceModelAwareSearchHunk(source, original, replacement, relativePath
 	if (source.includes(replacement)) return source;
 	if (!source.includes(original)) {
 		throw new Error(
-			`Unsupported pi-web-access 0.24.2 ${relativePath}: model-aware search hunk is missing (${label})`,
+			`Unsupported pi-web-access 0.25.0 ${relativePath}: model-aware search hunk is missing (${label})`,
 		);
 	}
 	return source.replace(original, replacement);
@@ -314,8 +317,10 @@ const GEMINI_AUTO_OPENAI_HELPERS = [
 	"\tif (!shouldTryOpenAIInAuto(options)) return null;",
 	"\ttry {",
 	"\t\tif (await isOpenAISearchAvailable(options.extensionContext)) {",
-	"\t\t\tconst result = await searchWithOpenAI(query, options, options.extensionContext);",
-	'\t\t\treturn { ...result, provider: "openai" };',
+		"\t\t\tconst result = isOpenAICodexSelected(options.extensionContext)",
+		"\t\t\t\t? await searchWithCurrentModelOpenAI(query, options, options.extensionContext)",
+		"\t\t\t\t: await searchWithOpenAI(query, options, options.extensionContext);",
+		'\t\t\treturn { ...result, provider: "openai" };',
 	"\t\t}",
 	"\t} catch (err) {",
 	"\t\tif (isAbortError(err)) throw err;",
@@ -323,6 +328,13 @@ const GEMINI_AUTO_OPENAI_HELPERS = [
 	"\t}",
 	"\treturn null;",
 	"}",
+].join("\n");
+const GEMINI_AUTO_OPENAI_CALL_ORIGINAL =
+	"\t\t\tconst result = await searchWithOpenAI(query, options, options.extensionContext);";
+const GEMINI_AUTO_OPENAI_CALL_PATCHED = [
+	"\t\t\tconst result = isOpenAICodexSelected(options.extensionContext)",
+	"\t\t\t\t? await searchWithCurrentModelOpenAI(query, options, options.extensionContext)",
+	"\t\t\t\t: await searchWithOpenAI(query, options, options.extensionContext);",
 ].join("\n");
 const GEMINI_AUTO_OPENAI_ORIGINAL = [
 	"\tif (shouldTryOpenAIInAuto(options)) {",
@@ -372,13 +384,22 @@ function patchModelAwareGeminiSearchSource(source) {
 	) {
 		return source;
 	}
-	let patched = replaceModelAwareSearchHunk(
-		source,
-		GEMINI_AUTO_OPENAI_HELPER_ANCHOR,
-		GEMINI_AUTO_OPENAI_HELPERS,
-		"gemini-search.ts",
-		"OpenAI helper",
-	);
+	let patched = source;
+	if (!source.includes("function isOpenAICodexSelected(")) {
+		patched = replaceModelAwareSearchHunk(
+			source,
+			GEMINI_AUTO_OPENAI_HELPER_ANCHOR,
+			GEMINI_AUTO_OPENAI_HELPERS,
+			"gemini-search.ts",
+			"OpenAI helper",
+		);
+	}
+	if (patched.includes(GEMINI_AUTO_OPENAI_CALL_ORIGINAL)) {
+		patched = patched.replace(
+			GEMINI_AUTO_OPENAI_CALL_ORIGINAL,
+			GEMINI_AUTO_OPENAI_CALL_PATCHED,
+		);
+	}
 	patched = replaceModelAwareSearchHunk(
 		patched,
 		GEMINI_AUTO_OPENAI_ORIGINAL,
@@ -486,6 +507,16 @@ function patchModelAwareIndexSource(source) {
 	) {
 		return source;
 	}
+	if (
+		source.includes("preferOpenAICodexDefault = false,") &&
+		source.includes('ctx?: Pick<ExtensionContext, "model">,') &&
+		source.includes("routing.useCurrentModel === true") &&
+		source.includes("isCurrentModelHostedSearchEligible(ctx)")
+	) {
+		// pi-web-access 0.25.0 owns the model-aware default and extends it with
+		// explicit current-model Hosted Search routing.
+		return source;
+	}
 	let patched = source;
 	for (const [original, replacement, label] of [
 		[
@@ -537,7 +568,7 @@ function patchModelAwareIndexSource(source) {
 			);
 		} else {
 			throw new Error(
-				"Unsupported pi-web-access 0.24.2 index.ts: model-aware search hunk is missing (tool description)",
+				"Unsupported pi-web-access 0.25.0 index.ts: model-aware search hunk is missing (tool description)",
 			);
 		}
 	}

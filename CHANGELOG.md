@@ -4,6 +4,21 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-26 12:08 EDT — research-runtime-intake-0.3.46
+
+- Objective: Complete the post-`0.3.45` intake with only concrete research-loop reliability work: Pi session-tail integrity, pi-btw custom-provider continuity, `pi-web-access@0.25.0`, and pi-otel HTTP signal routing.
+- Intake: Feynman has no open issues or pull requests. PR `#259` is merged and fully released. Upstream review rejected Pi `0.84.3`, `pi-subagents@0.57.0`, and general dependency drift as coordinated or freshness-only changes.
+- Changed: Added exact/idempotent patch and runtime/archive gates for Pi commit `0b5ee5d8`, pi-btw PR `#30`, and the bugfix half of pi-otel PR `#8`; updated the web runtime and exact fixtures to `0.25.0` while retaining Feynman's config, cache, model-scope, Firecrawl redirect, browser-cookie, and request-deadline boundaries.
+- Focused verification: The cumulative runtime-intake cluster passes `122/122`, including session-tail, BTW child-session, OTLP, exact web-source, proxy subprocess, Kimi, Gemini ADC, and existing Pi runtime regressions. Typecheck, architecture, syntax, and diff checks pass; the serialized exact-lock runtime archive is SHA-256 `3189bab251f7494bb39f2f40c4355ebb3d794ad4c421205ed06d42aaf54f7d28`.
+- State: `unverified` for the cumulative full suite, package/consumer proof, Daytona, PR CI, merge, and `0.3.46` publication. Next: persist this focused-green candidate, then finish the cumulative release ladder on its exact commit.
+
+### 2026-08-26 11:55 EDT — release-runtime-timeouts-0.3.45-release
+
+- Persistence: PR `#259` exact tested head `c1dada6b91639fe3299817e68465d78dfd8e78a3` merged as `9a39d2bfebb2b03114208ca4aea1a8f77170b427`; its source branch was deleted.
+- Verification: PR run `32971268467`, CodeQL, Vercel, Windows native installation, and all six Node/OS consumers passed. Disposable Daytona Node `25.9.0` passed `971/971`, typecheck, build, architecture, website checks, audits, package/consumer/runtime verification, and was deleted.
+- Publication: Main run `32979456096` passed source verification, all six consumers, all five native bundles, npm provenance publication, GitHub release creation, and published-state verification. GitHub/npm latest `0.3.45` agree on `9a39d2b`; npm integrity is `sha512-qpRxbeYCnYxOQdyBUFaqgY4tvTc6yiwncerSgULsgZ+0xkhH+qIlzhdPl9Nfd97FaCMD3qY6XD8c+YBJaOmMIg==`.
+- Live: Release `377248454` has all six expected assets with SHA-256 digests; release, installer, PowerShell installer, and release-doc endpoints return HTTP `200`. State: `verified`. Next: continue the successor runtime intake.
+
 ### 2026-08-26 08:48 EDT — pi-research-runtime-integrity-0.3.44-release
 
 - Persistence: PR `#257` merged the initial exact candidate `ea8a86ed156034674ec33137d87083e5591af586` as `44cb69406b1b1f0f333f4edcf3e2ee7984ba521f`. Post-merge review cancelled the first publish before publication; PR `#258` then merged exact blocker-repair head `00e8c24536a0e5accae00ca723dc932a36b56c9b` as `999243d042840317d95e153a9b9718f86b9a2fda`.

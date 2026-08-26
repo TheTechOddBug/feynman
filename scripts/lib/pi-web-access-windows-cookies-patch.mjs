@@ -1,15 +1,14 @@
 import { createHash } from "node:crypto";
 
-// pi-web-access 0.24.2 fixes Chromium's oversized expiry values and removes
-// DPAPI ciphertext from argv. Keep only Feynman's narrower transport hardening:
-// the protected key travels over stdin rather than through the child
-// environment, PowerShell failures are terminating, and the window stays
-// hidden. Remove this patch after upstream ships equivalent stdin transport
-// and the native Windows verifier passes without it.
+// pi-web-access 0.25.0 retains bounded Chromium expiry conversion and
+// app-bound-cookie rejection while adding browser/profile selection and
+// structured diagnostics, but its DPAPI subprocess again places protected
+// ciphertext in the child environment. Keep Feynman's narrower stdin-only
+// transport and exact digest gate.
 const BASELINE_SHA256 =
-	"e735ad014cbc167f5ed45fbd50b5582378771ed16120563587a48c6406fa495a";
+	"d69f91df6ef0e1768fc487c49c1056c3601b798989143eda95b0eefa8e3e108b";
 export const PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256 =
-	"20eba0bb1fd2ff9dbbdbfa1e469c88c2d2316dc663fdd0dd056d9e734b824da0";
+	"eed7b4488bee4fcedaa7007edfc387ce01491500566e54140273de958d65f9da";
 
 const UPSTREAM_UNPROTECT_WINDOWS_DATA = `function unprotectWindowsData(protectedData: Buffer): Promise<Buffer | null> {
 	return new Promise((resolve) => {
@@ -54,25 +53,16 @@ function digest(source) {
 export function patchPiWebAccessWindowsCookiesSource(source) {
 	const sourceDigest = digest(source);
 	if (sourceDigest === PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256) return source;
-	if (sourceDigest !== BASELINE_SHA256) {
-		throw new Error(
-			`Unsupported pi-web-access 0.24.2 chrome-cookies.ts: expected ${BASELINE_SHA256} or ${PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256}, found ${sourceDigest}`,
+	if (sourceDigest === BASELINE_SHA256 && source.includes(UPSTREAM_UNPROTECT_WINDOWS_DATA)) {
+		const patched = source.replace(
+			UPSTREAM_UNPROTECT_WINDOWS_DATA,
+			FIXED_UNPROTECT_WINDOWS_DATA,
 		);
+		if (digest(patched) === PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256) {
+			return patched;
+		}
 	}
-	if (!source.includes(UPSTREAM_UNPROTECT_WINDOWS_DATA)) {
-		throw new Error(
-			"Unsupported pi-web-access 0.24.2 chrome-cookies.ts: exact upstream DPAPI hunk is missing",
-		);
-	}
-	const patched = source.replace(
-		UPSTREAM_UNPROTECT_WINDOWS_DATA,
-		FIXED_UNPROTECT_WINDOWS_DATA,
+	throw new Error(
+		`Unsupported pi-web-access 0.25.0 chrome-cookies.ts: expected ${BASELINE_SHA256} or ${PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256}, found ${sourceDigest}`,
 	);
-	const patchedDigest = digest(patched);
-	if (patchedDigest !== PI_WEB_ACCESS_WINDOWS_COOKIES_SHA256) {
-		throw new Error(
-			`Unsupported pi-web-access 0.24.2 chrome-cookies.ts: DPAPI correction produced ${patchedDigest}`,
-		);
-	}
-	return patched;
 }

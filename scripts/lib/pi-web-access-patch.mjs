@@ -5,8 +5,24 @@ import {
 	patchPiWebAccessForwardFixSource,
 	syncPiWebAccessForwardFiles,
 } from "./pi-web-access-forward-fixes-patch.mjs";
+import {
+	patchGeminiWebConfigSource,
+	patchGeminiWebSource,
+} from "./pi-web-access-gemini-browser-patch.mjs";
+import {
+	assertPiWebAccessPatchedDigests,
+	assertPiWebAccessReviewedSources,
+} from "./pi-web-access-source-contract.mjs";
+import {
+	GITHUB_PROXY_IMPORT,
+	patchGeminiAdcPathSource,
+	patchGitHubApiProxySource,
+	patchGitHubIssueProxySource,
+	patchProxyUtilitySource,
+	patchSsrfNoProxySource,
+} from "./pi-web-access-security-patch.mjs";
 
-export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.24.2";
+export const PI_WEB_ACCESS_REQUIRED_VERSION = "0.25.0";
 export {
 	PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
 	patchPiWebAccessForwardFixSource,
@@ -16,10 +32,14 @@ export {
 export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"index.ts",
 	"extract.ts",
+	"fetch-params.ts",
 	"firecrawl.ts",
 	"ssrf-protection.ts",
 	"chrome-cookies.ts",
 	...PI_WEB_ACCESS_FORWARD_FILE_TARGETS,
+	"credential-source.ts",
+	"curator-page.ts",
+	"curator-server.ts",
 	"feature-config.ts",
 	"page-query.ts",
 	"storage.ts",
@@ -27,10 +47,15 @@ export const PI_WEB_ACCESS_PATCH_TARGETS = [
 	"summary-review.ts",
 	"exa.ts",
 	"gemini-api.ts",
+	"gemini-adc.ts",
 	"gemini-search.ts",
+	"gemini-url-context.ts",
 	"gemini-web-config.ts",
 	"gemini-web.ts",
+	"github-api.ts",
 	"github-extract.ts",
+	"github-issue-pr.ts",
+	"kimi-search.ts",
 	"openai-search.ts",
 	"perplexity.ts",
 	"pdf-extract.ts",
@@ -77,6 +102,21 @@ function rejectMarkers(source, relativePath, markers, surface) {
 }
 
 export function assertPiWebAccessPatchedSources(sources, surface = "patched source tree") {
+	const indexSource = sources.get("index.ts");
+	if (typeof indexSource === "string") {
+		for (const fragment of [
+			INDEX_CONFIG_PATH_BINDING_PATCHED,
+			INDEX_CONFIG_WRITE_DIRECTORY_PATCHED,
+		]) {
+			const count = countOccurrences(indexSource, fragment);
+			if (count !== 1) {
+				throw new Error(
+					`Incomplete pi-web-access ${PI_WEB_ACCESS_REQUIRED_VERSION} ${surface} index.ts: expected 1 occurrences of ${fragment}, found ${count}`,
+				);
+			}
+		}
+	}
+	assertPiWebAccessPatchedDigests(sources, PI_WEB_ACCESS_PATCH_TARGETS, surface);
 	assertPiWebAccessForwardFixSources(
 		sources,
 		surface,
@@ -97,7 +137,6 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		}
 	}
 
-	const indexSource = sources.get("index.ts");
 	requireMarkerCounts(indexSource, "index.ts", [
 		[INDEX_CONFIG_HELPER_IMPORT_PATCHED, 1],
 		[INDEX_CONFIG_PATH_BINDING_PATCHED, 1],
@@ -126,12 +165,16 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		['if (sourceCheckEnabled) pi.registerTool({', 1],
 		['if (fetchContentEnabled) pi.registerTool({', 1],
 		['if (getSearchContentEnabled) {', 1],
+		["proxy: Type.Optional(Type.String({", 3],
+		["runWithProxy(", 7],
+		["installGlobalProxyFetch();", 1],
 	], surface);
 	rejectMarkers(
 		indexSource,
 		"index.ts",
 		[
 			INDEX_CONFIG_HELPER_IMPORT_ORIGINAL,
+			INDEX_CONFIG_HELPER_IMPORT_LEGACY,
 			INDEX_CONFIG_PATH_BINDING_LEGACY,
 			INDEX_CONFIG_PATH_BINDING_PARTIAL,
 			INDEX_CONFIG_WRITE_DIRECTORY_LEGACY,
@@ -272,14 +315,14 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 
 	const geminiConfigSource = sources.get("gemini-web-config.ts");
 	requireMarkerCounts(geminiConfigSource, "gemini-web-config.ts", [
-		["\tgeminiBrowser?: boolean;", 1],
-		["\tallowBrowserAuth?: boolean;", 1],
-		["\tbrowserAuth?: boolean;", 1],
+		["\tbrowserCookies?: BrowserCookieSelection;", 1],
+		["geminiBrowser?: unknown; allowBrowserAuth?: unknown; browserAuth?: unknown", 2],
 		["function normalizeBooleanFlag(", 1],
 		[
 			"normalizeBooleanFlag(raw.allowBrowserCookies) || normalizeBooleanFlag(raw.geminiBrowser) || normalizeBooleanFlag(raw.allowBrowserAuth) || normalizeBooleanFlag(raw.browserAuth)",
 			1,
 		],
+		["return loadConfig().allowBrowserCookies === true;", 1],
 	], surface);
 
 	const pdfSource = sources.get("pdf-extract.ts");
@@ -308,6 +351,12 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"],
 		surface,
 	);
+	requireMarkerCounts(extractSource, "extract.ts", [
+		['import { extractGitHubIssuePr } from "./github-issue-pr.ts";', 1],
+		['const { Defuddle } = await import("defuddle/node");', 1],
+		["const ghIssuePrResult = await extractGitHubIssuePr(", 1],
+		["const defuddleResult = await extractWithDefuddle(", 2],
+	], surface);
 
 	const githubSource = sources.get("github-extract.ts");
 	requireMarkerCounts(githubSource, "github-extract.ts", [
@@ -340,7 +389,75 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 
 	const utilsSource = sources.get("utils.ts");
 	requireMarkerCount(utilsSource, "utils.ts", PATCHED_CONFIG_PATH_HELPER, 1, surface);
-	rejectMarkers(utilsSource, "utils.ts", [CONFIG_PATH_HELPER], surface);
+	requireMarkerCounts(utilsSource, "utils.ts", [
+		['import net from "node:net";', 1],
+		["export function runWithProxy<T>(", 1],
+		["export function isProxyBypassedUrl(", 1],
+		["function isIpv4MappedLoopback(", 1],
+		["function parseNoProxyEntry(", 1],
+		["if (parsed.port !== undefined && parsed.port !== port) return false;", 1],
+		["return hostname === parsed.hostname || hostname.endsWith(`.${parsed.hostname}`);", 1],
+		["export function getProxyProcessEnv(", 1],
+		["for (const name of PROXY_ENV_NAMES) delete env[name];", 1],
+		["for (const name of PROXY_ENV_NAMES) env[name] = proxy;", 1],
+		["export function installGlobalProxyFetch(): void {", 1],
+		["const noProxy = process.env.NO_PROXY || process.env.no_proxy;", 1],
+	], surface);
+	rejectMarkers(
+		utilsSource,
+		"utils.ts",
+		[CONFIG_PATH_HELPER, "function noProxyEntryMatches(hostname: string, entry: string)"],
+		surface,
+	);
+
+	const ssrfSource = sources.get("ssrf-protection.ts");
+	requireMarkerCount(
+		ssrfSource,
+		"ssrf-protection.ts",
+		"return !isProxyBypassedUrl(url);",
+		1,
+		surface,
+	);
+	rejectMarkers(
+		ssrfSource,
+		"ssrf-protection.ts",
+		["function hostnameMatchesNoProxy("],
+		surface,
+	);
+
+	requireMarkerCounts(sources.get("fetch-params.ts"), "fetch-params.ts", [
+		["proxy?: unknown;", 1],
+		["const proxy = normalizeProxy(params.proxy);", 1],
+		["normalizeProxyUrl(value, \"proxy\")", 1],
+	], surface);
+	requireMarkerCounts(sources.get("github-issue-pr.ts"), "github-issue-pr.ts", [
+		['import { getProxyProcessEnv, getWebSearchConfigPath } from "./utils.ts";', 1],
+		['env: { ...getProxyProcessEnv("https://github.com"), GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" },', 1],
+		["export function parseGitHubIssuePrUrl(", 1],
+		["export async function extractGitHubIssuePr(", 1],
+		["GitHub API rate limit reached", 2],
+		["review thread comments shown", 3],
+	], surface);
+	requireMarkerCounts(sources.get("github-api.ts"), "github-api.ts", [
+		[GITHUB_PROXY_IMPORT, 1],
+		['env: getProxyProcessEnv("https://github.com")', 6],
+	], surface);
+	requireMarkerCounts(sources.get("gemini-adc.ts"), "gemini-adc.ts", [
+		["export function getDefaultAdcPath(", 1],
+		['if (currentPlatform === "win32" && appData) {', 1],
+		['return win32.join(appData, "gcloud", "application_default_credentials.json");', 1],
+		["process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || getDefaultAdcPath()", 1],
+		["export function isAdcAuthSelected(): boolean {", 1],
+		["const OAUTH_CREDENTIAL_REJECTION_STATUSES = new Set([400, 401, 403]);", 1],
+		["Google Application Default Credentials file not found", 1],
+		["export async function getAdcAccessToken(", 1],
+	], surface);
+	requireMarkerCounts(sources.get("kimi-search.ts"), "kimi-search.ts", [
+		['const KIMI_SEARCH_URL = "https://api.kimi.com/coding/v1/search";', 1],
+		["ctx.modelRegistry.getApiKeyAndHeaders(model)", 1],
+		["export async function searchWithKimi(", 1],
+		["redactCredential(await response.text(), auth.apiKey)", 1],
+	], surface);
 
 	for (const [relativePath, source] of sources) {
 		rejectMarkers(source, relativePath, [LEGACY_CONFIG_EXPR], surface);
@@ -355,6 +472,7 @@ export function patchPiWebAccessSources(sources, surface = "source tree") {
 			);
 		}
 	}
+	assertPiWebAccessReviewedSources(sources, PI_WEB_ACCESS_PATCH_TARGETS, surface);
 
 	const patchedSources = new Map();
 	for (const relativePath of PI_WEB_ACCESS_PATCH_TARGETS) {
@@ -390,8 +508,12 @@ const PATCHED_CONFIG_PATH_HELPER = [
 	"}",
 ].join("\n");
 const INDEX_CONFIG_HELPER_IMPORT_ORIGINAL =
-	'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";';
+	'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, installGlobalProxyFetch, resolveCuratorNetworkConfig, runWithProxy } from "./utils.ts";';
 const INDEX_CONFIG_HELPER_IMPORT_PATCHED =
+	'import { formatSeconds, getWebSearchConfigPath, installGlobalProxyFetch, resolveCuratorNetworkConfig, runWithProxy } from "./utils.ts";';
+const INDEX_CONFIG_HELPER_IMPORT_LEGACY =
+	'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";';
+const INDEX_CONFIG_HELPER_IMPORT_LEGACY_PATCHED =
 	'import { formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";';
 const INDEX_CONFIG_PATH_BINDING_PATCHED =
 	"const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath();";
@@ -465,171 +587,6 @@ function patchFetchCacheStorageSource(source) {
 		);
 	}
 	return { source, changed: false };
-}
-
-function patchGeminiWebSource(source) {
-	let patched = source;
-	let changed = false;
-
-	if (!patched.includes("geminiBrowser?: boolean;")) {
-		const original = ["interface GeminiWebConfig {", "\tchromeProfile?: string;", "}"].join("\n");
-		const replacement = [
-			"interface GeminiWebConfig {",
-			"\tchromeProfile?: string;",
-			"\tgeminiBrowser?: boolean;",
-			"}",
-		].join("\n");
-		if (patched.includes(original)) {
-			patched = patched.replace(original, replacement);
-			changed = true;
-		}
-	}
-
-	const rawTypeOriginal = "let raw: { chromeProfile?: unknown };";
-	const rawTypePatched =
-		"let raw: { chromeProfile?: unknown; geminiBrowser?: unknown; allowBrowserAuth?: unknown; browserAuth?: unknown };";
-	if (patched.includes(rawTypeOriginal)) {
-		patched = patched.replace(rawTypeOriginal, rawTypePatched);
-		changed = true;
-	}
-
-	const configOriginal = ["cachedConfig = {", "\t\tchromeProfile: normalizeChromeProfile(raw.chromeProfile),", "\t};"].join("\n");
-	const configPatched = [
-		"cachedConfig = {",
-		"\t\tchromeProfile: normalizeChromeProfile(raw.chromeProfile),",
-		"\t\tgeminiBrowser: normalizeBooleanFlag(raw.geminiBrowser ?? raw.allowBrowserAuth ?? raw.browserAuth),",
-		"\t};",
-	].join("\n");
-	if (patched.includes(configOriginal)) {
-		patched = patched.replace(configOriginal, configPatched);
-		changed = true;
-	}
-
-	if (!patched.includes("function normalizeBooleanFlag(")) {
-		const anchor = [
-			"function getChromeProfileFromConfig(): string | undefined {",
-			"\treturn loadConfig().chromeProfile;",
-			"}",
-		].join("\n");
-		const replacement = [
-			"function normalizeBooleanFlag(value: unknown): boolean {",
-			"\tif (value === true) return true;",
-			'\tif (typeof value !== "string") return false;',
-			"\tconst normalized = value.trim().toLowerCase();",
-			'\treturn normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";',
-			"}",
-			"",
-			anchor,
-		].join("\n");
-		if (patched.includes(anchor)) {
-			patched = patched.replace(anchor, replacement);
-			changed = true;
-		}
-	}
-
-	const availabilityOriginal = [
-		"export async function isGeminiWebAvailable(chromeProfile?: string): Promise<CookieMap | null> {",
-		"\tconst result = await getGoogleCookies({",
-		"\t\tprofile: normalizeChromeProfile(chromeProfile) ?? getChromeProfileFromConfig(),",
-		"\t\trequiredCookies: REQUIRED_COOKIES,",
-		"\t});",
-		"\tif (!result) return null;",
-		"\treturn result.cookies;",
-		"}",
-	].join("\n");
-	const availabilityPatched = [
-		"export async function isGeminiWebAvailable(chromeProfile?: string): Promise<CookieMap | null> {",
-		"\tconst config = loadConfig();",
-		"\tif (!config.geminiBrowser) return null;",
-		"\tconst result = await getGoogleCookies({",
-		"\t\tprofile: normalizeChromeProfile(chromeProfile) ?? config.chromeProfile,",
-		"\t\trequiredCookies: REQUIRED_COOKIES,",
-		"\t});",
-		"\tif (!result) return null;",
-		"\treturn result.cookies;",
-		"}",
-	].join("\n");
-	if (patched.includes(availabilityOriginal)) {
-		patched = patched.replace(availabilityOriginal, availabilityPatched);
-		changed = true;
-	}
-
-	const profileHelper = [
-		"function getChromeProfileFromConfig(): string | undefined {",
-		"\treturn loadConfig().chromeProfile;",
-		"}",
-	].join("\n");
-	if (patched.includes(profileHelper) && patched.includes("config.chromeProfile")) {
-		patched = patched.replace(`${profileHelper}\n\n`, "").replace(`${profileHelper}\n`, "");
-		changed = true;
-	}
-
-	return { source: patched, changed };
-}
-
-function patchGeminiWebConfigSource(source) {
-	let patched = source;
-	let changed = false;
-
-	if (!patched.includes("geminiBrowser?: boolean;")) {
-		const original = [
-			"interface GeminiWebConfig {",
-			"\tchromeProfile?: string;",
-			"\tallowBrowserCookies?: boolean;",
-			"}",
-		].join("\n");
-		const replacement = [
-			"interface GeminiWebConfig {",
-			"\tchromeProfile?: string;",
-			"\tallowBrowserCookies?: boolean;",
-			"\tgeminiBrowser?: boolean;",
-			"\tallowBrowserAuth?: boolean;",
-			"\tbrowserAuth?: boolean;",
-			"}",
-		].join("\n");
-		if (patched.includes(original)) {
-			patched = patched.replace(original, replacement);
-			changed = true;
-		}
-	}
-
-	const rawTypeOriginal = "let raw: { chromeProfile?: unknown; allowBrowserCookies?: unknown };";
-	const rawTypePatched =
-		"let raw: { chromeProfile?: unknown; allowBrowserCookies?: unknown; geminiBrowser?: unknown; allowBrowserAuth?: unknown; browserAuth?: unknown };";
-	if (patched.includes(rawTypeOriginal)) {
-		patched = patched.split(rawTypeOriginal).join(rawTypePatched);
-		changed = true;
-	}
-
-	if (!patched.includes("function normalizeBooleanFlag(")) {
-		const anchor = [
-			"function loadConfig(): GeminiWebConfig {",
-		].join("\n");
-		const replacement = [
-			"function normalizeBooleanFlag(value: unknown): boolean {",
-			"\tif (value === true) return true;",
-			'\tif (typeof value !== "string") return false;',
-			"\tconst normalized = value.trim().toLowerCase();",
-			'\treturn normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";',
-			"}",
-			"",
-			anchor,
-		].join("\n");
-		if (patched.includes(anchor)) {
-			patched = patched.replace(anchor, replacement);
-			changed = true;
-		}
-	}
-
-	const configOriginal = "\t\tallowBrowserCookies: raw.allowBrowserCookies === true,";
-	const configPatched =
-		"\t\tallowBrowserCookies: normalizeBooleanFlag(raw.allowBrowserCookies) || normalizeBooleanFlag(raw.geminiBrowser) || normalizeBooleanFlag(raw.allowBrowserAuth) || normalizeBooleanFlag(raw.browserAuth),";
-	if (patched.includes(configOriginal)) {
-		patched = patched.replace(configOriginal, configPatched);
-		changed = true;
-	}
-
-	return { source: patched, changed };
 }
 
 // Issue #169: bound each primary web_search call so one wedged provider or
@@ -873,6 +830,13 @@ export function patchPiWebAccessSource(relativePath, source) {
 			patched = patched.replace(
 				INDEX_CONFIG_HELPER_IMPORT_ORIGINAL,
 				INDEX_CONFIG_HELPER_IMPORT_PATCHED,
+			);
+			changed = true;
+		}
+		if (patched.includes(INDEX_CONFIG_HELPER_IMPORT_LEGACY)) {
+			patched = patched.replace(
+				INDEX_CONFIG_HELPER_IMPORT_LEGACY,
+				INDEX_CONFIG_HELPER_IMPORT_LEGACY_PATCHED,
 			);
 			changed = true;
 		}
@@ -1123,6 +1087,26 @@ export function patchPiWebAccessSource(relativePath, source) {
 			patched = patched.replace('import { tmpdir } from "node:os";\n', "");
 			changed = true;
 		}
+	}
+
+	if (relativePath === "utils.ts") {
+		patched = patchProxyUtilitySource(patched);
+	}
+
+	if (relativePath === "ssrf-protection.ts") {
+		patched = patchSsrfNoProxySource(patched);
+	}
+
+	if (relativePath === "github-api.ts") {
+		patched = patchGitHubApiProxySource(patched);
+	}
+
+	if (relativePath === "github-issue-pr.ts") {
+		patched = patchGitHubIssueProxySource(patched);
+	}
+
+	if (relativePath === "gemini-adc.ts") {
+		patched = patchGeminiAdcPathSource(patched);
 	}
 
 	if (relativePath === "utils.ts" && patched.includes(CONFIG_PATH_HELPER)) {

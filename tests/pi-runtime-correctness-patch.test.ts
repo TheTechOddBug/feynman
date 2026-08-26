@@ -169,6 +169,8 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	assert.match(agentSessionSource, /feynmanToolResultIdBeforeExtensions/);
 	assert.match(agentSessionSource, /replaceMessage\(eagerlyPersisted\.entryId, event\.message\)/);
 	assert.match(sessionManagerSource, /restore eager tool results/);
+	assert.match(sessionManagerSource, /upstream #8345/);
+	assert.match(sessionManagerSource, /if \(pending\) appendFileSync\(resolvedFilePath, "\\n"\)/);
 	assert.match(sessionManagerSource, /restoreFeynmanToolResultsInSourceOrder/);
 	assert.match(sessionManagerSource, /replaceMessage\(entryId, message\)/);
 	assert.match(transformMessagesSource, /order eager tool results/);
@@ -194,6 +196,7 @@ test("Pi 0.84.2 correctness patch is applied, idempotent, and documents its remo
 	assert.match(patchSource, /delivered image-only queue entries as in commit b67b3db/);
 	assert.match(patchSource, /27115254/);
 	assert.match(patchSource, /86c42324/);
+	assert.match(patchSource, /0b5ee5d8/);
 	assert.doesNotMatch(agentSessionSource, /sourceMappingURL/);
 
 	assert.equal(patchPiAgentSessionSource(agentSessionSource), agentSessionSource);

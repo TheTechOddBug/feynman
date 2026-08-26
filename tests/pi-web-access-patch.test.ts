@@ -21,13 +21,13 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.24.2",
+	"pi-web-access-0.25.0",
 );
 const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"..",
 	"fixtures",
-	"pi-web-access-0.24.2",
+	"pi-web-access-0.25.0",
 );
 const PI_WEB_ACCESS_RUNTIME_ROOT = join(
 	import.meta.dirname,
@@ -94,6 +94,25 @@ test("package artifact verification checks every pi-web-access patch target", ()
 		indexMarkers,
 		/modelMatchesScopedModels\(model, summaryContext\.scopedModels\)/,
 	);
+	assert.match(indexMarkers, /Ignored when findText is supplied\./);
+	assert.doesNotMatch(indexMarkers, /Cannot be combined with findText\./);
+
+	const webDocs = readFileSync(
+		join(
+			import.meta.dirname,
+			"..",
+			"website",
+			"src",
+			"content",
+			"docs",
+			"tools",
+			"web-search.md",
+		),
+		"utf8",
+	);
+	assert.match(webDocs, /offset` and `limit` are ignored when `findText` is supplied/);
+	assert.match(webDocs, /%APPDATA%\\gcloud\\application_default_credentials\.json/);
+	assert.match(webDocs, /IPv4 `127\.0\.0\.0\/8`/);
 
 	const installedVerifier = readFileSync(
 		join(import.meta.dirname, "..", "scripts", "verify-installed-runtime.mjs"),
@@ -148,7 +167,7 @@ test("patchPiWebAccessSource repairs partial index.ts config-path handling", () 
 	const input = [
 		'import { existsSync, mkdirSync } from "node:fs";',
 		'import { join } from "node:path";',
-		'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, resolveCuratorNetworkConfig } from "./utils.ts";',
+		'import { formatSeconds, getWebSearchConfigDir, getWebSearchConfigPath, installGlobalProxyFetch, resolveCuratorNetworkConfig, runWithProxy } from "./utils.ts";',
 		'const WEB_SEARCH_CONFIG_PATH = join(getWebSearchConfigDir(), "web-search.json");',
 		"function saveConfig(config: Record<string, unknown>): void {",
 		"\tconst dir = getWebSearchConfigDir();",
@@ -164,7 +183,7 @@ test("patchPiWebAccessSource repairs partial index.ts config-path handling", () 
 	assert.match(patched, /import \{ dirname, join \} from "node:path";/);
 	assert.match(
 		patched,
-		/import \{ formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig \} from "\.\/utils\.ts";/,
+			/import \{ formatSeconds, getWebSearchConfigPath, installGlobalProxyFetch, resolveCuratorNetworkConfig, runWithProxy \} from "\.\/utils\.ts";/,
 	);
 	assert.match(
 		patched,
@@ -189,7 +208,7 @@ test("exact pi-web-access fixture binds config reads and writes to Feynman's pat
 
 	assert.match(
 		indexSource,
-		/import \{ formatSeconds, getWebSearchConfigPath, resolveCuratorNetworkConfig \} from "\.\/utils\.ts";/,
+		/import \{ formatSeconds, getWebSearchConfigPath, installGlobalProxyFetch, resolveCuratorNetworkConfig, runWithProxy \} from "\.\/utils\.ts";/,
 	);
 	assert.match(
 		indexSource,
@@ -245,10 +264,10 @@ test("exact pi-web-access fixture ports the three focused upstream reliability f
 	assert.doesNotMatch(extractSource, /return Promise\.all\(urls\.map/);
 });
 
-test("model-aware auto routing matches upstream commit 9b1b917 exactly", () => {
+test("model-aware auto routing matches reviewed pi-web-access 0.25.0 exactly", () => {
 	const expected = new Map([
-		["gemini-search.ts", "a6fde655c24a2889675fc6687844e1f8025ef3275490c127d7dbb42802e928e9"],
-		["index.ts", "745478a6675b1088e92c3c27a31ee15871011103a386df5f22f1cb30b4e13d25"],
+		["gemini-search.ts", "83fcf770ff9562bfef2179d64d6cae8eba19e540efe9eda6c6a8085a19870c41"],
+		["index.ts", "80d4f01fe7db1c0f095a60d9aa2c9fe3ebee675d988affced30da935554a0127"],
 	]);
 	for (const [relativePath, expectedDigest] of expected) {
 		const baseline = readFileSync(
@@ -269,10 +288,10 @@ test("model-aware auto routing matches upstream commit 9b1b917 exactly", () => {
 	}
 });
 
-test("exact pi-web-access fixture keeps 0.24.2 retrieval and clone protections", () => {
+test("exact pi-web-access fixture keeps 0.25.0 retrieval and clone protections", () => {
 	const patchedSources = patchPiWebAccessSources(
 		readPiWebAccessFixtureSources(),
-		"0.24.2 fixture",
+		"0.25.0 fixture",
 	);
 	const extractSource = patchedSources.get("extract.ts") ?? "";
 	const githubSource = patchedSources.get("github-extract.ts") ?? "";
@@ -329,7 +348,7 @@ test("runtime readable extraction removes inline data URIs while raw mode preser
 	assert.equal(output.userAgent, "OpenAI File Downloader, XaiImageApiFetch/1.0");
 });
 
-test("runtime 0.24.2 normalizes PDF limits and honors OpenAI search provider priority", () => {
+test("runtime 0.25.0 normalizes PDF limits and honors OpenAI search provider priority", () => {
 	const root = mkdtempSync(join(tmpdir(), "feynman-web-0241-config-"));
 	const configPath = join(root, "web-search.json");
 	writeFileSync(
@@ -387,7 +406,7 @@ test("runtime 0.24.2 normalizes PDF limits and honors OpenAI search provider pri
 	}
 });
 
-test("runtime 0.24.2 rejects unsafe GitHub clone identities", () => {
+test("runtime 0.25.0 rejects unsafe GitHub clone identities", () => {
 	const githubUrl = pathToFileURL(join(PI_WEB_ACCESS_RUNTIME_ROOT, "github-extract.ts")).href;
 	const child = spawnSync(
 		process.execPath,
@@ -581,7 +600,7 @@ test("patched Linux browser launcher propagates immediate spawn failures", async
 	}
 });
 
-test("patchPiWebAccessSources repairs partial config-path patch state", () => {
+test("patchPiWebAccessSources rejects unreviewed partial config-path patch state", () => {
 	const patchedSources = patchPiWebAccessSources(
 		readPiWebAccessFixtureSources(),
 		"partial patch baseline",
@@ -631,23 +650,15 @@ test("patchPiWebAccessSources repairs partial config-path patch state", () => {
 				),
 		);
 
-		const repairedSources = patchPiWebAccessSources(
-			partialSources,
-			`partial patch repair: ${partial.label}`,
-		);
-		const repairedIndex = repairedSources.get("index.ts") ?? "";
-		assert.match(
-			repairedIndex,
-			/const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);/,
+		assert.throws(
+			() =>
+				patchPiWebAccessSources(
+					partialSources,
+					`partial patch repair: ${partial.label}`,
+				),
+			/unreviewed digest/,
 			partial.label,
 		);
-		assert.match(
-			repairedIndex,
-			/const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);/,
-			partial.label,
-		);
-		assert.equal(repairedIndex.includes(partial.binding), false, partial.label);
-		assert.equal(repairedIndex.includes(partial.directory), false, partial.label);
 	}
 });
 
@@ -670,7 +681,7 @@ test("pi-web-access validator fails closed on config-path drift", () => {
 				stalePathSources,
 				"stale config path",
 			),
-		/expected 1 occurrences of const WEB_SEARCH_CONFIG_PATH = getWebSearchConfigPath\(\);, found 0/,
+		/Incomplete pi-web-access 0\.25\.0 stale config path index\.ts/,
 	);
 
 	const staleDirectorySources = new Map(patchedSources);
@@ -687,7 +698,7 @@ test("pi-web-access validator fails closed on config-path drift", () => {
 				staleDirectorySources,
 				"stale config directory",
 			),
-		/expected 1 occurrences of .*const dir = dirname\(WEB_SEARCH_CONFIG_PATH\);.*found 0/s,
+		/Incomplete pi-web-access 0\.25\.0 stale config directory index\.ts/,
 	);
 });
 
@@ -756,37 +767,17 @@ test("patchPiWebAccessSource disables Gemini Web cookie access by default", () =
 });
 
 test("patchPiWebAccessSource keeps Gemini Web config opt-in across current upstream aliases", () => {
-	const input = [
-		'import { existsSync, readFileSync } from "node:fs";',
-		'import { homedir } from "node:os";',
-		'import { join } from "node:path";',
-		'const CONFIG_PATH = join(homedir(), ".pi", "web-search.json");',
-		"interface GeminiWebConfig {",
-		"\tchromeProfile?: string;",
-		"\tallowBrowserCookies?: boolean;",
-		"}",
-		"function loadConfig(): GeminiWebConfig {",
-		'\tlet raw: { chromeProfile?: unknown; allowBrowserCookies?: unknown };',
-		"\ttry {",
-		'\t\traw = JSON.parse(rawText) as { chromeProfile?: unknown; allowBrowserCookies?: unknown };',
-		"\t} catch {}",
-		"\tcachedConfig = {",
-		"\t\tchromeProfile: normalizeChromeProfile(raw.chromeProfile),",
-		"\t\tallowBrowserCookies: raw.allowBrowserCookies === true,",
-		"\t};",
-		"\treturn cachedConfig;",
-		"}",
-		"",
-	].join("\n");
+	const input = readFileSync(
+		join(PI_WEB_ACCESS_FIXTURE_ROOT, "gemini-web-config.ts.fixture"),
+		"utf8",
+	);
 
 	const patched = patchPiWebAccessSource("gemini-web-config.ts", input);
 
-	assert.match(patched, /process\.env\.FEYNMAN_WEB_SEARCH_CONFIG/);
-	assert.match(patched, /geminiBrowser\?: boolean/);
-	assert.match(patched, /allowBrowserAuth\?: boolean/);
-	assert.match(patched, /browserAuth\?: boolean/);
+	assert.match(patched, /geminiBrowser\?: unknown; allowBrowserAuth\?: unknown; browserAuth\?: unknown/);
 	assert.match(patched, /function normalizeBooleanFlag/);
 	assert.match(patched, /normalizeBooleanFlag\(raw\.allowBrowserCookies\) \|\| normalizeBooleanFlag\(raw\.geminiBrowser\)/);
+	assert.match(patched, /return loadConfig\(\)\.allowBrowserCookies === true;/);
 });
 
 test("patchPiWebAccessSource changes Gemini search browser fallback messaging to opt-in", () => {
@@ -987,11 +978,11 @@ test("patchPiWebAccessSource carries Pi scoped models into every nested summary 
 });
 
 test("pi-web-access patch is exact-version gated and rejects unknown model-scope layouts", () => {
-	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.24.2");
-	assert.doesNotThrow(() => assertPiWebAccessVersion("0.24.2", "test"));
+	assert.equal(PI_WEB_ACCESS_REQUIRED_VERSION, "0.25.0");
+	assert.doesNotThrow(() => assertPiWebAccessVersion("0.25.0", "test"));
 	assert.throws(
-		() => assertPiWebAccessVersion("0.25.0", "future"),
-		/expected 0\.24\.2, found 0\.25\.0/,
+		() => assertPiWebAccessVersion("0.26.0", "future"),
+		/expected 0\.25\.0, found 0\.26\.0/,
 	);
 
 	const futureSource = [
@@ -1011,7 +1002,7 @@ test("pi-web-access patch is exact-version gated and rejects unknown model-scope
 	].join("\n");
 	assert.throws(
 		() => patchPiWebAccessSource("summary-model-scope.ts", futureSource),
-		/Unsupported pi-web-access 0\.24\.2 summary model scope layout/,
+		/Unsupported pi-web-access 0\.25\.0 summary model scope layout/,
 	);
 	assert.match(futureSource, /futureScopeHelper/);
 });

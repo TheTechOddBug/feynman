@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { patchPiOtelSource } from "../scripts/lib/pi-otel-patch.mjs";
+import {
+	assertPiOtelPatchedSources,
+	PI_OTEL_PATCH_TARGETS,
+	patchPiOtelPackageRoot,
+	patchPiOtelSource,
+	preflightPiOtelPackageRoot,
+	verifyInstalledPiOtel,
+} from "../scripts/lib/pi-otel-patch.mjs";
+import { applyPackageRootPatchPlans } from "../scripts/lib/package-root-patch-utils.mjs";
+import { writePiOtelFixture } from "./helpers/pi-otel-fixture.js";
 
 test("patchPiOtelSource strips cwd attributes from pi-otel spans and resources", () => {
 	const attrs = 'export const ATTR_PI_CWD = "pi.cwd";\nexport const ATTR_PI_TURN_COUNT = "pi.turn_count";';
@@ -44,7 +53,7 @@ const resource = resourceFromAttributes({});`,
 	}
 });
 
-test("patchPiOtelSource makes pi-otel honor trace-specific OTLP env vars", () => {
+test("patchPiOtelSource preserves explicit per-signal OTLP configuration", () => {
 	const config = `    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
         merged?.endpoint ??
         "http://127.0.0.1:4317";
@@ -55,10 +64,241 @@ test("patchPiOtelSource makes pi-otel honor trace-specific OTLP env vars", () =>
     };`;
 	const patched = patchPiOtelSource("dist/config.js", config);
 
-	assert.match(patched, /process\.env\.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \?\?/);
-	assert.match(patched, /process\.env\.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL \?\?/);
-	assert.match(patched, /parseKvList\(process\.env\.OTEL_EXPORTER_OTLP_TRACES_HEADERS\)/);
-	assert.match(patched, /process\.env\.OTEL_EXPORTER_OTLP_ENDPOINT \?\?/);
+	assert.match(patched, /const sharedEndpoint = process\.env\.OTEL_EXPORTER_OTLP_ENDPOINT/);
+	assert.match(patched, /const prefix = `OTEL_EXPORTER_OTLP_\$\{signal\.toUpperCase\(\)\}`/);
+	assert.match(patched, /explicitEndpoint: explicitEndpoint !== undefined/);
+	assert.match(patched, /traces: createFeynmanSignalConfig\("traces"\)/);
+	assert.match(patched, /metrics: createFeynmanSignalConfig\("metrics"\)/);
+	assert.match(patched, /logs: createFeynmanSignalConfig\("logs"\)/);
+});
+
+test("patched pi-otel config resolves independent signal endpoints, headers, and protocols", async () => {
+	const source = readFileSync(
+		resolve(import.meta.dirname, "fixtures", "pi-otel-0.1.0", "dist", "config.js"),
+		"utf8",
+	);
+	const executable = patchPiOtelSource("dist/config.js", source)
+		.replace(
+			'import { DiagLogLevel } from "@opentelemetry/api";',
+			"const DiagLogLevel = { NONE: 0, ERROR: 30, WARN: 50, INFO: 60, DEBUG: 70, VERBOSE: 80, ALL: 9999 };",
+		)
+		.replace(/\n\/\/# sourceMappingURL=.*$/, "");
+	const keys = [
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_HEADERS",
+		"OTEL_EXPORTER_OTLP_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+		"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_METRICS_HEADERS",
+		"OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+		"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+	] as const;
+	const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+	Object.assign(process.env, {
+		OTEL_EXPORTER_OTLP_ENDPOINT: "https://shared.example/base",
+		OTEL_EXPORTER_OTLP_HEADERS: "common=one",
+		OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+		OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://traces.example/custom",
+		OTEL_EXPORTER_OTLP_TRACES_HEADERS: "trace=two",
+		OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json",
+		OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "https://metrics.example/custom",
+		OTEL_EXPORTER_OTLP_METRICS_HEADERS: "metric=three",
+		OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc",
+		OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: "https://logs.example/custom",
+		OTEL_EXPORTER_OTLP_LOGS_HEADERS: "log=four",
+		OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: "http/protobuf",
+	});
+	try {
+		const { resolveConfig } = await import(
+			`data:text/javascript;base64,${Buffer.from(executable).toString("base64")}`
+		) as { resolveConfig: (cwd: string) => any };
+		const cfg = resolveConfig(resolve(tmpdir(), "feynman-pi-otel-config"));
+		assert.deepEqual(cfg.feynmanOtlpSignals, {
+			traces: {
+				endpoint: "https://traces.example/custom",
+				protocol: "http/json",
+				headers: { common: "one", trace: "two" },
+				explicitEndpoint: true,
+			},
+			metrics: {
+				endpoint: "https://metrics.example/custom",
+				protocol: "grpc",
+				headers: { common: "one", metric: "three" },
+				explicitEndpoint: true,
+			},
+			logs: {
+				endpoint: "https://logs.example/custom",
+				protocol: "http/protobuf",
+				headers: { common: "one", log: "four" },
+				explicitEndpoint: true,
+			},
+		});
+		assert.equal(cfg.endpoint, "https://traces.example/custom");
+		assert.equal(cfg.protocol, "http/json");
+		assert.deepEqual(cfg.headers, { common: "one", trace: "two" });
+	} finally {
+		for (const key of keys) {
+			const value = previous[key];
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+});
+
+test("patchPiOtelSource routes HTTP OTLP exporters by signal without changing PostHog's exact trace URL", async () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-pi-otel-signals-"));
+	const modulePath = resolve(root, "sdk.mjs");
+	const sdk = `class GrpcExporter {
+    constructor(opts) { Object.assign(this, opts, { kind: "grpc" }); }
+}
+class ProtoExporter {
+    constructor(opts) { Object.assign(this, opts, { kind: "http/protobuf" }); }
+}
+class HttpExporter {
+    constructor(opts) { Object.assign(this, opts, { kind: "http/json" }); }
+}
+function pickByProtocol(cfg, ctors) {
+    const opts = { url: cfg.endpoint, headers: cfg.headers };
+    if (cfg.protocol === "http/protobuf")
+        return new ctors.proto(opts);
+    if (cfg.protocol === "http/json")
+        return new ctors.http(opts);
+    return new ctors.grpc(opts);
+}
+export function initSdk(cfg) {
+    const traceExporter = pickByProtocol(cfg, { grpc: GrpcExporter, proto: ProtoExporter, http: HttpExporter });
+    const metricExporter = pickByProtocol(cfg, { grpc: GrpcExporter, proto: ProtoExporter, http: HttpExporter });
+    const logExporter = pickByProtocol(cfg, { grpc: GrpcExporter, proto: ProtoExporter, http: HttpExporter });
+    return { traceExporter, metricExporter, logExporter };
+}`;
+	const patched = patchPiOtelSource("dist/otel/sdk.js", sdk);
+	writeFileSync(modulePath, patched, "utf8");
+
+	try {
+		assert.match(patched, /nikiforovall\/pi-otel#8/);
+		assert.match(patched, /configured\?\.explicitEndpoint === true/);
+		assert.match(patched, /process\.env\.FEYNMAN_POSTHOG_KEY && signal === "traces"/);
+		assert.match(patched, /pickByProtocol\(cfg, "traces"/);
+		assert.match(patched, /pickByProtocol\(cfg, "metrics"/);
+		assert.match(patched, /pickByProtocol\(cfg, "logs"/);
+
+		const { initSdk, resolveFeynmanOtlpSignalConfig, resolveFeynmanOtlpSignalUrl } = await import(
+			`${pathToFileURL(modulePath).href}?test=${Date.now()}`
+		) as {
+			initSdk: (cfg: Record<string, unknown>) => Record<string, any>;
+			resolveFeynmanOtlpSignalConfig: (
+				cfg: Record<string, unknown>,
+				signal: string,
+			) => { url: string; protocol: string; headers: Record<string, string> };
+			resolveFeynmanOtlpSignalUrl: (endpoint: string, signal: string) => string;
+		};
+		assert.equal(
+			resolveFeynmanOtlpSignalUrl("https://collector.example", "traces"),
+			"https://collector.example/v1/traces",
+		);
+		assert.equal(
+			resolveFeynmanOtlpSignalUrl("https://collector.example/v1/traces", "metrics"),
+			"https://collector.example/v1/metrics",
+		);
+		assert.equal(
+			resolveFeynmanOtlpSignalUrl("http://127.0.0.1:4318/", "logs"),
+			"http://127.0.0.1:4318/v1/logs",
+		);
+		const previousKey = process.env.FEYNMAN_POSTHOG_KEY;
+		delete process.env.FEYNMAN_POSTHOG_KEY;
+		try {
+			const http = initSdk({
+				endpoint: "https://collector.example/base",
+				headers: { common: "one" },
+				protocol: "http/protobuf",
+			});
+			assert.equal(http.traceExporter.url, "https://collector.example/base/v1/traces");
+			assert.equal(http.metricExporter.url, "https://collector.example/base/v1/metrics");
+			assert.equal(http.logExporter.url, "https://collector.example/base/v1/logs");
+			const explicit = initSdk({
+				endpoint: "https://collector.example/base",
+				headers: { common: "one" },
+				protocol: "http/protobuf",
+				feynmanOtlpSignals: {
+					traces: {
+						endpoint: "https://traces.example/custom",
+						headers: { trace: "two" },
+						protocol: "http/json",
+						explicitEndpoint: true,
+					},
+					metrics: {
+						endpoint: "https://metrics.example/custom",
+						headers: { metric: "three" },
+						protocol: "grpc",
+						explicitEndpoint: true,
+					},
+					logs: {
+						endpoint: "https://logs.example/custom",
+						headers: { log: "four" },
+						protocol: "http/protobuf",
+						explicitEndpoint: true,
+					},
+				},
+			});
+			assert.deepEqual(
+				{
+					url: explicit.traceExporter.url,
+					headers: explicit.traceExporter.headers,
+					kind: explicit.traceExporter.kind,
+				},
+				{
+					url: "https://traces.example/custom",
+					headers: { trace: "two" },
+					kind: "http/json",
+				},
+			);
+			assert.deepEqual(
+				{
+					url: explicit.metricExporter.url,
+					headers: explicit.metricExporter.headers,
+					kind: explicit.metricExporter.kind,
+				},
+				{
+					url: "https://metrics.example/custom",
+					headers: { metric: "three" },
+					kind: "grpc",
+				},
+			);
+			assert.deepEqual(
+				{
+					url: explicit.logExporter.url,
+					headers: explicit.logExporter.headers,
+					kind: explicit.logExporter.kind,
+				},
+				{
+					url: "https://logs.example/custom",
+					headers: { log: "four" },
+					kind: "http/protobuf",
+				},
+			);
+			process.env.FEYNMAN_POSTHOG_KEY = "test-project-token";
+			assert.equal(
+				resolveFeynmanOtlpSignalConfig({
+					endpoint: "https://us.i.posthog.com/i/v0/ai/otel",
+					headers: { Authorization: "Bearer test-project-token" },
+					protocol: "http/protobuf",
+				}, "traces").url,
+				"https://us.i.posthog.com/i/v0/ai/otel",
+			);
+		} finally {
+			if (previousKey === undefined) {
+				delete process.env.FEYNMAN_POSTHOG_KEY;
+			} else {
+				process.env.FEYNMAN_POSTHOG_KEY = previousKey;
+			}
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });
 
 test("patchPiOtelSource silently skips a blocked Feynman-managed collector", () => {
@@ -186,4 +426,114 @@ const resource = new Resource({
 	assert.doesNotMatch(once, /ATTR_PI_CWD|cfg\.cwd/);
 	assert.equal(twice, once);
 	assert.equal(configTwice, configOnce);
+});
+
+test("pi-otel 0.1.0 package patch is atomic and rejects fail-open drift", () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-pi-otel-package-"));
+	const packageRoot = resolve(root, "pi-otel");
+	try {
+		writePiOtelFixture(packageRoot);
+		assert.equal(patchPiOtelPackageRoot(packageRoot), true);
+		const sources = new Map(
+			PI_OTEL_PATCH_TARGETS.map((relativePath) => [
+				relativePath,
+				readFileSync(resolve(packageRoot, relativePath), "utf8"),
+			]),
+		);
+		assert.doesNotThrow(() =>
+			assertPiOtelPatchedSources(sources, "patched fixture"),
+		);
+		assert.equal(patchPiOtelPackageRoot(packageRoot), false);
+
+		const sdkPath = resolve(packageRoot, "dist", "otel", "sdk.js");
+		writeFileSync(
+			sdkPath,
+			readFileSync(sdkPath, "utf8").replace(
+				'protocol === "grpc"',
+				'false && protocol === "grpc"',
+			),
+			"utf8",
+		);
+		assert.throws(
+			() => patchPiOtelPackageRoot(packageRoot),
+			/Unsupported pi-otel 0\.1\.0 dist\/otel\/sdk\.js/,
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("pi-otel migrates the exact published Feynman 0.3.45 SDK", () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-pi-otel-legacy-"));
+	const packageRoot = resolve(root, "pi-otel");
+	try {
+		writePiOtelFixture(packageRoot, { publishedFeynmanVersion: "0.3.45" });
+		assert.equal(patchPiOtelPackageRoot(packageRoot), true);
+		assert.equal(patchPiOtelPackageRoot(packageRoot), false);
+		assertPiOtelPatchedSources(
+			new Map(
+				PI_OTEL_PATCH_TARGETS.map((relativePath) => [
+					relativePath,
+					readFileSync(resolve(packageRoot, relativePath), "utf8"),
+				]),
+			),
+			"published Feynman 0.3.45 fixture",
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("installed runtime verification executes OTLP routing from exact patched bytes", async () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-installed-pi-otel-"));
+	const packageRoot = resolve(
+		root,
+		".feynman",
+		"npm",
+		"node_modules",
+		"pi-otel",
+	);
+	try {
+		writePiOtelFixture(packageRoot);
+		assert.equal(patchPiOtelPackageRoot(packageRoot), true);
+		assert.equal(await verifyInstalledPiOtel(root), "passed");
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("pi-otel multi-root plans preflight every source before writing", () => {
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-pi-otel-plans-"));
+	const firstRoot = resolve(root, "first", "pi-otel");
+	const secondRoot = resolve(root, "second", "pi-otel");
+	try {
+		writePiOtelFixture(firstRoot);
+		writePiOtelFixture(secondRoot);
+		const firstSdkPath = resolve(firstRoot, "dist", "otel", "sdk.js");
+		const secondSdkPath = resolve(secondRoot, "dist", "otel", "sdk.js");
+		const firstBefore = readFileSync(firstSdkPath, "utf8");
+		writeFileSync(secondSdkPath, `${readFileSync(secondSdkPath, "utf8")}\n// unsupported drift\n`);
+		assert.throws(
+			() => [
+				preflightPiOtelPackageRoot(firstRoot),
+				preflightPiOtelPackageRoot(secondRoot),
+			],
+			/Unsupported pi-otel 0\.1\.0 dist\/otel\/sdk\.js/,
+		);
+		assert.equal(readFileSync(firstSdkPath, "utf8"), firstBefore);
+
+		writePiOtelFixture(secondRoot);
+		const plans = [
+			preflightPiOtelPackageRoot(firstRoot),
+			preflightPiOtelPackageRoot(secondRoot),
+		];
+		writeFileSync(secondSdkPath, `${readFileSync(secondSdkPath, "utf8")}\n// changed after preflight\n`);
+		assert.throws(
+			() => applyPackageRootPatchPlans(plans),
+			/Package patch source changed after preflight/,
+		);
+		assert.equal(readFileSync(firstSdkPath, "utf8"), firstBefore);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });

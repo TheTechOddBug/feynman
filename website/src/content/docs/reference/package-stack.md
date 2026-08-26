@@ -19,10 +19,10 @@ These are installed by default with every Feynman installation. They provide the
 | --- | --- |
 | `@companion-ai/alpha-hub` | Direct alphaXiv tools for paper and author workflows |
 | `pi-subagents` | Parallel agent spawning for literature gathering and task decomposition. Powers the multi-agent workflows |
-| `pi-btw` | Side conversations while the main research agent is busy, including `/btw` follow-ups and handoff back into the main thread |
+| `pi-btw` | Side conversations while the main research agent is busy, including `/btw` follow-ups, custom-provider continuity, and handoff back into the main thread |
 | `pi-docparser` | Parse PDFs, Office documents, spreadsheets, and images through bounded, isolated native workers |
-| `pi-web-access` | Multi-provider web search, raw and page-grounded retrieval, private external fetched-page caching, stored-page passage lookup, registration gates, bounded summary generation, GitHub access, optional layout-aware PDF extraction, and direct image/media retrieval |
-| `pi-otel` | OpenTelemetry spans for Pi sessions, model calls, turns, and tool usage, exported without prompt or tool payload content |
+| `pi-web-access` | Multi-provider web search, explicit proxy routing, bounded GitHub issue/PR documents, raw and page-grounded retrieval, Defuddle fallback, private external fetched-page caching, stored-page passage lookup, registration gates, bounded summary generation, optional layout-aware PDF extraction, and direct image/media retrieval |
+| `pi-otel` | OpenTelemetry spans for Pi sessions, model calls, turns, and tool usage, exported without prompt or tool payload content and routed to signal-specific HTTP OTLP paths |
 
 These packages are updated together when you run `feynman update`. You do not need to install them individually.
 
