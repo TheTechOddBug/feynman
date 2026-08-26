@@ -3,6 +3,11 @@ import {
 	isPiOpenAiStructuredReasoningPatched,
 	patchPiOpenAiStructuredReasoningSource,
 } from "./pi-openai-reasoning-patch.mjs";
+import {
+	assertPiOpenAiResponsesNoToolsSource,
+	PI_OPENAI_RESPONSES_NO_TOOLS_MARKER,
+	patchPiOpenAiResponsesNoToolsSource,
+} from "./pi-openai-responses-no-tools-patch.mjs";
 
 /**
  * Temporary Pi 0.84.2 forward patches for upstream commits:
@@ -18,10 +23,11 @@ import {
  * - 4ca636c5e07eb1e0fbc6be6c11c720d1a8856daa (structured reasoning details)
  * - b7bb00b936dbe21b8e160b3e89efdec361846699 (reasoning signature storage)
  * - c5ad7c1b0f7623bbfdf64dd4967fa6e99c15c01a (reasoning delta concatenation)
+ * - 7280f89b42e4b233afc4f18e41366e845d179cef (Responses no-tools contract, Pi #8649/#8650)
  * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all thirteen fixes.
+ * version that contains all fourteen fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -60,6 +66,7 @@ export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	bedrock: "Feynman Pi 0.84.2 forward patch: Bedrock Smithy response headers",
 	toolChoice: "Feynman Pi 0.84.2 forward patch: provider-neutral tool choice",
 	openAiCompletions: "Feynman Pi 0.84.2 forward patch: Gemini signatures and bounded tool IDs",
+	openAiResponsesNoTools: PI_OPENAI_RESPONSES_NO_TOOLS_MARKER,
 	providerRetry: "Feynman Pi 0.84.2 forward patch: transient in-flight budget retry #8507",
 });
 
@@ -478,7 +485,9 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 		case "dist/api/azure-openai-responses.js":
 		case "dist/api/mistral-conversations.js":
 		case "dist/api/openai-codex-responses.js":
+			return;
 		case "dist/api/openai-responses.js":
+			assertPiOpenAiResponsesNoToolsSource(source, relativePath);
 			return;
 		default:
 			throw new Error(`Unknown Pi AI forward patch target: ${relativePath}`);
@@ -667,6 +676,11 @@ function patchOpenAiCompletions(source) {
 		if (isPiOpenAiStructuredReasoningPatched(source)) {
 			assertPiAiForwardFixSource(relativePath, source);
 			return source;
+		}
+		if (source.includes("function isReasoningDetailObject(detail) {")) {
+			const upgraded = patchPiOpenAiStructuredReasoningSource(source);
+			assertPiAiForwardFixSource(relativePath, upgraded);
+			return upgraded;
 		}
 		let upgraded = source
 			.replaceAll("output.reasoning_details", "output.reasoningDetails")
@@ -1171,7 +1185,9 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 		case "dist/api/azure-openai-responses.js":
 		case "dist/api/mistral-conversations.js":
 		case "dist/api/openai-codex-responses.js":
+			break;
 		case "dist/api/openai-responses.js":
+			patched = patchPiOpenAiResponsesNoToolsSource(patched, relativePath);
 			break;
 		default:
 			throw new Error(`Unknown Pi AI forward patch target: ${relativePath}`);

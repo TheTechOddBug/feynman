@@ -166,11 +166,11 @@ test("structured reasoning assertions reject no-op and mutated semantics", () =>
 		["text merge", "        lastDetail.text += detail.text;", "        void detail.text;"],
 		["summary merge", "        lastDetail.summary += detail.summary;", "        void detail.summary;"],
 		["encrypted append", "    details.push({ ...detail });", "    void detail;"],
-		[
-			"ordered storage",
-			"                            block.thinkingSignature = JSON.stringify(preservedDetails);",
-			"                            block.thinkingSignature = block.thinkingSignature;",
-		],
+			[
+				"ordered storage",
+				"            block.thinkingSignature = JSON.stringify(preservedDetails);",
+				"            void preservedDetails;",
+			],
 		[
 			"provider identity gate",
 			"            const legacyMessageReasoningDetails = msg.provider === model.provider &&",

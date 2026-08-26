@@ -6,6 +6,14 @@ import {
 	FEYNMAN_UNDICI_VERSION,
 } from "./lib/pi-undici-proxy-patch.mjs";
 import {
+	FEYNMAN_LITEPARSE_GIT_HEAD,
+	FEYNMAN_LITEPARSE_NATIVE_PACKAGES,
+	FEYNMAN_LITEPARSE_VERSION,
+	verifyLiteparseManifestContract,
+	verifyLiteparseRootLockContract,
+	verifyLiteparseRuntimeLockContract,
+} from "./lib/liteparse-release-contract.mjs";
+import {
 	assertPiAiForwardFixArchive,
 	assertPiAiForwardFixPackageTree,
 } from "./lib/pi-ai-forward-fixes-verifier.mjs";
@@ -41,17 +49,7 @@ const prunedNative = process.argv.includes("--pruned-native");
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
 const FEYNMAN_BRACE_EXPANSION_VERSION = "5.0.9";
 const FEYNMAN_IP_ADDRESS_VERSION = "10.5.0";
-const FEYNMAN_LITEPARSE_VERSION = "2.13.1";
-const FEYNMAN_LITEPARSE_INTEGRITY = "sha512-EtMFEYFZIY+Gpj6nebvyiIkU9NTmLG5CXe2WpYy5S0pjCLfFgW0Tn9iN68ik3QIk64ELSdLJlgijSzCzfSpeoQ==";
-const FEYNMAN_LITEPARSE_NATIVE_PACKAGES = [
-	"@llamaindex/liteparse-darwin-arm64",
-	"@llamaindex/liteparse-darwin-x64",
-	"@llamaindex/liteparse-linux-arm64-gnu",
-	"@llamaindex/liteparse-linux-x64-gnu",
-	"@llamaindex/liteparse-linux-x64-musl",
-	"@llamaindex/liteparse-win32-arm64-msvc",
-	"@llamaindex/liteparse-win32-x64-msvc",
-];
+const FEYNMAN_PI_DOCPARSER_VERSION = "4.0.0";
 const PI_INTERACTIVE_UPDATE_NOTICE_MARKER = "// Feynman: package update notices use the full update command.";
 const PI_INTERACTIVE_UPDATE_NOTICE_ACTION = 'const action = theme.fg("accent", `${APP_NAME} update`);';
 const PI_INTERACTIVE_UPDATE_NOTICE_OLD_ANCHOR = `showPackageUpdateNotification(packages) {
@@ -146,6 +144,11 @@ for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
 	if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
 		fail(`package.json does not request ${packageName} ${FEYNMAN_LITEPARSE_VERSION}`);
 	}
+}
+const rootLockPath = resolve(packageRoot, "package-lock.json");
+if (existsSync(rootLockPath)) {
+	const rootLock = readJson(rootLockPath, "package-lock.json");
+	verifyLiteparseRootLockContract(rootLock, fail);
 }
 
 for (const name of [
@@ -544,8 +547,8 @@ if (expectedPiWebAccessVersion !== "0.24.2") {
 	fail("committed runtime lock does not pin pi-web-access 0.24.2");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
-if (expectedPiDocparserVersion !== "4.0.0") {
-	fail("committed runtime lock does not pin pi-docparser 4.0.0");
+if (expectedPiDocparserVersion !== FEYNMAN_PI_DOCPARSER_VERSION) {
+	fail(`committed runtime lock does not pin pi-docparser ${FEYNMAN_PI_DOCPARSER_VERSION}`);
 }
 if (
 	runtimeLock.packages?.["node_modules/@hono/node-server"]?.version !== "2.0.12"
@@ -555,15 +558,7 @@ if (
 if (runtimeLock.packages?.["node_modules/ip-address"]?.version !== FEYNMAN_IP_ADDRESS_VERSION) {
 	fail(`committed runtime lock does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
-const liteparseLockEntry = runtimeLock.packages?.["node_modules/@llamaindex/liteparse"];
-if (
-	liteparseLockEntry?.version !== FEYNMAN_LITEPARSE_VERSION ||
-	liteparseLockEntry?.resolved !==
-		`https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-${FEYNMAN_LITEPARSE_VERSION}.tgz` ||
-	liteparseLockEntry?.integrity !== FEYNMAN_LITEPARSE_INTEGRITY
-) {
-	fail(`committed runtime lock does not resolve exact LiteParse ${FEYNMAN_LITEPARSE_VERSION}`);
-}
+verifyLiteparseRuntimeLockContract(runtimeLock, fail);
 if (runtimeLock.packages?.[""]?.dependencies?.undici !== FEYNMAN_UNDICI_VERSION) {
 	fail(`committed runtime lock does not pin Undici ${FEYNMAN_UNDICI_VERSION}`);
 }
@@ -844,17 +839,7 @@ const liteparseManifest = readArchivedJson(
 	archivePath,
 	"npm/node_modules/@llamaindex/liteparse/package.json",
 );
-if (liteparseManifest.version !== FEYNMAN_LITEPARSE_VERSION) {
-	fail(`runtime LiteParse is not ${FEYNMAN_LITEPARSE_VERSION}`);
-}
-for (const [packageName, version] of Object.entries(liteparseManifest.optionalDependencies ?? {})) {
-	if (
-		packageName.startsWith("@llamaindex/liteparse-") &&
-		version !== FEYNMAN_LITEPARSE_VERSION
-	) {
-		fail(`runtime LiteParse optional package ${packageName} is not ${FEYNMAN_LITEPARSE_VERSION}`);
-	}
-}
+verifyLiteparseManifestContract(liteparseManifest, fail, "runtime");
 requireMarkers(
 	readArchivedText(
 		archivePath,
@@ -1190,6 +1175,7 @@ console.log(JSON.stringify({
 	piVersion: expectedPiVersion,
 	piDocparserVersion: expectedPiDocparserVersion,
 	ipAddressVersion: FEYNMAN_IP_ADDRESS_VERSION,
+	liteparseGitHead: FEYNMAN_LITEPARSE_GIT_HEAD,
 	liteparseVersion: FEYNMAN_LITEPARSE_VERSION,
 	piWebAccessVersion: expectedPiWebAccessVersion,
 	undiciVersion: FEYNMAN_UNDICI_VERSION,

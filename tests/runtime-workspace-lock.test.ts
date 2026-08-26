@@ -88,11 +88,11 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 			)?.integrity,
 		},
 		{
-			version: "2.13.1",
+			version: "2.14.0",
 			resolved:
-				"https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-2.13.1.tgz",
+				"https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-2.14.0.tgz",
 			integrity:
-				"sha512-EtMFEYFZIY+Gpj6nebvyiIkU9NTmLG5CXe2WpYy5S0pjCLfFgW0Tn9iN68ik3QIk64ELSdLJlgijSzCzfSpeoQ==",
+				"sha512-lIFBbTRs87Bpp45Lm986hUDEPndm85pT9l/BM1dtWhQs0zTLEkpHLrgbOxGG2rjBqDgJM5fdChT8LWUd4ZThWA==",
 		},
 	);
 	assert.equal(

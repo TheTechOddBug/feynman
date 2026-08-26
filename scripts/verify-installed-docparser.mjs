@@ -10,6 +10,17 @@ export const VERIFICATION_PHRASE = "Feynman installed docparser verification phr
 export const HIDDEN_GPO_STAMP = "jbell on PROD1PC69 with BILLS";
 export const HIDDEN_GPO_PRINT_STAMP =
 	"VerDate Aug 31 2005 05:35 Dec 11, 2008 Jkt 079200 PO 00000 Frm 00002 Fmt 6652 Sfmt 6301 E:\\BILLS\\H7337.IH H7337";
+const EXPECTED_PI_DOCPARSER_VERSION = "4.0.0";
+const EXPECTED_LITEPARSE_VERSION = "2.14.0";
+const EXPECTED_LITEPARSE_NATIVE_PACKAGES = [
+	"@llamaindex/liteparse-darwin-arm64",
+	"@llamaindex/liteparse-darwin-x64",
+	"@llamaindex/liteparse-linux-arm64-gnu",
+	"@llamaindex/liteparse-linux-x64-gnu",
+	"@llamaindex/liteparse-linux-x64-musl",
+	"@llamaindex/liteparse-win32-arm64-msvc",
+	"@llamaindex/liteparse-win32-x64-msvc",
+];
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const defaultPackageRoot = resolve(import.meta.dirname, "..");
@@ -143,6 +154,26 @@ export function resolveInstalledDocparserPaths(packageRoot = defaultPackageRoot)
 	const runtimeRequire = createRequire(resolve(runtimeRoot, "package.json"));
 	const liteparseManifestPath = realpathSync(runtimeRequire.resolve("@llamaindex/liteparse/package.json"));
 	const liteparseManifest = JSON.parse(readFileSync(liteparseManifestPath, "utf8"));
+	assert.equal(
+		liteparseManifest.version,
+		EXPECTED_LITEPARSE_VERSION,
+		`Installed LiteParse is not ${EXPECTED_LITEPARSE_VERSION}`,
+	);
+	const liteparseNativePackages = Object.keys(liteparseManifest.optionalDependencies ?? {})
+		.filter((packageName) => packageName.startsWith("@llamaindex/liteparse-"))
+		.sort();
+	assert.deepEqual(
+		liteparseNativePackages,
+		EXPECTED_LITEPARSE_NATIVE_PACKAGES.toSorted(),
+		"Installed LiteParse does not declare the reviewed seven native packages",
+	);
+	for (const packageName of EXPECTED_LITEPARSE_NATIVE_PACKAGES) {
+		assert.equal(
+			liteparseManifest.optionalDependencies?.[packageName],
+			EXPECTED_LITEPARSE_VERSION,
+			`Installed LiteParse does not pin ${packageName} ${EXPECTED_LITEPARSE_VERSION}`,
+		);
+	}
 	const liteparseEntryPath = realpathSync(
 		resolve(liteparseManifestPath, "..", liteparseManifest.main),
 	);
@@ -152,6 +183,14 @@ export function resolveInstalledDocparserPaths(packageRoot = defaultPackageRoot)
 	);
 	const extensionPath = resolve(docparserRoot, "extensions", "docparser", "index.ts");
 	assert.ok(existsSync(extensionPath), `Installed pi-docparser extension is missing: ${extensionPath}`);
+	const docparserManifest = JSON.parse(
+		readFileSync(resolve(docparserRoot, "package.json"), "utf8"),
+	);
+	assert.equal(
+		docparserManifest.version,
+		EXPECTED_PI_DOCPARSER_VERSION,
+		`Installed pi-docparser is not ${EXPECTED_PI_DOCPARSER_VERSION}`,
+	);
 	return {
 		packageRoot: resolvedPackageRoot,
 		piRoot,
@@ -556,10 +595,8 @@ export async function verifyInstalledDocparser(options = {}) {
 
 		const jitiManifest = JSON.parse(readFileSync(paths.jitiManifestPath, "utf8"));
 		verification = {
-			docparser: JSON.parse(
-				readFileSync(resolve(paths.docparserRoot, "package.json"), "utf8"),
-			).version,
-			liteparse: JSON.parse(readFileSync(paths.liteparseManifestPath, "utf8")).version,
+			docparser: EXPECTED_PI_DOCPARSER_VERSION,
+			liteparse: EXPECTED_LITEPARSE_VERSION,
 			jiti: jitiManifest.version,
 			pageCount: parseResult.details.pageCount,
 			hits: searchResult.details.hits.length,

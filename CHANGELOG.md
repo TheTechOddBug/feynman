@@ -4,6 +4,17 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 23:48 EDT — pi-research-runtime-integrity-0.3.44
+
+- Objective: Repair five reproduced Pi research-runtime defects and qualify LiteParse `2.14.0` without adopting unrelated package churn.
+- Reproduced: Aborting during tool execution made a second model call and consumed queued research input; OpenAI Responses compaction sent `tool_choice` without tools; structured reasoning reparsed its full accumulated signature per delta; `8192`-token models compacted empty context under fixed budgets; empty and file-list-only summaries could replace research history.
+- Document intake: Official LiteParse `2.14.0` bounds OCR raster memory to worker-sized rounds and removes quadratic bounding-box/layout work, directly improving long and dense paper ingestion.
+- Changed: Exact Pi `0.84.2` patchers now preserve queued input on tool-time abort, serialize accumulated reasoning once per block, omit no-tool Responses `tool_choice`, derive viable small-context compaction budgets, and reject structurally unusable history, split-turn, and branch checkpoints. The root and runtime locks now pin all seven LiteParse `2.14.0` platform packages.
+- Adversarial repair: Follow-up review blocked tiny structured stubs relative to current and prior checkpoint size, preserved documented branch replacement prompts, made all seven runtime native LiteParse locks fail closed on identity and platform drift, and required the load-bearing size-threshold formula in source verification.
+- Verified locally: Focused executable regressions passed after integration; the final full suite passed `951/951`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/runtime/site production audits, source artifact verification, freshness review, and diff checks passed. Terminal dry and real packs matched at `116,527,953` bytes / `29,184` files with SHA-256 `f75b0511d86e244f5f6f42c75164c43524ce626f8b9fd3718e2a1f5b8414cdaf`; the exact clean consumer passed audits, package/runtime/provider/tool checks, and installed LiteParse parse/search/screenshot verification.
+- Preservation: Root work started from clean synchronized `main` at `aeb0a049`; the independent nested `website` checkout remains preserved at `67186845`, with only the root-owned release page intentionally updated for this candidate.
+- State: `verified` for the uncommitted local candidate; exact committed-SHA Daytona, PR CI, merge, publication, and post-release identity remain `unverified`. Next: commit the exact tree, run clean-machine proof, then merge, publish, and reconcile `0.3.44`.
+
 ### 2026-08-25 22:32 EDT — pi-subagents-legacy-install-0.3.43-release
 
 - Persistence: PR `#256` merged from exact tested head `84215bef3f13301cd448412b3bef05b59b2ca9ac` as `39eec7a0e245464bdfa765e7361193385c0f5ba2`; the release branch was deleted and pruned.
