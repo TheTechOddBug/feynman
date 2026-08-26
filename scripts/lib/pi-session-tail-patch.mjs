@@ -1,13 +1,25 @@
-import { createHash } from "node:crypto";
-
 export const PI_SESSION_TAIL_PATCH_MARKER =
 	"Feynman Pi 0.84.2 correctness patch: upstream #8345";
 const PI_SESSION_TAIL_FUNCTION_START =
 	"export function loadEntriesFromFile(filePath) {";
 const PI_SESSION_TAIL_FUNCTION_END =
 	"\n/**\n * Inspect a physical line while searching for the first parsed session entry.";
-const PI_SESSION_TAIL_PATCHED_FUNCTION_SHA256 =
-	"056801a48b9b4601e7011ca893c2a85cf417f576c3e50f6fc0a11c77411f8cac";
+const PI_SESSION_TAIL_OWNERSHIP_BLOCK = `    const entries = [];
+    let pending = "";
+    const fd = openSync(resolvedFilePath, "r");
+    try {
+        const decoder = new StringDecoder("utf8");
+        const buffer = Buffer.allocUnsafe(SESSION_READ_BUFFER_SIZE);`;
+const PI_SESSION_TAIL_REPAIR_BLOCK = `    // Validate session header before repairing the file.
+    if (entries.length === 0)
+        return entries;
+    const header = entries[0];
+    if (header.type !== "session" || typeof header.id !== "string") {
+        return [];
+    }
+    // ${PI_SESSION_TAIL_PATCH_MARKER}. Remove after the bundled Pi release includes commit 0b5ee5d8.
+    if (pending) appendFileSync(resolvedFilePath, "\\n");
+    return entries;`;
 
 function countOccurrences(source, fragment) {
 	return source.split(fragment).length - 1;
@@ -55,13 +67,38 @@ export function assertPiSessionTailPatchedSource(
 		);
 	}
 	const functionSource = extractLoadEntriesFromFile(source, surface);
-	const functionDigest = createHash("sha256")
-		.update(functionSource)
-		.digest("hex");
-	if (functionDigest !== PI_SESSION_TAIL_PATCHED_FUNCTION_SHA256) {
-		throw new Error(
-			`Incomplete Pi session tail repair ${surface}: expected exact loadEntriesFromFile ${PI_SESSION_TAIL_PATCHED_FUNCTION_SHA256}, found ${functionDigest}`,
-		);
+	for (const [fragment, expectedCount, label] of [
+		[PI_SESSION_TAIL_OWNERSHIP_BLOCK, 1, "pending tail ownership"],
+		['pending = "";', 1, "pending tail reset count"],
+		["pending += decoder.end();", 1, "decoder finalization"],
+		["const finalEntry = parseSessionEntryLine(pending);", 1, "final entry parse"],
+		["finally {\n        closeSync(fd);\n    }", 1, "file close boundary"],
+		[PI_SESSION_TAIL_REPAIR_BLOCK, 1, "validated append boundary"],
+		["return entries;", 2, "entry return count"],
+	]) {
+		const actualCount = countOccurrences(functionSource, fragment);
+		if (actualCount !== expectedCount) {
+			throw new Error(
+				`Incomplete Pi session tail repair ${surface}: expected ${expectedCount} ${label}, found ${actualCount}`,
+			);
+		}
+	}
+	const ordered = [
+		PI_SESSION_TAIL_OWNERSHIP_BLOCK,
+		"pending += decoder.end();",
+		"const finalEntry = parseSessionEntryLine(pending);",
+		"finally {\n        closeSync(fd);\n    }",
+		PI_SESSION_TAIL_REPAIR_BLOCK,
+	];
+	let previousIndex = -1;
+	for (const fragment of ordered) {
+		const index = functionSource.indexOf(fragment, previousIndex + 1);
+		if (index <= previousIndex) {
+			throw new Error(
+				`Incomplete Pi session tail repair ${surface}: invalid semantic order`,
+			);
+		}
+		previousIndex = index;
 	}
 }
 
