@@ -24,10 +24,11 @@ import {
  * - b7bb00b936dbe21b8e160b3e89efdec361846699 (reasoning signature storage)
  * - c5ad7c1b0f7623bbfdf64dd4967fa6e99c15c01a (reasoning delta concatenation)
  * - 7280f89b42e4b233afc4f18e41366e845d179cef (Responses no-tools contract, Pi #8649/#8650)
+ * - 331e187b8ee86cc87360600eef6f9620a5d1967b (Bedrock OpenAI tool-result images, Pi #8643)
  * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all fourteen fixes.
+ * version that contains all fifteen fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -64,6 +65,7 @@ export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	googleShared: "Feynman Pi 0.84.2 forward patch: resolve Google thinking level maps",
 	googleVertex: "Feynman Pi 0.84.2 forward patch: Vertex thinking level maps",
 	bedrock: "Feynman Pi 0.84.2 forward patch: Bedrock Smithy response headers",
+	bedrockToolResultImages: "Feynman Pi 0.84.2 forward patch: Bedrock OpenAI tool-result images",
 	toolChoice: "Feynman Pi 0.84.2 forward patch: provider-neutral tool choice",
 	openAiCompletions: "Feynman Pi 0.84.2 forward patch: Gemini signatures and bounded tool IDs",
 	openAiResponsesNoTools: PI_OPENAI_RESPONSES_NO_TOOLS_MARKER,
@@ -363,6 +365,63 @@ function assertSourceFragments(source, relativePath, fragments) {
 	}
 }
 
+function assertBedrockResponseHeadersSource(source, relativePath) {
+	assertSourceFragments(source, relativePath, [
+		PI_AI_FORWARD_FIX_MARKERS.bedrock,
+		"addResponseHeadersMiddleware(client, options.onResponse, model",
+		"if (!observedRawResponse && response.$metadata.httpStatusCode !== undefined)",
+		'name: "pi-ai-response-headers"',
+	]);
+}
+
+function assertBedrockToolResultImagesSource(source, relativePath) {
+	assertSourceFragments(source, relativePath, [
+		`// ${PI_AI_FORWARD_FIX_MARKERS.bedrockToolResultImages}
+function shouldHoistToolResultImages(model) {
+    return model.id.startsWith("openai.") || model.id.includes(".openai.");
+}
+function convertToolResultImages(content) {
+    return content
+        .filter((c) => c.type === "image")
+        .map((c) => ({ image: createImageBlock(c.mimeType, c.data) }));
+}`,
+		"function convertToolResultContent(content, hoistImages = false) {",
+		`        if (c.type === "image") {
+            if (!hoistImages)
+                result.push({ image: createImageBlock(c.mimeType, c.data) });
+        }`,
+		"    if (result.length === 0)\n        result.push({ text: EMPTY_TEXT_PLACEHOLDER });",
+		`                const toolResults = [];
+                const toolImages = [];
+                const hoistImages = shouldHoistToolResultImages(model);`,
+		"                        content: convertToolResultContent(m.content, hoistImages),",
+		"                            content: convertToolResultContent(nextMsg.content, hoistImages),",
+		`                if (hoistImages)
+                    toolImages.push(...convertToolResultImages(m.content));`,
+		`                    if (hoistImages)
+                        toolImages.push(...convertToolResultImages(nextMsg.content));`,
+		"                    content: [...toolResults, ...toolImages],",
+	]);
+	for (const [fragment, expectedCount] of [
+		[PI_AI_FORWARD_FIX_MARKERS.bedrockToolResultImages, 1],
+		["function shouldHoistToolResultImages(model) {", 1],
+		["function convertToolResultImages(content) {", 1],
+		["if (hoistImages)", 2],
+		["toolImages.push(...convertToolResultImages(", 2],
+		["content: [...toolResults, ...toolImages],", 1],
+	]) {
+		const count = countOccurrences(source, fragment);
+		if (count !== expectedCount) {
+			throw new Error(
+				`Incomplete Pi AI forward patch ${relativePath}: expected ${expectedCount} exact ${fragment} fragment(s), found ${count}`,
+			);
+		}
+	}
+	if (source.includes("                    content: toolResults,")) {
+		throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained nested-only tool result content`);
+	}
+}
+
 export function assertPiAiForwardFixSource(relativePath, source) {
 	if (!relativePath.endsWith(".json") && source.includes("//# sourceMappingURL=")) {
 		throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained stale source map directive`);
@@ -418,12 +477,8 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 			]);
 			return;
 		case "dist/api/bedrock-converse-stream.js":
-			assertSourceFragments(source, relativePath, [
-				PI_AI_FORWARD_FIX_MARKERS.bedrock,
-				"addResponseHeadersMiddleware(client, options.onResponse, model",
-				"if (!observedRawResponse && response.$metadata.httpStatusCode !== undefined)",
-				'name: "pi-ai-response-headers"',
-			]);
+			assertBedrockResponseHeadersSource(source, relativePath);
+			assertBedrockToolResultImagesSource(source, relativePath);
 			return;
 		case "dist/api/openai-completions.js":
 			assertSourceFragments(source, relativePath, [
@@ -611,10 +666,10 @@ function patchGoogleVertex(source) {
 	return patched;
 }
 
-function patchBedrock(source) {
+function patchBedrockResponseHeaders(source) {
 	const relativePath = "dist/api/bedrock-converse-stream.js";
 	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.bedrock)) {
-		assertPiAiForwardFixSource(relativePath, source);
+		assertBedrockResponseHeadersSource(source, relativePath);
 		return source;
 	}
 	let patched = replaceRequired(
@@ -666,6 +721,108 @@ function addResponseHeadersMiddleware(client, onResponse, model, onObserved) {
 }
 export const streamSimple`;
 	patched = replaceRequired(patched, anchor, helper, "Bedrock response middleware");
+	assertBedrockResponseHeadersSource(patched, relativePath);
+	return patched;
+}
+
+function patchBedrockToolResultImages(source) {
+	const relativePath = "dist/api/bedrock-converse-stream.js";
+	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.bedrockToolResultImages)) {
+		assertBedrockToolResultImagesSource(source, relativePath);
+		return source;
+	}
+	let patched = replaceRequired(
+		source,
+		"function convertToolResultContent(content) {",
+		"function convertToolResultContent(content, hoistImages = false) {",
+		"Bedrock tool result converter signature",
+	);
+	patched = replaceRequired(
+		patched,
+		`        if (c.type === "image") {
+            result.push({ image: createImageBlock(c.mimeType, c.data) });
+        }`,
+		`        if (c.type === "image") {
+            if (!hoistImages)
+                result.push({ image: createImageBlock(c.mimeType, c.data) });
+        }`,
+		"Bedrock nested tool result image filter",
+	);
+	patched = replaceRequired(
+		patched,
+		`    return result;
+}
+function convertMessages(context, model, cacheRetention, env) {`,
+		`    return result;
+}
+// ${PI_AI_FORWARD_FIX_MARKERS.bedrockToolResultImages}
+function shouldHoistToolResultImages(model) {
+    return model.id.startsWith("openai.") || model.id.includes(".openai.");
+}
+function convertToolResultImages(content) {
+    return content
+        .filter((c) => c.type === "image")
+        .map((c) => ({ image: createImageBlock(c.mimeType, c.data) }));
+}
+function convertMessages(context, model, cacheRetention, env) {`,
+		"Bedrock tool result image helpers",
+	);
+	patched = replaceRequired(
+		patched,
+		`                const toolResults = [];
+                // Add current tool result with all content blocks combined`,
+		`                const toolResults = [];
+                const toolImages = [];
+                const hoistImages = shouldHoistToolResultImages(model);
+                // Add current tool result with all content blocks combined`,
+		"Bedrock tool result image collections",
+	);
+	patched = replaceRequired(
+		patched,
+		"                        content: convertToolResultContent(m.content),",
+		"                        content: convertToolResultContent(m.content, hoistImages),",
+		"Bedrock current tool result conversion",
+	);
+	patched = replaceRequired(
+		patched,
+		`                });
+                // Look ahead for consecutive toolResult messages`,
+		`                });
+                if (hoistImages)
+                    toolImages.push(...convertToolResultImages(m.content));
+                // Look ahead for consecutive toolResult messages`,
+		"Bedrock current tool result image hoist",
+	);
+	patched = replaceRequired(
+		patched,
+		"                            content: convertToolResultContent(nextMsg.content),",
+		"                            content: convertToolResultContent(nextMsg.content, hoistImages),",
+		"Bedrock consecutive tool result conversion",
+	);
+	patched = replaceRequired(
+		patched,
+		`                    });
+                    j++;`,
+		`                    });
+                    if (hoistImages)
+                        toolImages.push(...convertToolResultImages(nextMsg.content));
+                    j++;`,
+		"Bedrock consecutive tool result image hoist",
+	);
+	patched = replaceRequired(
+		patched,
+		"                    content: toolResults,",
+		"                    content: [...toolResults, ...toolImages],",
+		"Bedrock user tool result image siblings",
+	);
+	assertBedrockToolResultImagesSource(patched, relativePath);
+	return patched;
+}
+
+function patchBedrock(source) {
+	const relativePath = "dist/api/bedrock-converse-stream.js";
+	let patched = patchBedrockResponseHeaders(source);
+	patched = patchBedrockToolResultImages(patched);
 	assertPiAiForwardFixSource(relativePath, patched);
 	return patched;
 }

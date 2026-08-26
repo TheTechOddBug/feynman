@@ -13,6 +13,7 @@ import {
 	patchPiAiForwardFixSource,
 } from "../scripts/lib/pi-ai-forward-fixes-patch.mjs";
 import {
+	assertPiAiForwardFixArchive,
 	assertPiAiForwardFixPackageTree,
 	resolvePiAiForwardFixVerificationTargets,
 } from "../scripts/lib/pi-ai-forward-fixes-verifier.mjs";
@@ -34,6 +35,213 @@ const nestedPiAiRoot = resolve(
 
 function readPiAiSource(root: string, relativePath: string): string {
 	return readFileSync(resolve(root, ...relativePath.split("/")), "utf8");
+}
+
+const BEDROCK_RELATIVE_PATH = "dist/api/bedrock-converse-stream.js";
+const BEDROCK_TOOL_RESULT_PNG = "iVBORw0KGgo=";
+const BEDROCK_EMPTY_USAGE = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+type BedrockPayload = {
+	messages: Array<{
+		role: string;
+		content: Array<{
+			image?: { format?: string; source?: { bytes?: Uint8Array } };
+			toolResult?: {
+				toolUseId: string;
+				content: Array<{ text?: string; image?: unknown }>;
+				status: string;
+			};
+		}>;
+	}>;
+};
+
+function bedrockToolResultModel(id: string) {
+	return {
+		id,
+		name: id,
+		api: "bedrock-converse-stream",
+		provider: "amazon-bedrock",
+		baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1_000_000,
+		maxTokens: 128_000,
+	};
+}
+
+function bedrockToolResultContext(modelId: string) {
+	return {
+		messages: [
+			{ role: "user", content: "Inspect two charts", timestamp: 1 },
+			{
+				role: "assistant",
+				content: [
+					{ type: "toolCall", id: "tool-1", name: "read", arguments: { path: "/tmp/chart-1.png" } },
+					{ type: "toolCall", id: "tool-2", name: "read", arguments: { path: "/tmp/chart-2.png" } },
+				],
+				api: "bedrock-converse-stream",
+				provider: "amazon-bedrock",
+				model: modelId,
+				usage: BEDROCK_EMPTY_USAGE,
+				stopReason: "toolUse",
+				timestamp: 2,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "tool-1",
+				toolName: "read",
+				content: [
+					{ type: "text", text: "rendered chart" },
+					{ type: "image", data: BEDROCK_TOOL_RESULT_PNG, mimeType: "image/png" },
+				],
+				isError: false,
+				timestamp: 3,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "tool-2",
+				toolName: "read",
+				content: [{ type: "image", data: BEDROCK_TOOL_RESULT_PNG, mimeType: "image/png" }],
+				isError: false,
+				timestamp: 4,
+			},
+		],
+	};
+}
+
+async function captureBedrockToolResultPayload(root: string, modelId: string, label: string): Promise<BedrockPayload> {
+	const bedrock = await import(
+		`${pathToFileURL(resolve(root, ...BEDROCK_RELATIVE_PATH.split("/"))).href}?tool-result-images=${Date.now()}-${label}`
+	);
+	let payload: BedrockPayload | undefined;
+	const captureMessage = `captured ${label} Bedrock tool-result payload`;
+	const result = await bedrock.stream(
+		bedrockToolResultModel(modelId),
+		bedrockToolResultContext(modelId),
+		{
+			cacheRetention: "none",
+			env: { AWS_BEDROCK_SKIP_AUTH: "1" },
+			onPayload: (request: BedrockPayload) => {
+				payload = request;
+				throw new Error(captureMessage);
+			},
+		},
+	).result();
+	assert.ok(result.errorMessage?.includes(captureMessage));
+	assert.ok(payload, `${label} Bedrock tool-result payload was not captured`);
+	return payload;
+}
+
+function assertHoistedBedrockOpenAiToolResultPayload(payload: BedrockPayload, label: string): void {
+	const message = payload.messages.at(-1);
+	assert.ok(message);
+	assert.equal(message.role, "user");
+	assert.equal(message.content.length, 4, `${label} must retain two tool results and two sibling images`);
+	assert.deepEqual(message.content[0].toolResult, {
+		toolUseId: "tool-1",
+		content: [{ text: "rendered chart" }],
+		status: "success",
+	});
+	assert.deepEqual(message.content[1].toolResult, {
+		toolUseId: "tool-2",
+		content: [{ text: "<empty>" }],
+		status: "success",
+	});
+	for (const block of message.content.slice(2)) {
+		assert.equal(block.image?.format, "png", `${label} sibling image must retain its format`);
+		assert.equal(
+			Buffer.from(block.image?.source?.bytes ?? []).toString("base64"),
+			BEDROCK_TOOL_RESULT_PNG,
+			`${label} sibling image must retain its bytes`,
+		);
+	}
+}
+
+function assertNestedBedrockAnthropicToolResultPayload(payload: BedrockPayload, label: string): void {
+	const message = payload.messages.at(-1);
+	assert.ok(message);
+	assert.equal(message.role, "user");
+	assert.equal(message.content.length, 2, `${label} Anthropic control must not gain sibling images`);
+	assert.deepEqual(
+		message.content[0].toolResult?.content.map((block) => Object.keys(block)[0]),
+		["text", "image"],
+	);
+	assert.deepEqual(
+		message.content[1].toolResult?.content.map((block) => Object.keys(block)[0]),
+		["image"],
+	);
+}
+
+function unpatchedBedrockSourceFixture(): string {
+	return [
+		"            const client = new BedrockRuntimeClient(config);",
+		"            if (response.$metadata.httpStatusCode !== undefined) {",
+		"function convertToolResultContent(content) {",
+		"    const result = [];",
+		"    for (const c of content) {",
+		'        if (c.type === "image") {',
+		"            result.push({ image: createImageBlock(c.mimeType, c.data) });",
+		"        }",
+		"        else {",
+		"            const textBlock = createNonBlankTextBlock(c.text);",
+		"            if (textBlock)",
+		"                result.push(textBlock);",
+		"        }",
+		"    }",
+		"    if (result.length === 0)",
+		"        result.push({ text: EMPTY_TEXT_PLACEHOLDER });",
+		"    return result;",
+		"}",
+		"function convertMessages(context, model, cacheRetention, env) {",
+		"    const result = [];",
+		"    const transformedMessages = transformMessages(context.messages, model, normalizeToolCallId);",
+		"    for (let i = 0; i < transformedMessages.length; i++) {",
+		"        const m = transformedMessages[i];",
+		'        if (m.role === "toolResult") {',
+		"                const toolResults = [];",
+		"                // Add current tool result with all content blocks combined",
+		"                toolResults.push({",
+		"                    toolResult: {",
+		"                        toolUseId: m.toolCallId,",
+		"                        content: convertToolResultContent(m.content),",
+		"                        status: m.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,",
+		"                    },",
+		"                });",
+		"                // Look ahead for consecutive toolResult messages",
+		"                let j = i + 1;",
+		'                while (j < transformedMessages.length && transformedMessages[j].role === "toolResult") {',
+		"                    const nextMsg = transformedMessages[j];",
+		"                    toolResults.push({",
+		"                        toolResult: {",
+		"                            toolUseId: nextMsg.toolCallId,",
+		"                            content: convertToolResultContent(nextMsg.content),",
+		"                            status: nextMsg.isError ? ToolResultStatus.ERROR : ToolResultStatus.SUCCESS,",
+		"                        },",
+		"                    });",
+		"                    j++;",
+		"                }",
+		"                i = j - 1;",
+		"                result.push({",
+		"                    role: ConversationRole.USER,",
+		"                    content: toolResults,",
+		"                });",
+		"        }",
+		"    }",
+		"    return result;",
+		"}",
+		'    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });',
+		"}",
+		"export const streamSimple",
+		"    const base = buildBaseOptions(model, context, options, undefined);",
+	].join("\n");
 }
 
 async function importPatchedOpenAiCompletions(label: string) {
@@ -129,11 +337,12 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		"0e4d495",
 		"8720548",
 		"ad58801",
-		"e5dde9a",
-		"fe37e9f",
-		"4ca636c5",
+			"e5dde9a",
+			"fe37e9f",
+			"4ca636c5",
 		"b7bb00b9",
 		"c5ad7c1b",
+		"331e187",
 	]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
@@ -202,6 +411,122 @@ test("structured reasoning assertions reject no-op and mutated semantics", () =>
 		() => assertPiAiForwardFixSource(typesPath, mutatedTypes),
 		/retained top-level reasoningDetails/,
 	);
+});
+
+test("Bedrock tool-result image assertions fail closed across source, package, and archive surfaces", () => {
+	const patched = readPiAiSource(piAiRoot, BEDROCK_RELATIVE_PATH);
+	const nestedArchivePrefix =
+		"npm/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/";
+	const rootArchivePrefix = "npm/node_modules/@earendil-works/pi-ai/";
+	const readSyntheticArchiveEntry = (
+		entryPath: string,
+		mutatedCopy?: "root" | "nested",
+		mutatedSource?: string,
+	): string => {
+		const [copy, root, prefix] = entryPath.startsWith(nestedArchivePrefix)
+			? ["nested" as const, nestedPiAiRoot, nestedArchivePrefix]
+			: ["root" as const, piAiRoot, rootArchivePrefix];
+		assert.ok(entryPath.startsWith(prefix), `unexpected synthetic archive entry: ${entryPath}`);
+		const relativePath = entryPath.slice(prefix.length);
+		if (copy === mutatedCopy && relativePath === BEDROCK_RELATIVE_PATH) {
+			assert.ok(mutatedSource);
+			return mutatedSource;
+		}
+		return readPiAiSource(root, relativePath);
+	};
+
+	assert.doesNotThrow(() =>
+		assertPiAiForwardFixPackageTree(appRoot, (path) => readFileSync(path, "utf8")),
+	);
+	assert.doesNotThrow(() => assertPiAiForwardFixArchive(readSyntheticArchiveEntry));
+
+	for (const [name, original, mutation] of [
+		[
+			"OpenAI model predicate",
+			'    return model.id.startsWith("openai.") || model.id.includes(".openai.");',
+			"    return false;",
+		],
+		[
+			"nested image filter",
+			`            if (!hoistImages)
+                result.push({ image: createImageBlock(c.mimeType, c.data) });`,
+			`            if (false && !hoistImages)
+                result.push({ image: createImageBlock(c.mimeType, c.data) });`,
+		],
+		[
+			"empty placeholder",
+			`    if (result.length === 0)
+        result.push({ text: EMPTY_TEXT_PLACEHOLDER });`,
+			`    if (false && result.length === 0)
+        result.push({ text: EMPTY_TEXT_PLACEHOLDER });`,
+		],
+		[
+			"image extraction",
+			'        .filter((c) => c.type === "image")',
+			'        .filter((c) => c.type === "text")',
+		],
+		[
+			"current result hoist",
+			`                if (hoistImages)
+                    toolImages.push(...convertToolResultImages(m.content));`,
+			`                if (false && hoistImages)
+                    toolImages.push(...convertToolResultImages(m.content));`,
+		],
+		[
+			"consecutive result hoist",
+			`                    if (hoistImages)
+                        toolImages.push(...convertToolResultImages(nextMsg.content));`,
+			`                    if (false && hoistImages)
+                        toolImages.push(...convertToolResultImages(nextMsg.content));`,
+		],
+		[
+			"sibling image publication",
+			"                    content: [...toolResults, ...toolImages],",
+			"                    content: toolResults,",
+		],
+	] as const) {
+		const mutated = patched.replace(original, mutation);
+		assert.notEqual(mutated, patched, name);
+		assert.throws(
+			() => assertPiAiForwardFixSource(BEDROCK_RELATIVE_PATH, mutated),
+			/Incomplete Pi AI forward patch/,
+			`${name} source assertion`,
+		);
+		assert.throws(
+			() => patchPiAiForwardFixSource(BEDROCK_RELATIVE_PATH, mutated),
+			/Incomplete Pi AI forward patch/,
+			`${name} patch path`,
+		);
+
+		for (const copy of ["root", "nested"] as const) {
+			const targetPath = resolve(
+				appRoot,
+				"node_modules",
+				"@earendil-works",
+				...(copy === "nested"
+					? ["pi-coding-agent", "node_modules", "@earendil-works", "pi-ai"]
+					: ["pi-ai"]),
+				...BEDROCK_RELATIVE_PATH.split("/"),
+			);
+			assert.throws(
+				() =>
+					assertPiAiForwardFixPackageTree(
+						appRoot,
+						(path) => path === targetPath ? mutated : readFileSync(path, "utf8"),
+					),
+				new RegExp(`bundled ${copy} Pi AI`),
+				`${name} bundled ${copy}`,
+			);
+			assert.throws(
+				() =>
+					assertPiAiForwardFixArchive(
+						(entryPath) => readSyntheticArchiveEntry(entryPath, copy, mutated),
+					),
+				new RegExp(`runtime archive ${copy} Pi AI`),
+				`${name} runtime archive ${copy}`,
+			);
+		}
+	}
 });
 
 test("pruned native Pi AI verification does not require declaration files", () => {
@@ -288,19 +613,15 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 	assert.doesNotMatch(vertex, /budgets\[effort\]/);
 
 	const bedrock = patchPiAiForwardFixSource(
-		"dist/api/bedrock-converse-stream.js",
-		[
-			"            const client = new BedrockRuntimeClient(config);",
-			"            if (response.$metadata.httpStatusCode !== undefined) {",
-			'    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });',
-			"}",
-			"export const streamSimple",
-			"    const base = buildBaseOptions(model, context, options, undefined);",
-		].join("\n"),
+		BEDROCK_RELATIVE_PATH,
+		unpatchedBedrockSourceFixture(),
 	);
 	assert.match(bedrock, new RegExp(PI_AI_FORWARD_FIX_MARKERS.bedrock));
+	assert.match(bedrock, new RegExp(PI_AI_FORWARD_FIX_MARKERS.bedrockToolResultImages));
 	assert.match(bedrock, /step: "deserialize", name: "pi-ai-response-headers"/);
 	assert.match(bedrock, /!observedRawResponse/);
+	assert.match(bedrock, /content: \[\.\.\.toolResults, \.\.\.toolImages\]/);
+	assert.equal(patchPiAiForwardFixSource(BEDROCK_RELATIVE_PATH, bedrock), bedrock);
 
 	const xiaomi = patchPiAiForwardFixSource(
 		"dist/providers/data/xiaomi.json",
@@ -478,6 +799,25 @@ test("Bedrock forwards raw Smithy response headers to onResponse", async (t) => 
 	assert.equal(responses[0].headers["x-amzn-requestid"], "req-123");
 	assert.equal(responses[0].headers["x-bifrost-provider"], "bedrock");
 	assert.equal(responses[0].headers["x-bifrost-resolved-model"], modelId);
+});
+
+test("Bedrock hoists OpenAI tool-result images while preserving Anthropic nesting", async () => {
+	for (const [copy, root] of [
+		["root", piAiRoot],
+		["nested", nestedPiAiRoot],
+	] as const) {
+		for (const modelId of [
+			"openai.gpt-5.6-sol",
+			"us.openai.gpt-5.6-sol",
+			"global.openai.gpt-5.6-sol",
+		]) {
+			const payload = await captureBedrockToolResultPayload(root, modelId, `${copy}-${modelId}`);
+			assertHoistedBedrockOpenAiToolResultPayload(payload, `${copy} ${modelId}`);
+		}
+		const anthropicModelId = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+		const anthropicPayload = await captureBedrockToolResultPayload(root, anthropicModelId, `${copy}-anthropic`);
+		assertNestedBedrockAnthropicToolResultPayload(anthropicPayload, `${copy} ${anthropicModelId}`);
+	}
 });
 
 test("patched Xiaomi and China ZAI catalogs expose only current provider models", async () => {
