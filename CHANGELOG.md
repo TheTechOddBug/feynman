@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-26 15:59 EDT — research-runtime-intake-0.3.46-release-blockers
+
+- Objective: Adversarially reconcile merged PR `#261` before `0.3.46` publication and stop any release whose package/runtime behavior was not actually exercised.
+- Blocked release: Canceled main publish run `33001506128` before npm or GitHub publication after exact runtime review reproduced `ReferenceError: override is not defined` in pi-otel session shutdown and found proxy credentials/provider headers in curl process arguments. GitHub clone subprocesses also ignored the per-call proxy decision, the ADC example selected mutually exclusive API-key and ADC modes, and the runtime archive retained npm's stale pre-patch hidden lock.
+- Fixed: pi-otel now keeps session shutdown and dashboard rewiring in their owning scopes and migrates the exact bad pre-release digest. Proxy secrets, headers, and target URLs move through curl stdin; GitHub clones use the same scoped proxy/`NO_PROXY`/forced-direct environment as API requests. Runtime builds remove `node_modules/.package-lock.json` after reviewed tree patches and artifact verification rejects its return. Public web/release docs now match those boundaries.
+- Verified: Baseline main passed `996/996` but lacked the blocker regressions. The repaired focused cluster passes `112/112`, including executable handler and stdin-only argv checks. Exact source contracts pass all `32` pi-web-access targets and all pi-otel targets. Rebuilt runtime/package verification passes with no hidden lock locally or in the archive; `npm ls` has no invalid version record; artifact verification reports runtime SHA-256 `eaf84d9b0b974f4ac69e363ac152b01d1c0b4bb570e337ffc7266133a73cfa72`.
+- State: `unverified` for the repaired full ladder, exact committed package/consumer/Daytona proof, successor PR CI, merge, and `0.3.46` publication. Next: finish every cumulative gate on the repaired commit, then merge and verify npm/GitHub/native release identity.
+
 ### 2026-08-26 12:08 EDT — research-runtime-intake-0.3.46
 
 - Objective: Complete the post-`0.3.45` intake with only concrete research-loop reliability work: Pi session-tail integrity, pi-btw custom-provider continuity, `pi-web-access@0.25.0`, and pi-otel HTTP signal routing.
