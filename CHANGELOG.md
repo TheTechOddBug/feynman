@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-26 17:11 EDT — research-runtime-intake-0.3.47-emergency-hotfix
+
+- Objective: Supersede an unsafe `0.3.46` publication with the already qualified PR `#262` repair tree rather than leaving the immutable npm version as `latest`.
+- Incident: Publish run `33001506128` was canceled before publication during adversarial review, but a concurrent retry resumed it and published npm/GitHub `0.3.46` from superseded merge `6bbb6e8` while the repaired PR matrix was still running. Added an immediate GitHub release warning. npm deprecation was attempted but the local automation token cannot satisfy the package's interactive two-factor requirement.
+- Hotfix: Bumped the exact repaired tree to `0.3.47`; moved the corrected user-facing notes to `v0.3.47` and marked `v0.3.46` as superseded in repository and website release history.
+- Reused proof: Repair head `057fbfb` passed focused `112/112`, full `999/999`, typecheck/build/architecture/site checks, all audits, deterministic local package/consumer checks, disposable Daytona Node `25.9.0` full/package/runtime verification, and exact-head PR run `33009176960` including Windows native and all six OS/Node consumers. Merge `f2977bc` contains the identical repaired tree.
+- State: `unverified` for the version-only `0.3.47` package identity, successor PR CI, publication, and live latest-tag replacement. Next: qualify and merge the version/docs hotfix, then verify npm/GitHub `0.3.47`, installers, provenance, and actual installs.
+
 ### 2026-08-26 15:59 EDT — research-runtime-intake-0.3.46-release-blockers
 
 - Objective: Adversarially reconcile merged PR `#261` before `0.3.46` publication and stop any release whose package/runtime behavior was not actually exercised.
