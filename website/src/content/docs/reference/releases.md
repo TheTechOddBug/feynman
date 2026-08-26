@@ -9,7 +9,7 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
-## v0.3.46 - 2026-08-26
+## v0.3.47 - 2026-08-26
 
 ### Research continuity
 
@@ -36,6 +36,12 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 - Added exact source, published-upgrade, patch-plan transaction, package-tree, runtime-archive, executable OTLP handler, stdin-only proxy credential, GitHub clone proxy, installed-runtime OTLP behavior, GitHub document, Gemini ADC, Kimi credential, BTW provider, and unterminated-session regressions.
 - Runtime archives omit npm's pre-patch hidden lock metadata and verify its absence, so `npm ls` reads the committed exact lock instead of a stale nested Undici version.
+
+## v0.3.46 - 2026-08-26
+
+### Superseded release
+
+- Do not install `0.3.46`. Its canceled workflow was retried and published the superseded `6bbb6e8` tree with a pi-otel shutdown failure, explicit proxy/provider credentials in process arguments, and stale npm runtime metadata. Upgrade to `0.3.47` or later.
 
 ## v0.3.45 - 2026-08-26
 
