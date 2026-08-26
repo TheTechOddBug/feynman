@@ -1,4 +1,37 @@
 const UTILS_NET_IMPORT = 'import net from "node:net";';
+const CURL_CONFIG_HELPER_SIGNATURE =
+	"function quoteCurlConfigValue(value: string): string {";
+const CURL_CONFIG_HELPER = `function quoteCurlConfigValue(value: string): string {
+	return \`"\${value
+		.replace(/\\\\/g, "\\\\\\\\")
+		.replace(/"/g, '\\\\"')
+		.replace(/\\t/g, "\\\\t")
+		.replace(/\\r/g, "\\\\r")
+		.replace(/\\n/g, "\\\\n")}"\`;
+}
+
+`;
+const CURL_SECRET_ARGS_ORIGINAL = `	const args: string[] = [
+		"--silent",
+		"--show-error",
+		"--compressed",
+		"--connect-timeout", "20",
+		"-x", proxyUrl,
+		"-D", headerFile,
+		"--output", bodyFile,
+		"--write-out", "%{json}",
+	];`;
+const CURL_SECRET_ARGS_PATCHED = `	const args: string[] = [
+		"--silent",
+		"--show-error",
+		"--compressed",
+		"--connect-timeout", "20",
+		"-D", headerFile,
+		"--output", bodyFile,
+		"--write-out", "%{json}",
+		"--config", "-",
+	];
+	const configLines = [\`proxy = \${quoteCurlConfigValue(proxyUrl)}\`];`;
 const UTILS_PROXY_BYPASS_ORIGINAL = `function noProxyEntryMatches(hostname: string, entry: string): boolean {
 	if (!entry) return false;
 	if (entry === "*") return true;
@@ -122,6 +155,34 @@ export function patchProxyUtilitySource(source) {
 	if (patched.includes(UTILS_PROXY_BYPASS_ORIGINAL)) {
 		patched = patched.replace(UTILS_PROXY_BYPASS_ORIGINAL, UTILS_PROXY_BYPASS_PATCHED);
 	}
+	if (!patched.includes(CURL_CONFIG_HELPER_SIGNATURE)) {
+		patched = patched.replace(
+			"async function fetchViaCurlOnce(url: URL, init: RequestInit, proxyUrl: string): Promise<Response> {",
+			`${CURL_CONFIG_HELPER}async function fetchViaCurlOnce(url: URL, init: RequestInit, proxyUrl: string): Promise<Response> {`,
+		);
+	}
+	patched = patched
+		.replace(CURL_SECRET_ARGS_ORIGINAL, CURL_SECRET_ARGS_PATCHED)
+		.replace(
+			'		args.push("-H", `${name}: ${value}`);',
+			'		configLines.push(`header = ${quoteCurlConfigValue(`${name}: ${value}`)}`);',
+		)
+		.replace(
+			"	args.push(url.toString());",
+			"	configLines.push(`url = ${quoteCurlConfigValue(url.toString())}`);",
+		)
+		.replace(
+			'			const child = spawn("curl", args, { windowsHide: true });',
+			'			const child = spawn("curl", args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });',
+		);
+	if (!patched.includes('child.stdin?.end(`${configLines.join("\\n")}\\n`);')) {
+		patched = patched.replace(
+			"			const onAbort = () => { try { child.kill(); } catch {} };",
+			'			const onAbort = () => { try { child.kill(); } catch {} };\n' +
+				'			child.stdin?.on("error", () => {});\n' +
+				'			child.stdin?.end(`${configLines.join("\\n")}\\n`);',
+		);
+	}
 	return patched;
 }
 
@@ -234,6 +295,21 @@ export function patchGitHubIssueProxySource(source) {
 	patched = patched.replace(
 		'env: { ...process.env, GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" },',
 		'env: { ...getProxyProcessEnv("https://github.com"), GH_PROMPT_DISABLED: "1", GIT_TERMINAL_PROMPT: "0" },',
+	);
+	return patched;
+}
+
+export function patchGitHubCloneProxySource(source) {
+	let patched = source;
+	const configImport = 'import { getWebSearchConfigPath } from "./utils.ts";';
+	const proxyImport =
+		'import { getProxyProcessEnv, getWebSearchConfigPath } from "./utils.ts";';
+	if (patched.includes(configImport)) patched = patched.replace(configImport, proxyImport);
+	patched = patched.replace(
+		"				...process.env,\n" +
+			'				GIT_TERMINAL_PROMPT: "0",',
+		'				...getProxyProcessEnv("https://github.com"),\n' +
+			'				GIT_TERMINAL_PROMPT: "0",',
 	);
 	return patched;
 }

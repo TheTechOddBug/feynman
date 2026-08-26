@@ -912,6 +912,16 @@ function patchMcpSdkManifest(nodeModulesDir) {
 	return true;
 }
 
+function removeGeneratedHiddenRuntimeLock() {
+	const hiddenLockPath = resolve(workspaceNodeModulesDir, ".package-lock.json");
+	if (!existsSync(hiddenLockPath)) return false;
+	// npm's hidden lock describes the bytes produced by npm ci. Feynman then
+	// applies reviewed package-tree repairs (including nested Undici upgrades),
+	// so retaining that pre-patch metadata makes npm ls report a false graph.
+	rmSync(hiddenLockPath, { force: true });
+	return true;
+}
+
 function patchBundledRuntime(
 	piCliArgsCandidates = collectBundledPiCliArgsCandidates(),
 ) {
@@ -960,6 +970,7 @@ function patchBundledRuntime(
 	changed = patchBundledPiDocparser() || changed;
 	changed = patchBundledAlphaHub() || changed;
 	changed = patchMcpSdkManifest(workspaceNodeModulesDir) || changed;
+	changed = removeGeneratedHiddenRuntimeLock() || changed;
 	return changed;
 }
 

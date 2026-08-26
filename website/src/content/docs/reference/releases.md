@@ -25,10 +25,17 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 - Generic HTTP OTLP collectors configured through one shared endpoint now receive traces, metrics, and logs at their signal-specific `/v1/*` paths, including collectors on default HTTP and HTTPS ports. Explicit per-signal endpoints remain exact and retain their own headers and protocols; Feynman's PostHog AI trace endpoint is unchanged.
 - Existing `0.3.45` pi-otel package roots migrate through the reviewed legacy digest. Embedded package setup and runtime-workspace preparation preflight every discovered pi-btw and pi-otel root before applying their combined patch plan, so an unsupported later root cannot leave earlier research packages partially updated.
+- Session shutdown now flushes the telemetry SDK in its own handler, while `/otel` dashboard and collector overrides clear stale per-signal routing before rewiring exporters.
+
+### Proxy and credential safety
+
+- Explicit proxy credentials, target URLs, and provider request headers are delivered to curl over stdin instead of appearing in process arguments. GitHub repository clones now follow the same scoped proxy, `NO_PROXY`, and forced-direct decision as GitHub API requests.
+- Vertex ADC setup documentation no longer combines `geminiAuth: "adc"` with an API key that would select API-key mode.
 
 ### Validation
 
-- Added exact source, published-upgrade, patch-plan transaction, package-tree, runtime-archive, installed-runtime OTLP behavior, proxy, GitHub document, Gemini ADC, Kimi credential, BTW provider, and unterminated-session regressions.
+- Added exact source, published-upgrade, patch-plan transaction, package-tree, runtime-archive, executable OTLP handler, stdin-only proxy credential, GitHub clone proxy, installed-runtime OTLP behavior, GitHub document, Gemini ADC, Kimi credential, BTW provider, and unterminated-session regressions.
+- Runtime archives omit npm's pre-patch hidden lock metadata and verify its absence, so `npm ls` reads the committed exact lock instead of a stale nested Undici version.
 
 ## v0.3.45 - 2026-08-26
 

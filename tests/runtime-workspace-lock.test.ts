@@ -152,6 +152,8 @@ test("runtime build hashes its lock and pruning logic and installs with npm ci",
 	assert.match(source, /computeRuntimeInputHash/);
 	assert.match(source, /computeRuntimeTreeHash/);
 	assert.match(source, /filesMatch/);
+	assert.match(source, /removeGeneratedHiddenRuntimeLock/);
+	assert.match(source, /node_modules.*\.package-lock\.json/s);
 	assert.match(source, /runtime-workspace\.sha256/);
 	assert.match(source, /createDeterministicTarGz/);
 	assert.match(source, /--rebuild/);
@@ -311,10 +313,13 @@ test("setup lock heartbeats preserve a live owner when process-start lookup is u
 		assert.equal(existsSync(readyPath), true);
 		assert.throws(
 			() =>
-				acquireRuntimeWorkspaceSetupLock(lockDir, {
-					staleMs: 250,
-					readOwnerProcessStartedAt: () => undefined,
-				}),
+					acquireRuntimeWorkspaceSetupLock(lockDir, {
+						// Keep the test below the production five-minute budget while
+						// allowing a loaded CI host to schedule the separate heartbeat
+						// process before stale ownership is evaluated.
+						staleMs: 1_000,
+						readOwnerProcessStartedAt: () => undefined,
+					}),
 			/Timed out waiting/,
 		);
 		assert.equal(existsSync(lockDir), true);

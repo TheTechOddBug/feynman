@@ -301,6 +301,14 @@ test("exact pi-web-access fixture keeps 0.25.0 retrieval and clone protections",
 	assert.match(extractSource, /OpenAI File Downloader, XaiImageApiFetch\/1\.0/);
 	assert.match(githubSource, /function cloneDestination/);
 	assert.match(githubSource, /createHash\("sha256"\).*JSON\.stringify/);
+	assert.match(
+		githubSource,
+		/import \{ getProxyProcessEnv, getWebSearchConfigPath \} from "\.\/utils\.ts";/,
+	);
+	assert.match(
+		githubSource,
+		/\.\.\.getProxyProcessEnv\("https:\/\/github\.com"\)/,
+	);
 	assert.match(openaiSource, /openaiSearchProviders/);
 	assert.match(openaiSource, /for \(const provider of providers\)/);
 	assert.match(pdfSource, /const configuredMaxPages = pdf\.maxPages/);
