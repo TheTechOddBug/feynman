@@ -618,6 +618,245 @@ test("a timed-out tool policy runs downstream handlers and still blocks executio
 	}]);
 });
 
+test("a timed-out user bash policy runs later handlers and blocks TUI and RPC execution", async (t) => {
+	const { ExtensionRunner } = await loadFastPatchedRunner(t);
+	let downstreamCalls = 0;
+	let cleanupAborts = 0;
+	const errors: Array<{
+		extensionPath: string;
+		event: string;
+		error: string;
+		stack?: string;
+	}> = [];
+	const runner = new ExtensionRunner(
+		[
+			extension("hung-user-bash-policy.ts", "user_bash", [
+				async (_event, ctx) =>
+					new Promise(() => {
+						ctx.signal.addEventListener(
+							"abort",
+							() => cleanupAborts++,
+							{ once: true },
+						);
+					}),
+			]),
+			extension("downstream-user-bash-policy.ts", "user_bash", [
+				async () => {
+					downstreamCalls++;
+					return { operations: { exec: () => assert.fail("must not execute") } };
+				},
+			]),
+		],
+		runtime(),
+		appRoot,
+		{},
+		{},
+	);
+	runner.onError((error: any) => errors.push(error));
+
+	const eventResult = await runner.emitUserBash({
+		type: "user_bash",
+		command: "printf private-command",
+		excludeFromContext: false,
+		cwd: appRoot,
+	});
+
+	assert.equal(downstreamCalls, 1);
+	assert.equal(cleanupAborts, 1);
+	assert.deepEqual(eventResult, {
+		result: {
+			output:
+				"Bash command blocked because an extension policy handler timed out before execution.\n",
+			exitCode: 126,
+			cancelled: false,
+			truncated: false,
+		},
+	});
+	assert.deepEqual(errors, [{
+		extensionPath: "hung-user-bash-policy.ts",
+		event: "user_bash",
+		error: "Extension handler timed out after 25ms",
+		stack: undefined,
+	}]);
+	assert.doesNotMatch(eventResult.result.output, /private-command/);
+
+	// Both supported callers short-circuit on a full replacement result before
+	// reaching their normal session.executeBash path.
+	for (const [label, source, eventAnchor, executionAnchor] of [
+		[
+			"TUI",
+			readFileSync(interactiveModePath, "utf8"),
+			"const eventResult = await extensionRunner.emitUserBash",
+			"this.session.executeBash(",
+		],
+		[
+			"RPC",
+			readFileSync(rpcModePath, "utf8"),
+			"const eventResult = await session.extensionRunner.emitUserBash",
+			"session.executeBash(",
+		],
+	] as const) {
+		const eventStart = source.indexOf(eventAnchor);
+		const shortCircuit = source.indexOf(
+			"if (eventResult?.result)",
+			eventStart,
+		);
+		const execution = source.indexOf(executionAnchor, shortCircuit);
+		assert.notEqual(eventStart, -1, `${label} user_bash interception`);
+		assert.ok(shortCircuit > eventStart, `${label} result short circuit`);
+		assert.ok(execution > shortCircuit, `${label} normal execution path`);
+		assert.match(
+			source.slice(shortCircuit, execution),
+			/\breturn(?:\s+success\([^;]+)?;/,
+			`${label} must return before normal execution`,
+		);
+	}
+
+	let tuiExecuted = false;
+	let rpcExecuted = false;
+	if (!eventResult?.result) tuiExecuted = true;
+	if (!eventResult?.result) rpcExecuted = true;
+	assert.equal(tuiExecuted, false);
+	assert.equal(rpcExecuted, false);
+});
+
+test("interactive dialogs pause the remaining non-interactive budget instead of resetting it", async (t) => {
+	const timeoutMs = 40;
+	const { ExtensionRunner } = await loadFastPatchedRunner(t, timeoutMs);
+	const workSliceMs = 24;
+	const dialogMs = 80;
+	let downstreamCalls = 0;
+	let handlerCompleted = false;
+	const errors: Array<{
+		extensionPath: string;
+		event: string;
+		error: string;
+		stack?: string;
+	}> = [];
+	const runner = new ExtensionRunner(
+		[
+			extension("cumulative-budget-extension.ts", "agent_start", [
+				async (_event, ctx) => {
+					await delay(workSliceMs);
+					await ctx.ui.confirm("Continue?", "research");
+					await delay(workSliceMs);
+					handlerCompleted = true;
+				},
+			]),
+			extension("after-cumulative-timeout.ts", "agent_start", [
+				async () => {
+					downstreamCalls++;
+				},
+			]),
+		],
+		runtime(),
+		appRoot,
+		{},
+		{},
+	);
+	runner.setUIContext(
+		{
+			confirm: async () => {
+				await delay(dialogMs);
+				return true;
+			},
+		},
+		"tui",
+	);
+	runner.onError((error: any) => errors.push(error));
+
+	const startedAt = Date.now();
+	await runner.emit({ type: "agent_start" });
+	const elapsedMs = Date.now() - startedAt;
+
+	assert.equal(handlerCompleted, false);
+	assert.equal(downstreamCalls, 1);
+	assert.ok(
+		elapsedMs >= dialogMs + timeoutMs - 15,
+		`elapsed ${elapsedMs}ms`,
+	);
+	assert.ok(elapsedMs < 2_000, `elapsed ${elapsedMs}ms`);
+	assert.deepEqual(errors, [{
+		extensionPath: "cumulative-budget-extension.ts",
+		event: "agent_start",
+		error: "Extension handler timed out after 40ms",
+		stack: undefined,
+	}]);
+
+	await delay(workSliceMs * 2);
+	assert.equal(handlerCompleted, true, "late handler settlement is absorbed");
+});
+
+test("parent abort settles a never-resolving dialog promptly and absorbs late rejection", async (t) => {
+	const timeoutMs = 250;
+	const { ExtensionRunner } = await loadFastPatchedRunner(t, timeoutMs);
+	const parentController = new AbortController();
+	let rejectDialog: ((error: Error) => void) | undefined;
+	let resolveDialogStarted: (() => void) | undefined;
+	const dialogStarted = new Promise<void>((resolveStarted) => {
+		resolveDialogStarted = resolveStarted;
+	});
+	let downstreamCalls = 0;
+	const errors: unknown[] = [];
+	const unhandled: unknown[] = [];
+	const onUnhandled = (reason: unknown) => unhandled.push(reason);
+	process.on("unhandledRejection", onUnhandled);
+	t.after(() => process.off("unhandledRejection", onUnhandled));
+
+	const runner = new ExtensionRunner(
+		[
+			extension("hung-dialog-extension.ts", "agent_start", [
+				async (_event, ctx) => {
+					await ctx.ui.custom(
+						() =>
+							new Promise((_resolve, reject) => {
+								rejectDialog = reject;
+								resolveDialogStarted?.();
+							}),
+					);
+				},
+			]),
+			extension("after-parent-abort.ts", "agent_start", [
+				async () => {
+					downstreamCalls++;
+				},
+			]),
+		],
+		runtime(),
+		appRoot,
+		{},
+		{},
+	);
+	runner.setUIContext(
+		{
+			custom: (factory: (...args: any[]) => any) => factory(),
+		},
+		"tui",
+	);
+	runner.getSignalFn = () => parentController.signal;
+	runner.onError((error: any) => errors.push(error));
+
+	const emission = runner.emit({ type: "agent_start" });
+	await dialogStarted;
+	const abortedAt = Date.now();
+	parentController.abort();
+	await Promise.race([
+		emission,
+		delay(100).then(() => {
+			throw new Error("parent abort did not settle the hung dialog promptly");
+		}),
+	]);
+	const abortElapsedMs = Date.now() - abortedAt;
+
+	assert.ok(abortElapsedMs < 100, `abort elapsed ${abortElapsedMs}ms`);
+	assert.equal(downstreamCalls, 1);
+	assert.deepEqual(errors, []);
+
+	rejectDialog?.(new Error("late dialog rejection"));
+	await delay(20);
+	assert.deepEqual(unhandled, []);
+});
+
 test("project trust and tool permission dialogs suspend the handler deadline", async (t) => {
 	const { ExtensionRunner, emitProjectTrustEvent } =
 		await loadFastPatchedRunner(t);

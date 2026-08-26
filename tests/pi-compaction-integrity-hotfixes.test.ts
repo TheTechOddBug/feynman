@@ -545,101 +545,101 @@ test("model-bounded budgets preserve large-context behavior and make 8K compacti
 			nearBudgetEntries,
 			2048,
 		);
-			await verifyBranchBudget(
-				{ ...baseModel, contextWindow: 1024, maxTokens: 128 },
-				[{
+		await verifyBranchBudget(
+			{ ...baseModel, contextWindow: 1024, maxTokens: 128 },
+			[{
 				type: "message",
 				id: "branch-budget-tiny",
 				parentId: null,
 				timestamp: new Date(1).toISOString(),
 				message: { role: "user", content: "B".repeat(1200), timestamp: 1 },
-				}],
-				128,
-			);
-			const replacementInstructions = "R".repeat(2350);
-			assert.equal(replacementInstructions.length, 2350);
-			const constrainedModel = {
-				...baseModel,
-				contextWindow: 1024,
-				maxTokens: 1024,
+			}],
+			128,
+		);
+		const replacementInstructions = "R".repeat(2350);
+		assert.equal(replacementInstructions.length, 2350);
+		const constrainedModel = {
+			...baseModel,
+			contextWindow: 1024,
+			maxTokens: 1024,
+		};
+		let constrainedStreamCalls = 0;
+		const constrainedStream = async () => {
+			constrainedStreamCalls += 1;
+			return {
+				result: async () => assistantMessage(
+					constrainedModel,
+					budgetCheckpointSummary,
+				),
 			};
-			let constrainedStreamCalls = 0;
-			const constrainedStream = async () => {
-				constrainedStreamCalls += 1;
-				return {
-					result: async () => assistantMessage(
-						constrainedModel,
-						budgetCheckpointSummary,
-					),
-				};
-			};
-			const genuinelyEmpty = await branch.generateBranchSummary([], {
+		};
+		const genuinelyEmpty = await branch.generateBranchSummary([], {
+			model: constrainedModel,
+			apiKey: "test",
+			customInstructions: replacementInstructions,
+			replaceInstructions: true,
+			streamFn: constrainedStream,
+		});
+		assert.deepEqual(genuinelyEmpty, { summary: "No content to summarize" });
+		assert.equal(constrainedStreamCalls, 0);
+
+		const constrainedEntry = (characters: number) => [{
+			type: "message",
+			id: `branch-capacity-${characters}`,
+			parentId: null,
+			timestamp: new Date(1).toISOString(),
+			message: { role: "user", content: "A".repeat(characters), timestamp: 1 },
+		}];
+		const preparationFailure = await branch.generateBranchSummary(
+			constrainedEntry(400),
+			{
 				model: constrainedModel,
 				apiKey: "test",
 				customInstructions: replacementInstructions,
 				replaceInstructions: true,
 				streamFn: constrainedStream,
-			});
-			assert.deepEqual(genuinelyEmpty, { summary: "No content to summarize" });
-			assert.equal(constrainedStreamCalls, 0);
+			},
+		);
+		assert.equal(preparationFailure.summary, undefined);
+		assert.match(
+			preparationFailure.error ?? "",
+			/non-empty branch history did not fit the conversation budget/,
+		);
+		assert.equal(constrainedStreamCalls, 0);
 
-			const constrainedEntry = (characters: number) => [{
-				type: "message",
-				id: `branch-capacity-${characters}`,
-				parentId: null,
-				timestamp: new Date(1).toISOString(),
-				message: { role: "user", content: "A".repeat(characters), timestamp: 1 },
-			}];
-			const preparationFailure = await branch.generateBranchSummary(
-				constrainedEntry(400),
-				{
-					model: constrainedModel,
-					apiKey: "test",
-					customInstructions: replacementInstructions,
-					replaceInstructions: true,
-					streamFn: constrainedStream,
-				},
-			);
-			assert.equal(preparationFailure.summary, undefined);
-			assert.match(
-				preparationFailure.error ?? "",
-				/non-empty branch history did not fit the conversation budget/,
-			);
-			assert.equal(constrainedStreamCalls, 0);
+		const serializationFailure = await branch.generateBranchSummary(
+			constrainedEntry(370),
+			{
+				model: constrainedModel,
+				apiKey: "test",
+				customInstructions: replacementInstructions,
+				replaceInstructions: true,
+				streamFn: constrainedStream,
+			},
+		);
+		assert.equal(serializationFailure.summary, undefined);
+		assert.match(
+			serializationFailure.error ?? "",
+			/non-empty branch history did not fit the serialized request budget/,
+		);
+		assert.equal(constrainedStreamCalls, 0);
 
-			const serializationFailure = await branch.generateBranchSummary(
-				constrainedEntry(370),
-				{
-					model: constrainedModel,
-					apiKey: "test",
-					customInstructions: replacementInstructions,
-					replaceInstructions: true,
-					streamFn: constrainedStream,
-				},
-			);
-			assert.equal(serializationFailure.summary, undefined);
-			assert.match(
-				serializationFailure.error ?? "",
-				/non-empty branch history did not fit the serialized request budget/,
-			);
-			assert.equal(constrainedStreamCalls, 0);
+		const constrainedControl = await branch.generateBranchSummary(
+			constrainedEntry(100),
+			{
+				model: constrainedModel,
+				apiKey: "test",
+				customInstructions: replacementInstructions,
+				replaceInstructions: true,
+				streamFn: constrainedStream,
+			},
+		);
+		assert.equal(constrainedControl.error, undefined);
+		assert.match(constrainedControl.summary ?? "", /Verify the BRCA1 claim/);
+		assert.equal(constrainedStreamCalls, 1);
 
-			const constrainedControl = await branch.generateBranchSummary(
-				constrainedEntry(100),
-				{
-					model: constrainedModel,
-					apiKey: "test",
-					customInstructions: replacementInstructions,
-					replaceInstructions: true,
-					streamFn: constrainedStream,
-				},
-			);
-			assert.equal(constrainedControl.error, undefined);
-			assert.match(constrainedControl.summary ?? "", /Verify the BRCA1 claim/);
-			assert.equal(constrainedStreamCalls, 1);
-
-			const largeContext = await verifyBranchBudget(
-				baseModel,
+		const largeContext = await verifyBranchBudget(
+			baseModel,
 			Array.from({ length: 114 }, (_, index) => ({
 				type: "message",
 				id: `branch-budget-large-${index}`,
