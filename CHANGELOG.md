@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-25 22:32 EDT — pi-subagents-legacy-install-0.3.43-release
+
+- Persistence: PR `#256` merged from exact tested head `84215bef3f13301cd448412b3bef05b59b2ca9ac` as `39eec7a0e245464bdfa765e7361193385c0f5ba2`; the release branch was deleted and pruned.
+- Verification: PR run `32912470871` passed source validation, six Node/OS package consumers, Windows PowerShell 5.1/Core native installation, CodeQL, and Vercel. Disposable Daytona Linux passed `936/936` tests, typecheck, build, architecture check, root/site audits, website lint/typecheck/build, package pack, and a legacy `pi-subagents@0.37.2` consumer smoke.
+- Publication: Main run `32916885824` passed verify, all six package consumers, all five native bundles, npm publication, GitHub release creation, and published-state verification. GitHub/npm `0.3.43` agree on merge `39eec7a`; native asset digests are committed in `SHA256SUMS`, and npm integrity is `sha512-DjdTqdQ54akp7UKhLcv8qZTTsRm2gxpN3qUyh9DhlXU0aTRqziV4WWWbrsWQfXSF715YtgSyM38MFKMeLyurMQ==`.
+- Live: A fresh registry-tarball consumer with legacy `pi-subagents@0.37.2` passed zero-vulnerability audit, returned `0.3.43` twice, and persisted the repaired diagnostics marker. Installer endpoints returned HTTP `200`; main CodeQL passed.
+- Preservation: Root main is clean and synchronized. The independently dirty nested `website` checkout remains untouched at `67186845cd89772a24fd20b9f5239457aeedcbcf` with `51` user paths. State: `verified`. Next: resume normal intake monitoring.
+
 ### 2026-08-25 19:32 EDT — pi-subagents-legacy-install-0.3.43
 
 - Objective: Repair issue `#255`, where a native-bundle `--version` check crashed while migrating the legacy `pi-subagents@0.37.2` management source left by an older Feynman installation.
