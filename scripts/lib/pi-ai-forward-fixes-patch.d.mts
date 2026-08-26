@@ -6,6 +6,7 @@ export declare const PI_AI_FORWARD_FIX_MARKERS: Readonly<{
 	googleShared: string;
 	googleVertex: string;
 	bedrock: string;
+	bedrockToolResultImages: string;
 	toolChoice: string;
 	openAiCompletions: string;
 	providerRetry: string;

@@ -50,7 +50,7 @@ function sha256(source) {
 	return createHash("sha256").update(source).digest("hex");
 }
 
-const BEDROCK_TOOL_RESULT_PNG = "iVBORw0KGgo=";
+const BEDROCK_TOOL_RESULT_IMAGES = Object.freeze(["Zmlyc3Q=", "c2Vjb25k"]);
 const BEDROCK_EMPTY_USAGE = Object.freeze({
 	input: 0,
 	output: 0,
@@ -98,17 +98,17 @@ function bedrockToolResultContext(modelId) {
 				toolName: "read",
 				content: [
 					{ type: "text", text: "rendered chart" },
-					{ type: "image", data: BEDROCK_TOOL_RESULT_PNG, mimeType: "image/png" },
+					{ type: "image", data: BEDROCK_TOOL_RESULT_IMAGES[0], mimeType: "image/png" },
 				],
-				isError: false,
+				isError: true,
 				timestamp: 3,
 			},
 			{
 				role: "toolResult",
 				toolCallId: "tool-2",
 				toolName: "read",
-				content: [{ type: "image", data: BEDROCK_TOOL_RESULT_PNG, mimeType: "image/png" }],
-				isError: false,
+				content: [{ type: "image", data: BEDROCK_TOOL_RESULT_IMAGES[1], mimeType: "image/png" }],
+				isError: true,
 				timestamp: 4,
 			},
 		],
@@ -144,21 +144,21 @@ function assertHoistedBedrockOpenAiToolResultPayload(payload, label) {
 	assert.deepEqual(message.content[0].toolResult, {
 		toolUseId: "tool-1",
 		content: [{ text: "rendered chart" }],
-		status: "success",
+		status: "error",
 	});
 	assert.deepEqual(message.content[1].toolResult, {
 		toolUseId: "tool-2",
 		content: [{ text: "<empty>" }],
-		status: "success",
+		status: "error",
 	});
-	for (const block of message.content.slice(2)) {
-		assert.equal(block.image?.format, "png", `${label} sibling image must retain its format`);
-		assert.equal(
-			Buffer.from(block.image?.source?.bytes ?? []).toString("base64"),
-			BEDROCK_TOOL_RESULT_PNG,
-			`${label} sibling image must retain its bytes`,
-		);
-	}
+	assert.deepEqual(
+		message.content.slice(2).map((block) => ({
+			format: block.image?.format,
+			data: Buffer.from(block.image?.source?.bytes ?? []).toString("base64"),
+		})),
+		BEDROCK_TOOL_RESULT_IMAGES.map((data) => ({ format: "png", data })),
+		`${label} must preserve sibling image order and bytes`,
+	);
 }
 
 function assertNestedBedrockAnthropicToolResultPayload(payload, label) {
