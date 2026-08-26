@@ -12,6 +12,13 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Live: A fresh registry consumer passed zero-vulnerability audit, package/runtime/tool/provider verification, and LiteParse `2.14.0` parse/search/screenshot checks. Installer and release-document endpoints return HTTP `200`; main CodeQL passed.
 - Preservation: Root main is clean and synchronized; the independently dirty nested `website` checkout remains preserved at `67186845`. State: `verified`. Next: resume normal intake monitoring.
 
+### 2026-08-26 08:03 EDT — release-runtime-timeouts-0.3.45
+
+- Objective: Remove two release/runtime timeout hazards found during the intake sweep while preserving the independently dirty nested website checkout.
+- Changed: Publish Windows native smoke now extracts with .NET `System.IO.Compression.ZipFile`; source runtime archive rebuilds now use the shared fifteen-minute runtime restore timeout; added focused workflow/runtime regressions and prepared `0.3.45` release notes.
+- Verified: Focused release/runtime/content tests pass `55/55`; full `npm test` passes `971/971`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site audits, and `git diff --check` pass. `npm outdated` reports expected non-security dependency drift only.
+- State: `unverified` for the committed exact head, clean-machine proof, PR CI, merge, publication, and release identity. Next: pack the exact candidate, run clean consumer/Daytona proof, then push, merge, publish, and verify `0.3.45`.
+
 ### 2026-08-26 04:00 EDT — pi-release-blockers-0.3.44
 
 - Intake: Cancelled publish run `32938502008` before npm/GitHub publication after post-merge adversarial and upstream review found new release blockers; npm/GitHub latest remain `0.3.43`.
@@ -4919,11 +4926,3 @@ Use this file to track chronology, not release notes. Keep entries short, factua
 - Package proof: Typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/site/runtime/consumer audits, freshness review, and `git diff --check` pass. Dry and real packs match at `107,684,607` bytes, `287,530,283` unpacked bytes, and `29,128` entries; SHA-256 is `cbfe3653ca23930342e2c55544ad1ffe49e7bc64fa38cdc5f6e83f6ff38eb201`.
 - Installed proof: A clean tarball consumer passes version/help, package and search status, stale-Pi repair, package/archive verification, RPC extension and TypeBox checks, document parse/search/screenshot, and zero-vulnerability audits. Direct installed-runtime probes remove inline data URIs in readable mode, preserve raw responses, allow same-origin loopback Firecrawl redirects, and reject cross-origin loopback redirects plus loopback research targets.
 - State: `unverified` for exact committed Daytona, pull-request CI, merge, publication, and release identity. Next: commit the candidate, run the clean-machine ladder, then merge, publish, and reconcile `0.3.30`.
-
-
-### 2026-08-26 08:03 EDT — release-runtime-timeouts-0.3.45
-
-- Objective: Remove two release/runtime timeout hazards found during the intake sweep while preserving the independently dirty nested website checkout.
-- Changed: Publish Windows native smoke now extracts with .NET `System.IO.Compression.ZipFile`; source runtime archive rebuilds now use the shared fifteen-minute runtime restore timeout; added focused workflow/runtime regressions and prepared `0.3.45` release notes.
-- Verified: Focused release/runtime/content tests pass `55/55`; full `npm test` passes `971/971`; typecheck, build, architecture check, website lint/typecheck/build (`34` pages), root/site audits, and `git diff --check` pass. `npm outdated` reports expected non-security dependency drift only.
-- State: `unverified` for the committed exact head, clean-machine proof, PR CI, merge, publication, and release identity. Next: pack the exact candidate, run clean consumer/Daytona proof, then push, merge, publish, and verify `0.3.45`.

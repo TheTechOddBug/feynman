@@ -11,7 +11,7 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 ### Release reliability
 
 - Windows publication smoke tests now use the supported .NET ZIP extractor instead of the pathologically slow PowerShell `Expand-Archive` cmdlet, so large native research bundles complete within the release job budget.
-- Source-checkout runtime archive rebuilds now use the same fifteen-minute timeout as exact locked runtime restores, preventing slow clean environments from silently falling back to an incomplete runtime.
+- Source-checkout runtime archive rebuilds now use the same fifteen-minute process budget as exact locked runtime restores, avoiding premature timeouts on slow clean environments while retaining the existing transactional exact-lock checks.
 
 ### Validation
 
