@@ -47,6 +47,15 @@ function createPatchedPackageRoot(): string {
 		mkdirSync(dirname(path), { recursive: true });
 		writeFileSync(path, source, "utf8");
 	}
+	for (const relativePath of ["activity.ts"]) {
+		const path = resolve(root, relativePath);
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(
+			path,
+			readFileSync(resolve(webRoot, relativePath), "utf8"),
+			"utf8",
+		);
+	}
 	writeFileSync(
 		resolve(root, "package.json"),
 		JSON.stringify({ name: "pi-web-access", version: "0.25.0", type: "module" }) + "\n",
@@ -339,6 +348,96 @@ test("patched curl proxy transport keeps credentials and headers out of process 
 	}
 });
 
+test("patched curl proxy transport remains compatible with real curl config parsing", (t) => {
+	const curlVersion = spawnSync("curl", ["--version"], { encoding: "utf8" });
+	if (curlVersion.status !== 0) {
+		t.skip("curl is unavailable");
+		return;
+	}
+	const packageRoot = createPatchedPackageRoot();
+	try {
+		const utilsUrl = pathToFileURL(resolve(packageRoot, "utils.ts")).href;
+		const child = spawnSync(
+			process.execPath,
+			["--import", "tsx", "--input-type=module"],
+			{
+				encoding: "utf8",
+				env: {
+					...process.env,
+					NO_PROXY: "",
+					no_proxy: "",
+				},
+				input: `
+					import { createServer } from "node:http";
+					const requests = [];
+					const server = createServer((request, response) => {
+						requests.push({
+							url: request.url,
+							proxyAuthorization: request.headers["proxy-authorization"] ?? null,
+							authorization: request.headers.authorization ?? null,
+							cookie: request.headers.cookie ?? null,
+						});
+						response.writeHead(200, { "content-type": "text/plain" });
+						response.end("proxy-ok");
+					});
+					await new Promise((resolvePromise, reject) => {
+						server.once("error", reject);
+						server.listen(0, "127.0.0.1", resolvePromise);
+					});
+					try {
+						const address = server.address();
+						if (!address || typeof address === "string") throw new Error("missing proxy address");
+						const utils = await import(${JSON.stringify(utilsUrl)});
+						utils.installGlobalProxyFetch();
+						const response = await utils.runWithProxy(
+							\`http://proxy-user:proxy-password@127.0.0.1:\${address.port}\`,
+							() => fetch("http://research.example/paper?token=url-secret", {
+								headers: {
+									Authorization: "Bearer header-secret",
+									Cookie: "browser-secret",
+								},
+							}),
+						);
+						console.log(JSON.stringify({
+							body: await response.text(),
+							status: response.status,
+							requests,
+						}));
+					} finally {
+						await new Promise((resolvePromise) => server.close(resolvePromise));
+					}
+				`,
+			},
+		);
+		assert.equal(child.status, 0, child.stderr);
+		const output = JSON.parse(child.stdout.trim()) as {
+			body: string;
+			status: number;
+			requests: Array<{
+				url: string;
+				proxyAuthorization: string | null;
+				authorization: string | null;
+				cookie: string | null;
+			}>;
+		};
+		assert.equal(output.status, 200);
+		assert.equal(output.body, "proxy-ok");
+		assert.equal(output.requests.length, 1);
+		assert.equal(
+			output.requests[0].url,
+			"http://research.example/paper?token=url-secret",
+		);
+		assert.equal(
+			output.requests[0].proxyAuthorization,
+			`Basic ${Buffer.from("proxy-user:proxy-password").toString("base64")}`,
+		);
+		assert.equal(output.requests[0].authorization, "Bearer header-secret");
+		assert.equal(output.requests[0].cookie, "browser-secret");
+	} finally {
+		rmSync(packageRoot, { recursive: true, force: true });
+	}
+});
+
 test("patched GitHub issue and PR gh calls inherit the per-call proxy and bypass it via NO_PROXY", () => {
 	const packageRoot = createPatchedPackageRoot();
 	const root = mkdtempSync(resolve(tmpdir(), "feynman-web-gh-proxy-"));
@@ -460,6 +559,219 @@ test("patched GitHub issue and PR gh calls inherit the per-call proxy and bypass
 			assert.equal(call.ALL_PROXY, null);
 		}
 		assert.ok(calls.some((call) => call.GH_PROMPT_DISABLED === "1"));
+	} finally {
+		rmSync(packageRoot, { recursive: true, force: true });
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("patched GitHub clones propagate explicit, bypassed, and forced-direct proxy decisions", () => {
+	const packageRoot = createPatchedPackageRoot();
+	const root = mkdtempSync(resolve(tmpdir(), "feynman-web-clone-proxy-"));
+	try {
+		const bin = resolve(root, "bin");
+		const logPath = resolve(root, "clone.jsonl");
+		mkdirSync(bin, { recursive: true });
+		const fakeCommandSource = `
+			const fs = require("node:fs");
+			const path = require("node:path");
+			const args = process.argv.slice(2);
+			const command = args[0] === "--version" || args[0] === "repo" ? "gh" : "git";
+			fs.appendFileSync(process.env.FEYNMAN_CLONE_PROXY_LOG, JSON.stringify({
+				scenario: process.env.FEYNMAN_SCENARIO,
+				command,
+				args,
+				HTTP_PROXY: process.env.HTTP_PROXY ?? null,
+				HTTPS_PROXY: process.env.HTTPS_PROXY ?? null,
+				ALL_PROXY: process.env.ALL_PROXY ?? null,
+				GIT_TERMINAL_PROMPT: process.env.GIT_TERMINAL_PROMPT ?? null,
+			}) + "\\n");
+			if (command === "gh" && args[0] === "--version") {
+				if (process.env.FEYNMAN_GH_AVAILABLE === "1") {
+					console.log("gh version test");
+					process.exit(0);
+				}
+				process.exit(1);
+			}
+			let destination;
+			if (command === "gh" && args[0] === "repo" && args[1] === "clone") {
+				destination = args[3];
+			} else if (command === "git" && args[0] === "clone") {
+				destination = args.at(-1);
+			}
+			if (!destination) process.exit(2);
+			fs.mkdirSync(destination, { recursive: true });
+			fs.writeFileSync(path.join(destination, "README.md"), "# Proxy clone\\n");
+		`;
+		const fakeGhJs = resolve(bin, "fake-gh.cjs");
+		const fakeGitJs = resolve(bin, "fake-git.cjs");
+		writeFileSync(fakeGhJs, fakeCommandSource, "utf8");
+		writeFileSync(fakeGitJs, fakeCommandSource, "utf8");
+		if (process.platform === "win32") {
+			writeFileSync(
+				resolve(bin, "gh.cmd"),
+				`@echo off\r\n"${process.execPath}" "${fakeGhJs}" %*\r\n`,
+				"utf8",
+			);
+			writeFileSync(
+				resolve(bin, "git.cmd"),
+				`@echo off\r\n"${process.execPath}" "${fakeGitJs}" %*\r\n`,
+				"utf8",
+			);
+		} else {
+			const ghPath = resolve(bin, "gh");
+			const gitPath = resolve(bin, "git");
+			writeFileSync(
+				ghPath,
+				`#!/usr/bin/env node\n${fakeCommandSource}`,
+				"utf8",
+			);
+			writeFileSync(
+				gitPath,
+				`#!/usr/bin/env node\n${fakeCommandSource}`,
+				"utf8",
+			);
+			chmodSync(ghPath, 0o755);
+			chmodSync(gitPath, 0o755);
+		}
+
+		const utilsUrl = pathToFileURL(resolve(packageRoot, "utils.ts")).href;
+		const githubUrl = pathToFileURL(
+			resolve(packageRoot, "github-extract.ts"),
+		).href;
+		const scenarios = [
+			{
+				name: "explicit-gh",
+				ghAvailable: true,
+				noProxy: "",
+				proxy: "http://explicit.proxy:8123",
+			},
+			{
+				name: "bypassed-gh",
+				ghAvailable: true,
+				noProxy: "github.com",
+				proxy: "http://explicit.proxy:8123",
+			},
+			{
+				name: "forced-direct-gh",
+				ghAvailable: true,
+				noProxy: "",
+				proxy: "",
+			},
+			{
+				name: "explicit-git",
+				ghAvailable: false,
+				noProxy: "",
+				proxy: "http://explicit.proxy:8123",
+			},
+		];
+		for (const scenario of scenarios) {
+			const configPath = resolve(root, `${scenario.name}.json`);
+			writeFileSync(
+				configPath,
+				JSON.stringify({
+					githubClone: {
+						enabled: true,
+						clonePath: resolve(root, "clones", scenario.name),
+					},
+				}),
+				"utf8",
+			);
+			const child = spawnSync(
+				process.execPath,
+				["--import", "tsx", "--input-type=module"],
+				{
+					encoding: "utf8",
+					env: {
+						...process.env,
+						PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+						FEYNMAN_CLONE_PROXY_LOG: logPath,
+						FEYNMAN_SCENARIO: scenario.name,
+						FEYNMAN_GH_AVAILABLE: scenario.ghAvailable ? "1" : "0",
+						FEYNMAN_WEB_SEARCH_CONFIG: configPath,
+						NO_PROXY: scenario.noProxy,
+						no_proxy: scenario.noProxy,
+						HTTP_PROXY: "http://inherited.invalid:1",
+						HTTPS_PROXY: "http://inherited.invalid:1",
+						ALL_PROXY: "http://inherited.invalid:1",
+					},
+					input: `
+						const utils = await import(${JSON.stringify(utilsUrl)});
+						const github = await import(${JSON.stringify(githubUrl)});
+						const result = await utils.runWithProxy(
+							${JSON.stringify(scenario.proxy)},
+							() => github.extractGitHub(
+								${JSON.stringify(`https://github.com/owner/${scenario.name}`)},
+								undefined,
+								true,
+							),
+						);
+						console.log(JSON.stringify({
+							ok: !!result,
+							content: result?.content ?? "",
+						}));
+						github.clearCloneCache();
+					`,
+				},
+			);
+			assert.equal(child.status, 0, `${scenario.name}: ${child.stderr}`);
+			const output = JSON.parse(child.stdout.trim()) as {
+				ok: boolean;
+				content: string;
+			};
+			assert.equal(output.ok, true, scenario.name);
+			assert.match(output.content, /Repository cloned to:/);
+			assert.match(output.content, /README\.md/);
+		}
+
+		const calls = readFileSync(logPath, "utf8")
+			.trim()
+			.split("\n")
+			.map((line) => JSON.parse(line)) as Array<{
+			scenario: string;
+			command: string;
+			args: string[];
+			HTTP_PROXY: string | null;
+			HTTPS_PROXY: string | null;
+			ALL_PROXY: string | null;
+			GIT_TERMINAL_PROMPT: string | null;
+		}>;
+		for (const scenario of ["explicit-gh", "explicit-git"]) {
+			const scenarioCalls = calls.filter((call) => call.scenario === scenario);
+			assert.ok(scenarioCalls.length >= 2, JSON.stringify(scenarioCalls));
+			for (const call of scenarioCalls) {
+				assert.equal(call.HTTP_PROXY, "http://explicit.proxy:8123/");
+				assert.equal(call.HTTPS_PROXY, "http://explicit.proxy:8123/");
+				assert.equal(call.ALL_PROXY, "http://explicit.proxy:8123/");
+			}
+		}
+		for (const scenario of ["bypassed-gh", "forced-direct-gh"]) {
+			const scenarioCalls = calls.filter((call) => call.scenario === scenario);
+			assert.ok(scenarioCalls.length >= 2, JSON.stringify(scenarioCalls));
+			for (const call of scenarioCalls) {
+				assert.equal(call.HTTP_PROXY, null);
+				assert.equal(call.HTTPS_PROXY, null);
+				assert.equal(call.ALL_PROXY, null);
+			}
+		}
+		assert.ok(
+			calls.some(
+				(call) =>
+					call.scenario === "explicit-gh" &&
+					call.command === "gh" &&
+					call.args[0] === "repo" &&
+					call.GIT_TERMINAL_PROMPT === "0",
+			),
+		);
+		assert.ok(
+			calls.some(
+				(call) =>
+					call.scenario === "explicit-git" &&
+					call.command === "git" &&
+					call.args[0] === "clone" &&
+					call.GIT_TERMINAL_PROMPT === "0",
+			),
+		);
 	} finally {
 		rmSync(packageRoot, { recursive: true, force: true });
 		rmSync(root, { recursive: true, force: true });
