@@ -7,9 +7,9 @@ import {
 } from "./lib/pi-undici-proxy-patch.mjs";
 import {
 	FEYNMAN_LITEPARSE_GIT_HEAD,
-	FEYNMAN_LITEPARSE_NATIVE_PACKAGES,
 	FEYNMAN_LITEPARSE_VERSION,
 	verifyLiteparseManifestContract,
+	verifyLiteparseRootManifestContract,
 	verifyLiteparseRootLockContract,
 	verifyLiteparseRuntimeLockContract,
 } from "./lib/liteparse-release-contract.mjs";
@@ -27,6 +27,11 @@ import {
 } from "./lib/pi-cli-args-patch.mjs";
 import { verifyResearchArtifactIntegrityRuntime } from "./lib/research-artifact-integrity-verifier.mjs";
 import { assertPiLlamaUsagePatchSource } from "./lib/pi-llama-usage-patch.mjs";
+import {
+	assertPiExtensionHandlerTimeoutArchive,
+	assertPiExtensionHandlerTimeoutPackageTree,
+} from "./lib/pi-extension-handler-timeout-verifier.mjs";
+import { verifyPiTelemetryArchiveContract, verifyPiTelemetryRuntimeLockContract } from "./lib/pi-telemetry-release-contract.mjs";
 import { assertPiStateFilePermissionsPatchSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import {
 	assertPiRuntimeCorrectnessPatchSource,
@@ -140,11 +145,7 @@ if (
 ) {
 	fail(`bundled package does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
-for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
-	if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
-		fail(`package.json does not request ${packageName} ${FEYNMAN_LITEPARSE_VERSION}`);
-	}
-}
+verifyLiteparseRootManifestContract(manifest, fail);
 const rootLockPath = resolve(packageRoot, "package-lock.json");
 if (existsSync(rootLockPath)) {
 	const rootLock = readJson(rootLockPath, "package-lock.json");
@@ -267,6 +268,11 @@ assertPiRuntimeCorrectnessPatchSource(
 	"sessionManager",
 	"bundled Pi SessionManager",
 );
+assertPiExtensionHandlerTimeoutPackageTree((relativePath) =>
+	readText(
+		resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", ...relativePath.split("/")),
+		"bundled Pi extension runner",
+	));
 assertPiCodingAgentForwardFixPackageTree((relativePath, label) =>
 	readText(resolve(packageRoot, "node_modules", "@earendil-works", "pi-coding-agent", ...relativePath.split("/")), label));
 for (const [label, path] of [
@@ -542,6 +548,7 @@ if (!verifyFileSha256(archivePath, digestPath)) {
 }
 const runtimeLockSource = readText(runtimeLockPath, "committed runtime package lock");
 const runtimeLock = JSON.parse(runtimeLockSource);
+verifyPiTelemetryRuntimeLockContract(runtimeLock, expectedPiVersion, fail);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
 if (expectedPiWebAccessVersion !== "0.24.2") {
 	fail("committed runtime lock does not pin pi-web-access 0.24.2");
@@ -598,6 +605,11 @@ if (
 ) {
 	fail(`runtime archive does not resolve ip-address ${FEYNMAN_IP_ADDRESS_VERSION}`);
 }
+verifyPiTelemetryArchiveContract(
+	(entryPath) => readArchivedJson(archivePath, entryPath),
+	expectedPiVersion,
+	fail,
+);
 const runtimeManifest = readArchivedJson(archivePath, "npm/.runtime-manifest.json");
 assertPiCliArgsPatchSource(readArchivedText(archivePath, "npm/node_modules/@earendil-works/pi-coding-agent/dist/cli/args.js"), "runtime Pi CLI args");
 verifyResearchArtifactIntegrityRuntime((entryPath) => readArchivedText(archivePath, entryPath));
@@ -649,6 +661,8 @@ assertPiRuntimeCorrectnessPatchSource(
 	"sessionManager",
 	"runtime Pi SessionManager",
 );
+assertPiExtensionHandlerTimeoutArchive((entryPath) =>
+	readArchivedText(archivePath, entryPath));
 for (const [label, entryPath] of [
 	[
 		"runtime root Pi AI",

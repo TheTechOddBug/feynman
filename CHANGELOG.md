@@ -4,6 +4,14 @@ Workspace lab notebook for long-running or resumable research work.
 
 Use this file to track chronology, not release notes. Keep entries short, factual, and operational.
 
+### 2026-08-26 04:00 EDT — pi-release-blockers-0.3.44
+
+- Intake: Cancelled publish run `32938502008` before npm/GitHub publication after post-merge adversarial and upstream review found new release blockers; npm/GitHub latest remain `0.3.43`.
+- Repaired: Branch summarization now budgets system prompt, serialized input, and output together for 1K/8K contexts and fails closed if history-integrity guards are disabled. Pi extension handlers now have bounded non-interactive deadlines with downstream progress, late-settlement handling, scoped aborts, fail-closed tool policy, and interactive trust/dialog preservation.
+- Package integrity: Runtime Pi telemetry remains coordinated at `0.84.2`; unrelated lock-only drift was reverted; root/runtime LiteParse contracts reject missing, extra, identity, and platform package drift.
+- Verified locally: Full tests passed `959/959`; typecheck, build, architecture, website lint/typecheck/build (`34` pages), root/runtime/site audits, and diff checks passed. Dry and real packs matched at `116,530,062` bytes / `29,188` files with SHA-256 `5c0b914cd6077b3f24a2330920540f87353391cf916f1ddc21231f5cef752d88`; the clean consumer passed package/runtime/tool/provider and LiteParse verification.
+- State: `verified` for the local blocker repair; exact committed-SHA Daytona, PR CI, merge, and `0.3.44` publication remain `unverified`. Next: persist the exact tree, rerun clean-machine and CI gates, then publish and reconcile live identity.
+
 ### 2026-08-25 23:48 EDT — pi-research-runtime-integrity-0.3.44
 
 - Objective: Repair five reproduced Pi research-runtime defects and qualify LiteParse `2.14.0` without adopting unrelated package churn.

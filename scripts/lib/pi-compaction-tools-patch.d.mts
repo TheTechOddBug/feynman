@@ -12,6 +12,8 @@ export declare const PI_COMPACTION_TOOLS_PATCH_MARKERS: Readonly<{
 	contextBudgets: string;
 	contextCallers: string;
 	contextBudgetTypes: string;
+	branchRequestBudget: string;
+	branchHistoryCapacity: string;
 	summaryIntegrity: string;
 	branchIntegrity: string;
 	summaryIntegrityTypes: string;

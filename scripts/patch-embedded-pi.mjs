@@ -34,6 +34,7 @@ import {
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
+import { patchPiExtensionHandlerTimeoutPackageRoot } from "./lib/pi-extension-handler-timeout-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
@@ -947,6 +948,8 @@ const workspaceModelRegistryPath = resolveWorkspacePiFile("pi-coding-agent", "di
 const workspaceModelRuntimePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "model-runtime.js");
 const workspaceAuthStoragePath = resolveWorkspacePiFile("pi-coding-agent", "dist", "core", "auth-storage.js");
 assertPiPackageVersion(workspacePiPackageRoot, "vendored pi-coding-agent");
+for (const packageRoot of [piPackageRoot, workspacePiPackageRoot].filter(Boolean))
+	patchPiExtensionHandlerTimeoutPackageRoot(packageRoot);
 for (const packageRoot of [piPackageRoot, workspacePiPackageRoot].filter(Boolean)) {
 	if (!existsSync(resolve(packageRoot, "package.json"))) continue;
 	const version = JSON.parse(

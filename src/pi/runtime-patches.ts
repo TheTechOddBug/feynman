@@ -28,6 +28,11 @@ import {
 	patchPiCompactionToolsSource,
 } from "../../scripts/lib/pi-compaction-tools-patch.mjs";
 import {
+	assertPiExtensionHandlerTimeoutVersion,
+	PI_EXTENSION_HANDLER_TIMEOUT_TARGET,
+	patchPiExtensionHandlerTimeoutSource,
+} from "../../scripts/lib/pi-extension-handler-timeout-patch.mjs";
+import {
 	assertPiRuntimeCorrectnessVersion,
 	PI_CODING_AGENT_FORWARD_FIX_TARGETS,
 	patchPiCodingAgentForwardFixSource,
@@ -257,6 +262,10 @@ export function patchPiRuntimeNodeModules(
 	const bundledPiVersion = resolveBundledPiVersion(appRoot);
 	if (bundledPiVersion) {
 		assertPiRuntimeCorrectnessVersion(bundledPiVersion, "bundled pi-coding-agent");
+		assertPiExtensionHandlerTimeoutVersion(
+			bundledPiVersion,
+			"bundled pi-coding-agent",
+		);
 	}
 	const nodeModuleRoots = [
 		resolve(appRoot, "node_modules"),
@@ -349,6 +358,17 @@ export function patchPiRuntimeNodeModules(
 			"pi-coding-agent",
 			"dist/core/session-manager.js",
 			patchPiSessionManagerSource,
+			bundledPiVersion,
+		) || changed;
+		changed = patchScopedPiPackageFileIfPresent(
+			nodeModulesPath,
+			"pi-coding-agent",
+			PI_EXTENSION_HANDLER_TIMEOUT_TARGET,
+			(source) =>
+				patchPiExtensionHandlerTimeoutSource(
+					source,
+					bundledPiVersion,
+				),
 			bundledPiVersion,
 		) || changed;
 		changed = patchScopedPiPackageFileIfPresent(

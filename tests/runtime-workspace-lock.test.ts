@@ -55,6 +55,7 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 		"@earendil-works/pi-agent-core",
 		"@earendil-works/pi-ai",
 		"@earendil-works/pi-coding-agent",
+		"@earendil-works/pi-telemetry",
 		"@earendil-works/pi-tui",
 		"brace-expansion",
 		"typebox",
