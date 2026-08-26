@@ -174,13 +174,15 @@ export function patchProxyUtilitySource(source) {
 		.replace(
 			'			const child = spawn("curl", args, { windowsHide: true });',
 			'			const child = spawn("curl", args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });',
-		)
-		.replace(
+		);
+	if (!patched.includes('child.stdin?.end(`${configLines.join("\\n")}\\n`);')) {
+		patched = patched.replace(
 			"			const onAbort = () => { try { child.kill(); } catch {} };",
 			'			const onAbort = () => { try { child.kill(); } catch {} };\n' +
 				'			child.stdin?.on("error", () => {});\n' +
 				'			child.stdin?.end(`${configLines.join("\\n")}\\n`);',
 		);
+	}
 	return patched;
 }
 

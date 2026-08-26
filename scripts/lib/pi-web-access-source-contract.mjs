@@ -59,7 +59,7 @@ const PATCHED_SHA256 = Object.freeze({
 	"gemini-web-config.ts": "4349ab62928c62b64e1ae4c928dede30e752b3b22216c78d0e0445949956cf46",
 	"gemini-web.ts": BASELINE_SHA256["gemini-web.ts"],
 	"github-api.ts": "49f032ba2266fe6bacd9bcabb897266dd32f12db3ec703eae1c3822f52282dd5",
-	"github-extract.ts": BASELINE_SHA256["github-extract.ts"],
+	"github-extract.ts": "c406e986f66d044e85deb0a33dc72a378a4a8b74a74e38964e549094a82ce077",
 	"github-issue-pr.ts": "62564a9f591c4d41b1be926963a2333f4f417a669f015c8c76e902adaed583ec",
 	"kimi-search.ts": BASELINE_SHA256["kimi-search.ts"],
 	"openai-search.ts": BASELINE_SHA256["openai-search.ts"],
@@ -67,7 +67,7 @@ const PATCHED_SHA256 = Object.freeze({
 	"pdf-extract.ts": "3e58267784031daaf4ed0bf3eaa99a668235d9bdffd754991a451083e2754f30",
 	"video-extract.ts": BASELINE_SHA256["video-extract.ts"],
 	"youtube-extract.ts": BASELINE_SHA256["youtube-extract.ts"],
-	"utils.ts": "64084d32b8a182934900b61f220dcc3b45608325a5cf93a97a4b612dd3843811",
+	"utils.ts": "7ce555e08a5db5d37564acbe6b023e930b2c13020b7251d4e4112c3abd967c2c",
 });
 const KNOWN_PARTIAL_SHA256 = Object.freeze({
 	"index.ts": Object.freeze([
@@ -80,6 +80,7 @@ const KNOWN_PARTIAL_SHA256 = Object.freeze({
 	]),
 	"utils.ts": Object.freeze([
 		"e9f347080e8cee8b4883ceab42416d402cbb8a6225fc4278f1cc8eb0267ebcb0",
+		"64084d32b8a182934900b61f220dcc3b45608325a5cf93a97a4b612dd3843811",
 	]),
 });
 
