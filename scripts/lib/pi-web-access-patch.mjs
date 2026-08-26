@@ -17,6 +17,7 @@ import {
 	GITHUB_PROXY_IMPORT,
 	patchGeminiAdcPathSource,
 	patchGitHubApiProxySource,
+	patchGitHubCloneProxySource,
 	patchGitHubIssueProxySource,
 	patchProxyUtilitySource,
 	patchSsrfNoProxySource,
@@ -361,10 +362,12 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 	const githubSource = sources.get("github-extract.ts");
 	requireMarkerCounts(githubSource, "github-extract.ts", [
 		['import { createHash } from "node:crypto";', 1],
+		['import { getProxyProcessEnv, getWebSearchConfigPath } from "./utils.ts";', 1],
 		["function cloneDestination(", 1],
 		['createHash("sha256").update(JSON.stringify([owner, repo, ref ?? null])).digest("hex")', 1],
 		['if (dirname(localPath) !== rootPath || !/^[0-9a-f]{64}$/.test(basename(localPath))) return false;', 1],
 		["if (owner.includes(\"--\")) return null;", 1],
+		['...getProxyProcessEnv("https://github.com"),', 1],
 	], surface);
 	rejectMarkers(
 		githubSource,
@@ -397,18 +400,27 @@ export function assertPiWebAccessPatchedSources(sources, surface = "patched sour
 		["function parseNoProxyEntry(", 1],
 		["if (parsed.port !== undefined && parsed.port !== port) return false;", 1],
 		["return hostname === parsed.hostname || hostname.endsWith(`.${parsed.hostname}`);", 1],
-		["export function getProxyProcessEnv(", 1],
-		["for (const name of PROXY_ENV_NAMES) delete env[name];", 1],
-		["for (const name of PROXY_ENV_NAMES) env[name] = proxy;", 1],
-		["export function installGlobalProxyFetch(): void {", 1],
-		["const noProxy = process.env.NO_PROXY || process.env.no_proxy;", 1],
+			["export function getProxyProcessEnv(", 1],
+			["for (const name of PROXY_ENV_NAMES) delete env[name];", 1],
+			["for (const name of PROXY_ENV_NAMES) env[name] = proxy;", 1],
+			["function quoteCurlConfigValue(", 1],
+			['spawn("curl", args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true })', 1],
+			['child.stdin?.end(`${configLines.join("\\n")}\\n`);', 1],
+			["export function installGlobalProxyFetch(): void {", 1],
+			["const noProxy = process.env.NO_PROXY || process.env.no_proxy;", 1],
 	], surface);
 	rejectMarkers(
 		utilsSource,
 		"utils.ts",
-		[CONFIG_PATH_HELPER, "function noProxyEntryMatches(hostname: string, entry: string)"],
-		surface,
-	);
+			[
+				CONFIG_PATH_HELPER,
+				"function noProxyEntryMatches(hostname: string, entry: string)",
+				'"-x", proxyUrl',
+				'args.push("-H"',
+				"args.push(url.toString())",
+			],
+			surface,
+		);
 
 	const ssrfSource = sources.get("ssrf-protection.ts");
 	requireMarkerCount(
@@ -1103,6 +1115,10 @@ export function patchPiWebAccessSource(relativePath, source) {
 
 	if (relativePath === "github-issue-pr.ts") {
 		patched = patchGitHubIssueProxySource(patched);
+	}
+
+	if (relativePath === "github-extract.ts") {
+		patched = patchGitHubCloneProxySource(patched);
 	}
 
 	if (relativePath === "gemini-adc.ts") {

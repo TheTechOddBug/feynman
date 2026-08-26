@@ -33,10 +33,16 @@ const PI_OTEL_PREVIOUS_CANDIDATE_SHA256 = Object.freeze({
 	...PI_OTEL_PUBLISHED_FEYNMAN_0_3_45_SHA256,
 	"dist/otel/sdk.js": "6a11d061fb67fd214a7b09397eddbe9bddaea1a07a85e071bfcad4d24015c5d3",
 });
+const PI_OTEL_RELEASE_BLOCKER_SHA256 = Object.freeze({
+	...PI_OTEL_PREVIOUS_CANDIDATE_SHA256,
+	"dist/config.js": "45d4251b8e6b2de00b4160110faf4ac616e087452ddc8f9330f7460147d4602e",
+	"dist/index.js": "d5fda0a4493fbe7b59d4946c4bbe39de22c69e811bbb5acf6fb8079c59dcbd33",
+	"dist/otel/sdk.js": "d7828a932fb0976664b8a5664bb216187b8b50c07846bd73e6bf049d11da80f7",
+});
 const PI_OTEL_PATCHED_SHA256 = Object.freeze({
 	"dist/attrs.js": "e18851f6ebc046789640e9f19fbc007d56ac6a9e7956d954c1e83db3b7f4b1a0",
 	"dist/config.js": "45d4251b8e6b2de00b4160110faf4ac616e087452ddc8f9330f7460147d4602e",
-	"dist/index.js": "d5fda0a4493fbe7b59d4946c4bbe39de22c69e811bbb5acf6fb8079c59dcbd33",
+	"dist/index.js": "f5169b0f47ed9deacee5f8b92e0f40bd5a99d3364efa270c99b635678ce81bf7",
 	"dist/otel/sdk.js": "d7828a932fb0976664b8a5664bb216187b8b50c07846bd73e6bf049d11da80f7",
 	"dist/spans.js": "30763e25e1c2db6a2a7ec5cf9907a730840754724ccac1fbffb46d5018a38ffc",
 });
@@ -81,11 +87,28 @@ export function patchPiOtelSource(relativePath, source) {
 				"            if (!process.env.FEYNMAN_POSTHOG_KEY)\n                notify(`pi-otel: OTLP endpoint ${cfg.endpoint} not reachable — run /otel start to launch a dashboard, or /otel connect <endpoint> to wire elsewhere.`);",
 			);
 		}
+		const misplacedSignalReset =
+			'        if (typeof override.endpoint === "string" || typeof override.protocol === "string")\n' +
+			"            delete cfg.feynmanOtlpSignals;\n" +
+			"        await shutdownSdk();";
+		const dashboardOverrideEnd =
+			'        if (typeof override.protocol === "string" && override.protocol) {\n' +
+			"            cfg.protocol = override.protocol;\n" +
+			"        }\n" +
+			"        await shutdownSdk();";
+		const dashboardSignalReset =
+			'        if (typeof override.protocol === "string" && override.protocol) {\n' +
+			"            cfg.protocol = override.protocol;\n" +
+			"        }\n" +
+			'        if (typeof override.endpoint === "string" || typeof override.protocol === "string")\n' +
+			"            delete cfg.feynmanOtlpSignals;\n" +
+			"        await shutdownSdk();";
+		// A pre-release candidate inserted the dashboard-only reset into the
+		// earlier session_shutdown handler. Repair that exact shape before
+		// placing the reset beside the dashboard override that owns cfg/override.
+		patched = patched.replace(misplacedSignalReset, "        await shutdownSdk();");
 		if (!patched.includes("delete cfg.feynmanOtlpSignals")) {
-			patched = patched.replace(
-				"        await shutdownSdk();",
-				"        if (typeof override.endpoint === \"string\" || typeof override.protocol === \"string\")\n            delete cfg.feynmanOtlpSignals;\n        await shutdownSdk();",
-			);
+			patched = patched.replace(dashboardOverrideEnd, dashboardSignalReset);
 		}
 	}
 
@@ -273,12 +296,13 @@ export function preflightPiOtelPackageRoot(packageRoot) {
 		targets: PI_OTEL_PATCH_TARGETS,
 		patchSource(relativePath, source) {
 			const sourceDigest = digest(source);
-			const reviewedDigests = new Set([
-				PI_OTEL_BASELINE_SHA256[relativePath],
-				PI_OTEL_PUBLISHED_FEYNMAN_0_3_45_SHA256[relativePath],
-				PI_OTEL_PREVIOUS_CANDIDATE_SHA256[relativePath],
-				PI_OTEL_PATCHED_SHA256[relativePath],
-			]);
+				const reviewedDigests = new Set([
+					PI_OTEL_BASELINE_SHA256[relativePath],
+					PI_OTEL_PUBLISHED_FEYNMAN_0_3_45_SHA256[relativePath],
+					PI_OTEL_PREVIOUS_CANDIDATE_SHA256[relativePath],
+					PI_OTEL_RELEASE_BLOCKER_SHA256[relativePath],
+					PI_OTEL_PATCHED_SHA256[relativePath],
+				]);
 			if (!reviewedDigests.has(sourceDigest)) {
 				throw new Error(
 					`Unsupported pi-otel ${PI_OTEL_REQUIRED_VERSION} ${relativePath}: found ${sourceDigest}`,
