@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import {
 	PI_WEB_ACCESS_PATCH_TARGETS,
@@ -15,6 +15,7 @@ import {
 	patchPiAgentCoreSource,
 } from "../scripts/lib/pi-agent-core-patch.mjs";
 import { patchPiRuntimeNodeModules } from "../src/pi/runtime-patches.js";
+import { writePiOtelFixture } from "./helpers/pi-otel-fixture.js";
 
 const PI_CLI_ARGS_SOURCE = readFileSync(
 	join(
@@ -215,15 +216,6 @@ const INTERACTIVE_UPDATE_NOTICE_SOURCE = [
 	"    }",
 ].join("\n");
 
-const PI_OTEL_CONFIG_SOURCE = `    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-        merged?.endpoint ??
-        "http://127.0.0.1:4317";
-    const protocol = normalizeProtocol(process.env.OTEL_EXPORTER_OTLP_PROTOCOL ?? merged?.protocol);
-    const headers = {
-        ...(merged?.headers ?? {}),
-        ...parseKvList(process.env.OTEL_EXPORTER_OTLP_HEADERS),
-    };`;
-
 const SESSION_SEARCH_INDEXER_SOURCE = `
 export async function indexAllSessions() {
     const sessionsDir = path.join(os.homedir(), ".pi", "agent", "sessions");
@@ -270,9 +262,9 @@ export async function answerPdfQuery(url, query) {
 }
 `;
 
-const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.24.2");
-const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(import.meta.dirname, "..", "fixtures", "pi-web-access-0.24.2");
-function writePiWebAccessFixture(webRoot: string, version = "0.24.2", patched = false): void {
+const PI_WEB_ACCESS_FIXTURE_ROOT = join(import.meta.dirname, "fixtures", "pi-web-access-0.25.0");
+const PI_WEB_ACCESS_FORWARD_FIXTURE_ROOT = join(import.meta.dirname, "..", "fixtures", "pi-web-access-0.25.0");
+function writePiWebAccessFixture(webRoot: string, version = "0.25.0", patched = false): void {
 	mkdirSync(webRoot, { recursive: true });
 	const sources = new Map(
 		PI_WEB_ACCESS_PATCH_TARGETS.map((relativePath) => [
@@ -300,7 +292,7 @@ function writePiWebAccessFixture(webRoot: string, version = "0.24.2", patched = 
 
 function writePiWebAccessForwardFixtures(appRoot: string): void {
 	for (const relativePath of PI_WEB_ACCESS_FORWARD_FILE_TARGETS) {
-		const fixturePath = join(appRoot, "fixtures", "pi-web-access-0.24.2", relativePath);
+		const fixturePath = join(appRoot, "fixtures", "pi-web-access-0.25.0", relativePath);
 		mkdirSync(dirname(fixturePath), { recursive: true });
 		writeFileSync(
 			fixturePath,
@@ -577,7 +569,6 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	await mkdir(dirname(webAccessPath), { recursive: true });
 	await mkdir(dirname(webAccessPdfPath), { recursive: true });
 	await mkdir(dirname(subagentSpawnPath), { recursive: true });
-	await mkdir(dirname(piOtelConfigPath), { recursive: true });
 	await mkdir(dirname(sessionSearchPath), { recursive: true });
 	writeFileSync(agentLoopPath, SOURCE, "utf8");
 	writeFileSync(tuiPath, TUI_SOURCE, "utf8");
@@ -606,7 +597,7 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	);
 	writePiWebAccessFixture(dirname(webAccessPath));
 	writeFileSync(subagentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
-	writeFileSync(piOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
+	writePiOtelFixture(dirname(dirname(piOtelConfigPath)));
 	writeFileSync(sessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot), true);
@@ -628,8 +619,9 @@ test("patchPiRuntimeNodeModules patches the vendored runtime workspace", async (
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /process\.env\.FEYNMAN_PI_CLI_PATH/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /\targv2\?: string;/);
 	assert.match(readFileSync(subagentSpawnPath, "utf8"), /path\.basename\(argvPath\) !== "pi-cli-wrapper\.js"/);
-	assert.match(readFileSync(piOtelConfigPath, "utf8"), /process\.env\.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \?\?/);
-	assert.match(readFileSync(piOtelConfigPath, "utf8"), /process\.env\.OTEL_EXPORTER_OTLP_TRACES_HEADERS/);
+	assert.match(readFileSync(piOtelConfigPath, "utf8"), /createFeynmanSignalConfig\("traces"\)/);
+	assert.match(readFileSync(piOtelConfigPath, "utf8"), /createFeynmanSignalConfig\("metrics"\)/);
+	assert.match(readFileSync(piOtelConfigPath, "utf8"), /createFeynmanSignalConfig\("logs"\)/);
 	assert.match(readFileSync(sessionSearchPath, "utf8"), /process\.env\.FEYNMAN_SESSION_DIR/);
 	assert.equal(patchPiRuntimeNodeModules(appRoot), false);
 });
@@ -654,12 +646,12 @@ test("patchPiRuntimeNodeModules rejects unsupported pi-web-access versions befor
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-future-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
 	const webAccessPath = join(webRoot, "index.ts");
-	writePiWebAccessFixture(webRoot, "0.25.0");
+	writePiWebAccessFixture(webRoot, "0.26.0");
 	const originalSource = readFileSync(webAccessPath, "utf8");
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/expected 0\.24\.2, found 0\.25\.0/,
+		/expected 0\.25\.0, found 0\.26\.0/,
 	);
 	assert.equal(readFileSync(webAccessPath, "utf8"), originalSource);
 });
@@ -693,47 +685,31 @@ test("patchPiRuntimeNodeModules patches the Windows npm prefix layout", () => {
 		"utf8",
 	);
 	writePiCliArgsFixture(dirname(bundledPiManifestPath));
-	writePiWebAccessFixture(webRoot, "0.24.2", true);
-	writeFileSync(
-		webAccessPath,
-		readFileSync(webAccessPath, "utf8").replace(
-			'pi.registerCommand("web-results",',
-			'pi.registerCommand("search",',
-		),
-		"utf8",
-	);
+	writePiWebAccessFixture(webRoot, "0.25.0");
 
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir, "win32"), true);
 	assert.match(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("web-results"/);
 	assert.doesNotMatch(readFileSync(webAccessPath, "utf8"), /pi\.registerCommand\("search"/);
 });
 
-test("patchPiRuntimeNodeModules validates the complete web patch before writing any file", () => {
+test("patchPiRuntimeNodeModules rejects unreviewed web source before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-runtime-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.24.2", true);
+	writePiWebAccessFixture(webRoot, "0.25.0");
 	const indexPath = join(webRoot, "index.ts");
 	const pageQueryPath = join(webRoot, "page-query.ts");
 	writeFileSync(
-		indexPath,
-		readFileSync(indexPath, "utf8").replace(
-			'pi.registerCommand("web-results",',
-			'pi.registerCommand("search",',
-		),
-		"utf8",
-	);
-	writeFileSync(
-		pageQueryPath,
-		readFileSync(pageQueryPath, "utf8").replace(
-			"modelMatchesScopedModels(model, ctx.scopedModels)",
-			"futureModelScopeCheck(model, ctx)",
+			pageQueryPath,
+			readFileSync(pageQueryPath, "utf8").replace(
+				"modelMatchesEnabledPatterns(model, loadEnabledModelPatterns(ctx))",
+				"futureModelScopeCheck(model, ctx)",
 		),
 		"utf8",
 	);
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/page-query\.ts: expected 1 occurrences of modelMatchesScopedModels/,
+		/page-query\.ts: unreviewed digest/,
 	);
 	assert.match(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("search"/);
 	assert.doesNotMatch(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("web-results"/);
@@ -743,7 +719,7 @@ test("patchPiRuntimeNodeModules validates the complete web patch before writing 
 test("patchPiRuntimeNodeModules validates non-model web invariants before writing any file", () => {
 	const appRoot = mkdtempSync(join(tmpdir(), "feynman-atomic-web-non-model-patches-"));
 	const webRoot = join(appRoot, ".feynman", "npm", "node_modules", "pi-web-access");
-	writePiWebAccessFixture(webRoot, "0.24.2", true);
+	writePiWebAccessFixture(webRoot, "0.25.0", true);
 	const indexPath = join(webRoot, "index.ts");
 	writeFileSync(
 		indexPath,
@@ -755,7 +731,7 @@ test("patchPiRuntimeNodeModules validates non-model web invariants before writin
 
 	assert.throws(
 		() => patchPiRuntimeNodeModules(appRoot),
-		/index\.ts: expected 1 occurrences of const SEARCH_CALL_TIMEOUT_MS = 90000;/,
+		/index\.ts: unreviewed digest/,
 	);
 	assert.match(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("search"/);
 	assert.doesNotMatch(readFileSync(indexPath, "utf8"), /pi\.registerCommand\("web-results"/);
@@ -874,8 +850,6 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	);
 	await mkdir(dirname(globalSpawnPath), { recursive: true });
 	await mkdir(dirname(agentSpawnPath), { recursive: true });
-	await mkdir(dirname(globalOtelConfigPath), { recursive: true });
-	await mkdir(dirname(agentOtelConfigPath), { recursive: true });
 	await mkdir(dirname(globalSessionSearchPath), { recursive: true });
 	await mkdir(dirname(agentSessionSearchPath), { recursive: true });
 	await mkdir(dirname(bundledPiManifestPath), { recursive: true });
@@ -884,8 +858,8 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	await mkdir(dirname(agentUpdateNoticePath), { recursive: true });
 	writeFileSync(globalSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
 	writeFileSync(agentSpawnPath, SUBAGENT_PI_SPAWN_SOURCE, "utf8");
-	writeFileSync(globalOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
-	writeFileSync(agentOtelConfigPath, PI_OTEL_CONFIG_SOURCE, "utf8");
+	writePiOtelFixture(dirname(dirname(globalOtelConfigPath)));
+	writePiOtelFixture(dirname(dirname(agentOtelConfigPath)));
 	writeFileSync(globalSessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 	writeFileSync(agentSessionSearchPath, SESSION_SEARCH_INDEXER_SOURCE, "utf8");
 	writeFileSync(
@@ -924,8 +898,9 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	}
 	for (const configPath of [globalOtelConfigPath, agentOtelConfigPath]) {
 		const source = readFileSync(configPath, "utf8");
-		assert.match(source, /process\.env\.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \?\?/);
-		assert.match(source, /process\.env\.OTEL_EXPORTER_OTLP_TRACES_HEADERS/);
+		assert.match(source, /createFeynmanSignalConfig\("traces"\)/);
+		assert.match(source, /createFeynmanSignalConfig\("metrics"\)/);
+		assert.match(source, /createFeynmanSignalConfig\("logs"\)/);
 	}
 	for (const indexerPath of [globalSessionSearchPath, agentSessionSearchPath]) {
 		const source = readFileSync(indexerPath, "utf8");
@@ -940,6 +915,21 @@ test("patchPiRuntimeNodeModules leaves stale Pi core packages untouched while pa
 	};
 	assert.equal(staleCodingManifest.piConfig?.configDir, ".pi");
 	assert.equal(patchPiRuntimeNodeModules(appRoot, agentDir), false);
+});
+
+test("runtime setup preflights BTW and OTEL roots before one patch-plan apply", () => {
+	for (const relativePath of [
+		"scripts/patch-embedded-pi.mjs",
+		"scripts/prepare-runtime-workspace.mjs",
+	]) {
+		const source = readFileSync(resolve(process.cwd(), relativePath), "utf8");
+		const btwPreflight = source.indexOf("preflightPackageRootPatch({");
+		const otelPreflight = source.indexOf("preflightPiOtelPackageRoot(");
+		const apply = source.indexOf("applyPackageRootPatchPlans(");
+		assert.ok(btwPreflight >= 0, `${relativePath} does not preflight pi-btw`);
+		assert.ok(otelPreflight >= 0, `${relativePath} does not preflight pi-otel`);
+		assert.ok(apply > btwPreflight && apply > otelPreflight, `${relativePath} writes before all package preflights`);
+	}
 });
 
 test("patchPiRuntimeNodeModules repairs current Pi Undici in global and agent roots but skips stale Pi", () => {

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+	cpSync,
 	existsSync,
 	lstatSync,
 	mkdtempSync,
@@ -107,17 +108,6 @@ const staleBraceExpansionManifest = `${JSON.stringify({
 }, null, 2)}\n`;
 
 const staleBraceExpansionSource = "export function expandTop() { return []; }\n";
-
-const otelConfigSource = `\
-    const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-        merged?.endpoint ??
-        "http://127.0.0.1:4317";
-    const protocol = normalizeProtocol(process.env.OTEL_EXPORTER_OTLP_PROTOCOL ?? merged?.protocol);
-    const headers = {
-        ...(merged?.headers ?? {}),
-        ...parseKvList(process.env.OTEL_EXPORTER_OTLP_HEADERS),
-    };
-`;
 
 function getStaleFiles(nodeModulesPath) {
 	const staleTuiRoot = resolve(nodeModulesPath, "@earendil-works", "pi-tui");
@@ -465,8 +455,10 @@ runWithTemporaryTreeCleanup(root, () => {
 	}
 	writeFiles(managedStaleFiles);
 	writeFiles(persistentStaleFiles);
-	mkdirSync(dirname(otelConfigPath), { recursive: true });
-	writeFileSync(otelConfigPath, otelConfigSource, "utf8");
+	cpSync(trustedOtelRoot, persistentOtelRoot, {
+		recursive: true,
+		dereference: true,
+	});
 	const persistentBefore = snapshotPersistentFixture();
 
 	runFeynman(1);
@@ -475,7 +467,10 @@ runWithTemporaryTreeCleanup(root, () => {
 	assertOnlyAllowedPersistentMutations(persistentBefore, persistentAfterFirstPass, 1);
 	assertStaleSecurityRepair(safeBraceExpansionSnapshots);
 	const patchedOtelConfig = readFileSync(otelConfigPath, "utf8");
-	for (const marker of ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"]) {
+	for (const marker of [
+		"const createFeynmanSignalConfig = (signal) =>",
+		"const feynmanOtlpSignals = {",
+	]) {
 		if (!patchedOtelConfig.includes(marker)) {
 			throw new Error(`Feynman stale-Pi upgrade smoke did not patch the extension marker: ${marker}`);
 		}

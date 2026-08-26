@@ -15,7 +15,7 @@ import {
 const PI_WEB_ACCESS_FIXTURE_ROOT = join(
 	import.meta.dirname,
 	"fixtures",
-	"pi-web-access-0.24.2",
+	"pi-web-access-0.25.0",
 );
 const PI_WEB_ACCESS_RUNTIME_ROOT = join(
 	import.meta.dirname,
@@ -39,7 +39,7 @@ test("Windows cookie forward port is exact, digest-gated, and idempotent", () =>
 	assert.equal(patchPiWebAccessWindowsCookiesSource(patched), patched);
 	assert.throws(
 		() => patchPiWebAccessWindowsCookiesSource(`${baseline}\n`),
-		/expected e735ad01.*20eba0bb/,
+		/expected d69f91df.*eed7b448/,
 	);
 });
 

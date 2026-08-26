@@ -16,12 +16,19 @@
  * (interleaved user content), and 86c42324 (EXIF after XMP). Remove each only
  * after the supported released Pi version contains its corresponding commit and
  * the executable regressions below continue to pass without the patch.
+ * The SessionManager patch also ports commit 0b5ee5d8 so resuming a valid
+ * unterminated JSONL session cannot fuse the next appended research entry.
  */
 import {
 	assertPiInterleavedUserContentSource,
 	PI_INTERLEAVED_USER_CONTENT_MARKER,
 	patchPiInterleavedUserContentSource,
 } from "./pi-interleaved-user-content-patch.mjs";
+import {
+	assertPiSessionTailPatchedSource,
+	PI_SESSION_TAIL_PATCH_MARKER,
+	patchPiSessionTailSource,
+} from "./pi-session-tail-patch.mjs";
 
 export const PI_RUNTIME_CORRECTNESS_PATCH_TARGETS = Object.freeze({
 	codingAgent: Object.freeze([
@@ -52,6 +59,7 @@ const PATCHED_EXIF_AFTER_XMP_BLOCK = `            // ${PI_CODING_AGENT_FORWARD_F
 export const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS = Object.freeze({
 	agentSession: "Feynman Pi 0.84.2 correctness patch: issue #7053",
 	sessionManager: "Feynman Pi 0.84.2 correctness patch: restore eager tool results",
+	sessionTailRepair: PI_SESSION_TAIL_PATCH_MARKER,
 	transformMessages: "Feynman Pi 0.84.2 correctness patch: order eager tool results",
 	githubCopilotDeviceCode: "Feynman Pi 0.84.2 correctness patch: export abortableSleep for upstream #8121",
 	githubCopilotOAuth: "Feynman Pi 0.84.2 correctness patch: upstream #8121",
@@ -109,6 +117,9 @@ export const PI_RUNTIME_CORRECTNESS_REQUIRED_FRAGMENTS = Object.freeze({
 	]),
 	sessionManager: Object.freeze([
 		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionManager,
+		PI_RUNTIME_CORRECTNESS_PATCH_MARKERS.sessionTailRepair,
+		'let pending = "";',
+		'if (pending) appendFileSync(resolvedFilePath, "\\n");',
 		"function restoreFeynmanToolResultsInSourceOrder(messages) {",
 		"activeBatch.results.set(message.toolCallId, message);",
 		"restored.push(toolResult);",
@@ -461,6 +472,9 @@ export function assertPiRuntimeCorrectnessPatchSource(source, target, surface = 
 				`Incomplete Pi runtime correctness patch ${surface}: missing exact image-only queue event handler`,
 			);
 		}
+	}
+	if (target === "sessionManager") {
+		assertPiSessionTailPatchedSource(source, surface);
 	}
 	let previousIndex = -1;
 	for (const fragment of ordered) {
@@ -894,6 +908,7 @@ const SESSION_MANAGER_REPLACE_MESSAGE = `    /**
 
 export function patchPiSessionManagerSource(source) {
 	source = stripStaleSourceMapDirective(source, "session-manager");
+	source = patchPiSessionTailSource(source);
 	if (source.includes(SESSION_MANAGER_MARKER)) {
 		assertPiRuntimeCorrectnessPatchSource(source, "sessionManager");
 		return source;

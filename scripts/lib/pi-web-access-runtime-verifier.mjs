@@ -90,7 +90,12 @@ function runModelAwareRoutingProbe({
 					{ model: { provider: "openai" } },
 				),
 			};
-			const models = [{ provider: "openai-codex", id: "gpt-5.6-terra" }];
+			const models = [{
+				provider: "openai-codex",
+				id: "gpt-5.6-terra",
+				api: "openai-codex-responses",
+				baseUrl: "https://chatgpt.com/backend-api",
+			}];
 			const modelRegistry = {
 				getAll: () => models,
 				getApiKeyAndHeaders: async () => ({
@@ -106,10 +111,24 @@ function runModelAwareRoutingProbe({
 					throw new Error("Expected Codex search first, got " + codexUrl);
 				}
 				return new Response(JSON.stringify({
-					output: [{
-						type: "message",
-						content: [{ type: "output_text", text: "codex search answer" }],
-					}],
+					output: [
+						{
+							type: "web_search_call",
+							action: {
+								sources: [{
+									url: "https://codex.example/source",
+									title: "Codex source",
+								}],
+							},
+						},
+						{
+							type: "message",
+							content: [{
+								type: "output_text",
+								text: "codex search answer",
+							}],
+						},
+					],
 				}), {
 					status: 200,
 					headers: { "content-type": "application/json" },
@@ -147,7 +166,12 @@ function runModelAwareRoutingProbe({
 			const exaResult = await searchModule.search("non-Codex route", {
 				provider: "auto",
 				extensionContext: {
-					model: { provider: "openai", id: "gpt-5.6-terra" },
+					model: {
+						provider: "openai",
+						id: "gpt-5.6-terra",
+						api: "openai-responses",
+						baseUrl: "https://api.openai.com/v1",
+					},
 					modelRegistry,
 				},
 			});
@@ -179,7 +203,11 @@ export function verifyModelAwareSearchRouting(packageRoot) {
 	assert.ok(existsSync(geminiModulePath), "Installed pi-web-access search module is missing");
 
 	try {
-		writeFileSync(configPath, "{}\n", "utf8");
+		writeFileSync(
+			configPath,
+			JSON.stringify({ openaiSearchProviders: ["openai-codex", "openai"] }) + "\n",
+			"utf8",
+		);
 		const result = JSON.parse(runModelAwareRoutingProbe({
 			geminiModulePath,
 			indexModulePath,

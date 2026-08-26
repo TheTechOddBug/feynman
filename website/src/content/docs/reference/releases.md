@@ -9,6 +9,27 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 
 ## Unreleased
 
+## v0.3.46 - 2026-08-26
+
+### Research continuity
+
+- Resuming a valid Pi session whose JSONL file lacks a trailing newline now repairs the append boundary before new research messages are persisted, preventing the next record from being fused into the previous one.
+- `/btw` and `/btw:summarize` now copy extension-registered providers, native providers, and temporary runtime API keys into their isolated child `ModelRuntime`. Side research can use the same custom provider that is already active in the main session.
+
+### Web research
+
+- Updated `pi-web-access` to `0.25.0`. Researchers can route search and fetch calls through an explicit HTTP(S) proxy, retrieve bounded GitHub issue and pull-request documents with comments and review threads, use Defuddle when ordinary HTML extraction is insufficient, and select Chromium browser/profile cookies explicitly.
+- Gemini generate-content paths can use Google Application Default Credentials for Vertex AI, and Kimi Code Plan accounts can be selected explicitly for web search. Stored-content passage lookup also tolerates bridge defaults when `findText` is supplied.
+
+### Observability
+
+- Generic HTTP OTLP collectors configured through one shared endpoint now receive traces, metrics, and logs at their signal-specific `/v1/*` paths, including collectors on default HTTP and HTTPS ports. Explicit per-signal endpoints remain exact and retain their own headers and protocols; Feynman's PostHog AI trace endpoint is unchanged.
+- Existing `0.3.45` pi-otel package roots migrate through the reviewed legacy digest. Embedded package setup and runtime-workspace preparation preflight every discovered pi-btw and pi-otel root before applying their combined patch plan, so an unsupported later root cannot leave earlier research packages partially updated.
+
+### Validation
+
+- Added exact source, published-upgrade, patch-plan transaction, package-tree, runtime-archive, installed-runtime OTLP behavior, proxy, GitHub document, Gemini ADC, Kimi credential, BTW provider, and unterminated-session regressions.
+
 ## v0.3.45 - 2026-08-26
 
 ### Release reliability

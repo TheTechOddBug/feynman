@@ -8,6 +8,7 @@ import { FEYNMAN_LOGO_HTML } from "../logo.mjs";
 import { patchAlphaHubAuthSource } from "./lib/alpha-hub-auth-patch.mjs";
 import { patchAlphaHubSearchResultsSource, patchAlphaHubSearchSource } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
+import { applyPackageRootPatchPlans, preflightPackageRootPatch, uniqueExistingPackageRoots } from "./lib/package-root-patch-utils.mjs";
 import { patchPiAgentCoreSource } from "./lib/pi-agent-core-patch.mjs";
 import {
 	ensureLegacyPiRuntimeAliases,
@@ -37,6 +38,7 @@ import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
 import { patchPiExtensionHandlerTimeoutPackageRoot } from "./lib/pi-extension-handler-timeout-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
+import { PI_BTW_MODEL_RUNTIME_PATCH_TARGETS, PI_BTW_MODEL_RUNTIME_REQUIRED_VERSION, patchPiBtwModelRuntimeSource } from "./lib/pi-btw-model-runtime-patch.mjs";
 import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
 import { patchPiUndiciProxyTree } from "./lib/pi-undici-proxy-patch.mjs";
 import { patchPiBraceExpansionTree } from "./lib/pi-shrinkwrap-security-patch.mjs";
@@ -71,7 +73,7 @@ import {
 	syncPiWebAccessForwardFiles,
 } from "./lib/pi-web-access-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource, stripPiSubagentBuiltinModelSource } from "./lib/pi-subagents-patch.mjs";
-import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "./lib/pi-otel-patch.mjs";
+import { preflightPiOtelPackageRoot } from "./lib/pi-otel-patch.mjs";
 import { patchPiSessionSearchSource } from "./lib/pi-session-search-patch.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..");
@@ -299,6 +301,7 @@ const workspaceExtensionLoaderPath = resolveWorkspacePiFile(
 	"loader.js",
 );
 const piSubagentsRoot = resolve(workspaceRoot, "pi-subagents");
+const piBtwRoot = resolve(workspaceRoot, "pi-btw");
 const piOtelRoot = resolve(workspaceRoot, "pi-otel");
 const sessionSearchIndexerPath = resolve(
 	workspaceRoot,
@@ -772,17 +775,36 @@ ensurePandoc();
 
 const globalPiSubagentsRoot = resolve(globalNodeModulesRoot, "pi-subagents");
 const agentNpmPiSubagentsRoot = resolve(feynmanHome, "agent", "npm", "node_modules", "pi-subagents");
-for (const subagentsRoot of new Set(
-	[piSubagentsRoot, globalPiSubagentsRoot, agentNpmPiSubagentsRoot]
-		.filter((root) => existsSync(root))
-		.map((root) => {
-			try {
-				return realpathSync(root);
-			} catch {
-				return root;
-			}
-		}),
-)) {
+const globalPiOtelRoot = resolve(globalNodeModulesRoot, "pi-otel");
+const agentNpmPiOtelRoot = resolve(feynmanHome, "agent", "npm", "node_modules", "pi-otel");
+const globalPiBtwRoot = resolve(globalNodeModulesRoot, "pi-btw");
+const agentNpmPiBtwRoot = resolve(feynmanHome, "agent", "npm", "node_modules", "pi-btw");
+const researchPackagePatchPlans = [
+	...Array.from(uniqueExistingPackageRoots([
+		piBtwRoot,
+		globalPiBtwRoot,
+		agentNpmPiBtwRoot,
+	])).map((packageRoot) =>
+		preflightPackageRootPatch({
+			packageRoot,
+			packageName: "pi-btw",
+			requiredVersion: PI_BTW_MODEL_RUNTIME_REQUIRED_VERSION,
+			targets: PI_BTW_MODEL_RUNTIME_PATCH_TARGETS,
+			patchSource: patchPiBtwModelRuntimeSource,
+		})),
+	...Array.from(uniqueExistingPackageRoots([
+		piOtelRoot,
+		globalPiOtelRoot,
+		agentNpmPiOtelRoot,
+	])).map((packageRoot) => preflightPiOtelPackageRoot(packageRoot)),
+];
+applyPackageRootPatchPlans(researchPackagePatchPlans);
+
+for (const subagentsRoot of uniqueExistingPackageRoots([
+	piSubagentsRoot,
+	globalPiSubagentsRoot,
+	agentNpmPiSubagentsRoot,
+])) {
 	for (const relativePath of PI_SUBAGENTS_PATCH_TARGETS) {
 		const entryPath = resolve(subagentsRoot, relativePath);
 		if (!existsSync(entryPath)) continue;
@@ -804,30 +826,6 @@ for (const subagentsRoot of new Set(
 			if (patched !== source) {
 				writeFileSync(entryPath, patched, "utf8");
 			}
-		}
-	}
-}
-
-const globalPiOtelRoot = resolve(globalNodeModulesRoot, "pi-otel");
-const agentNpmPiOtelRoot = resolve(feynmanHome, "agent", "npm", "node_modules", "pi-otel");
-for (const otelRoot of new Set(
-	[piOtelRoot, globalPiOtelRoot, agentNpmPiOtelRoot]
-		.filter((root) => existsSync(root))
-		.map((root) => {
-			try {
-				return realpathSync(root);
-			} catch {
-				return root;
-			}
-		}),
-)) {
-	for (const relativePath of PI_OTEL_PATCH_TARGETS) {
-		const entryPath = resolve(otelRoot, relativePath);
-		if (!existsSync(entryPath)) continue;
-		const source = readFileSync(entryPath, "utf8");
-		const patched = patchPiOtelSource(relativePath, source);
-		if (patched !== source) {
-			writeFileSync(entryPath, patched, "utf8");
 		}
 	}
 }

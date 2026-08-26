@@ -43,11 +43,12 @@ import {
 	patchPiTransformMessagesSource,
 } from "../../scripts/lib/pi-runtime-correctness-patch.mjs";
 import { patchPiLlamaUsageSource } from "../../scripts/lib/pi-llama-usage-patch.mjs";
+import { patchPiBtwModelRuntimePackageRoot } from "../../scripts/lib/pi-btw-model-runtime-patch.mjs";
 import { patchPiModelRegistrySource } from "../../scripts/lib/pi-model-registry-patch.mjs";
 import { patchPiStateFilePermissionsSource } from "../../scripts/lib/pi-state-file-permissions-patch.mjs";
 import { patchPiBraceExpansionTree } from "../../scripts/lib/pi-shrinkwrap-security-patch.mjs";
 import { patchPiUndiciProxyTree } from "../../scripts/lib/pi-undici-proxy-patch.mjs";
-import { PI_OTEL_PATCH_TARGETS, patchPiOtelSource } from "../../scripts/lib/pi-otel-patch.mjs";
+import { patchPiOtelPackageRoot } from "../../scripts/lib/pi-otel-patch.mjs";
 import { PI_SESSION_SEARCH_PATCH_TARGETS, patchPiSessionSearchSource } from "../../scripts/lib/pi-session-search-patch.mjs";
 import { PI_SUBAGENTS_PATCH_TARGETS, patchPiSubagentsSource } from "../../scripts/lib/pi-subagents-patch.mjs";
 import {
@@ -569,18 +570,16 @@ export function patchPiRuntimeNodeModules(
 		) || changed;
 		changed = patchPiWebAccessPackageFiles(nodeModulesPath, appRoot) || changed;
 		changed = patchPiDocparserPackageFiles(nodeModulesPath) || changed;
+		changed =
+			patchPiBtwModelRuntimePackageRoot(resolve(nodeModulesPath, "pi-btw")) ||
+			changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"pi-subagents",
 			PI_SUBAGENTS_PATCH_TARGETS,
 			patchPiSubagentsSource,
 		) || changed;
-		changed = patchPackageFiles(
-			nodeModulesPath,
-			"pi-otel",
-			PI_OTEL_PATCH_TARGETS,
-			patchPiOtelSource,
-		) || changed;
+		changed = patchPiOtelPackageRoot(resolve(nodeModulesPath, "pi-otel")) || changed;
 		changed = patchPackageFiles(
 			nodeModulesPath,
 			"@kaiserlich-dev/pi-session-search",

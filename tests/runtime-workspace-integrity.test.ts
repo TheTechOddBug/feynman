@@ -314,13 +314,13 @@ test("runtime reinstall preserves archived exact packages and adds new configure
 				"@earendil-works/pi-coding-agent@0.84.2",
 				"undici@8.10.0",
 			],
-			["pi-docparser@4.0.0", "pi-web-access@0.24.2"],
+			["pi-docparser@4.0.0", "pi-web-access@0.25.0"],
 		),
 		[
 			"pi-docparser@4.0.0",
 			"@earendil-works/pi-coding-agent@0.84.2",
 			"undici@8.10.0",
-			"pi-web-access@0.24.2",
+			"pi-web-access@0.25.0",
 		],
 	);
 	assert.deepEqual(mergeRuntimePackageSpecs(undefined, ["pi-docparser@4.0.0"]), [

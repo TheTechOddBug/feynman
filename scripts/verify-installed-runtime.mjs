@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
 import {
 	createAgentSession,
@@ -37,6 +37,9 @@ import {
 	PI_EDIT_LINE_ENDINGS_RUNTIME_TARGETS,
 } from "./lib/pi-edit-line-endings-patch.mjs";
 import { verifyPiCompactionToolsBehavior } from "./lib/pi-compaction-tools-verifier.mjs";
+import { verifyPiBtwModelRuntime } from "./lib/pi-btw-model-runtime-verifier.mjs";
+import { isDirectExecution as isDirectExecutionModule } from "./lib/direct-execution.mjs";
+import { verifyInstalledPiOtel } from "./lib/pi-otel-patch.mjs";
 import { verifyInstalledPiStateFilePermissions } from "./lib/pi-state-file-permissions-verifier.mjs";
 import { verifyPdfPageLimits } from "./lib/pi-web-access-pdf-verifier.mjs";
 import {
@@ -1152,6 +1155,8 @@ async function main() {
 	const modelAwareSearchRouting = verifyModelAwareSearchRouting(packageRoot);
 	const pdfPageLimits = await verifyPdfPageLimits(packageRoot);
 	const windowsWebCookies = await verifyWindowsWebCookies();
+	const btwModelRuntime = verifyPiBtwModelRuntime(packageRoot);
+	const otlpSignalRouting = await verifyInstalledPiOtel(packageRoot);
 	await verifyInstalledSchemas();
 	await verifyGithubCopilotRateLimitLogin();
 	await verifyRuntimeForwardFixBehavior(packageRoot, { prunedNative: isNativeBundlePackageRoot(packageRoot) });
@@ -1172,6 +1177,8 @@ async function main() {
 		modelAwareSearchRouting,
 		pdfPageLimits,
 		windowsWebCookies,
+		btwModelRuntime,
+		otlpSignalRouting,
 		malformedSubagentIsolation: "passed",
 		githubCopilotRateLimit: "passed",
 		runtimeForwardFixes: "passed",
@@ -1182,17 +1189,10 @@ async function main() {
 	}));
 }
 
-export function isDirectExecution(
+export const isDirectExecution = (
 	entryPath = process.argv[1],
-	modulePath = fileURLToPath(import.meta.url),
-) {
-	if (!entryPath) return false;
-	try {
-		return realpathSync(entryPath) === realpathSync(modulePath);
-	} catch {
-		return resolve(entryPath) === resolve(modulePath);
-	}
-}
+	modulePath = import.meta.filename,
+) => isDirectExecutionModule(entryPath, modulePath);
 
 if (isDirectExecution()) {
 	await main();

@@ -12,6 +12,7 @@ export declare const PI_CODING_AGENT_FORWARD_FIX_MARKERS: Readonly<{
 export declare const PI_RUNTIME_CORRECTNESS_PATCH_MARKERS: Readonly<{
 	agentSession: string;
 	sessionManager: string;
+	sessionTailRepair: string;
 	transformMessages: string;
 	githubCopilotDeviceCode: string;
 	githubCopilotOAuth: string;

@@ -49,6 +49,7 @@ import {
 } from "./lib/runtime-workspace-integrity.mjs";
 import { PI_WEB_ACCESS_PATCH_TARGETS, assertPiWebAccessPatchedSources } from "./lib/pi-web-access-patch.mjs";
 import { assertPiSubagentPatchedSources } from "./lib/pi-subagents-verification.mjs";
+import { assertResearchRuntimeIntakeArchive } from "./lib/research-runtime-intake-release-contract.mjs";
 const packageRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, ".."));
 const prunedNative = process.argv.includes("--pruned-native");
 const packageRequire = createRequire(resolve(packageRoot, "package.json"));
@@ -550,8 +551,8 @@ const runtimeLockSource = readText(runtimeLockPath, "committed runtime package l
 const runtimeLock = JSON.parse(runtimeLockSource);
 verifyPiTelemetryRuntimeLockContract(runtimeLock, expectedPiVersion, fail);
 const expectedPiWebAccessVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-web-access"];
-if (expectedPiWebAccessVersion !== "0.24.2") {
-	fail("committed runtime lock does not pin pi-web-access 0.24.2");
+if (expectedPiWebAccessVersion !== "0.25.0") {
+	fail("committed runtime lock does not pin pi-web-access 0.25.0");
 }
 const expectedPiDocparserVersion = runtimeLock.packages?.[""]?.dependencies?.["pi-docparser"];
 if (expectedPiDocparserVersion !== FEYNMAN_PI_DOCPARSER_VERSION) {
@@ -645,6 +646,7 @@ for (const spec of runtimeManifest.packageSpecs) {
 	}
 }
 assertPiSubagentPatchedSources((relativePath) => readArchivedText(archivePath, `npm/node_modules/pi-subagents/${relativePath}`), "runtime pi-subagents");
+assertResearchRuntimeIntakeArchive((entryPath) => readArchivedText(archivePath, entryPath));
 assertPiRuntimeCorrectnessPatchSource(
 	readArchivedText(
 		archivePath,
@@ -932,7 +934,7 @@ requireMarkers(
 		"if (sourceCheckEnabled) pi.registerTool({",
 		"if (fetchContentEnabled) pi.registerTool({",
 		"if (getSearchContentEnabled) {",
-		"Cannot be combined with findText.",
+		"Ignored when findText is supplied.",
 		"Requires findText.",
 	],
 );
