@@ -73,6 +73,25 @@ test("vendored runtime uses a committed exact dependency lock", () => {
 	);
 	assert.deepEqual(
 		{
+			piTelemetry:
+				runtimeLock.packages[
+					"node_modules/@earendil-works/pi-telemetry"
+				]?.version,
+			nodeTypes:
+				runtimeLock.packages["node_modules/@types/node"]?.version,
+			fastUri:
+				runtimeLock.packages["node_modules/fast-uri"]?.version,
+			hono: runtimeLock.packages["node_modules/hono"]?.version,
+		},
+		{
+			piTelemetry: "0.84.2",
+			nodeTypes: "26.2.0",
+			fastUri: "3.1.5",
+			hono: "4.13.3",
+		},
+	);
+	assert.deepEqual(
+		{
 			version:
 				runtimeLock.packages["node_modules/@llamaindex/liteparse"]
 					?.version,

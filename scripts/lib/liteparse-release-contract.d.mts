@@ -11,6 +11,10 @@ export declare function verifyLiteparseManifestContract(
 	fail: (message: string) => never,
 	label: string,
 ): void;
+export declare function verifyLiteparseRootManifestContract(
+	rootManifest: Record<string, unknown>,
+	fail: (message: string) => never,
+): void;
 export declare function verifyLiteparseRootLockContract(
 	rootLock: Record<string, unknown>,
 	fail: (message: string) => never,
