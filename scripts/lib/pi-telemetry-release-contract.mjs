@@ -33,6 +33,21 @@ function verifyExpectedVersion(expectedVersion, fail) {
 	}
 }
 
+export function resolvePiTelemetryRuntimeVersion(
+	lockedVersion,
+	hasRootPackageLock,
+) {
+	if (!hasRootPackageLock) {
+		return FEYNMAN_PI_TELEMETRY_VERSION;
+	}
+	if (lockedVersion !== FEYNMAN_PI_TELEMETRY_VERSION) {
+		throw new Error(
+			`Pi telemetry must match the maintained Pi ${FEYNMAN_PI_TELEMETRY_VERSION} train, found ${lockedVersion ?? "missing"}`,
+		);
+	}
+	return lockedVersion;
+}
+
 function verifyPiTelemetryLockEntry(entry, packagePath, canonicalIntegrity, fail) {
 	const observedIntegrity =
 		entry?.integrity === undefined

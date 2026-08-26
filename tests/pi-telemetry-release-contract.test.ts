@@ -6,6 +6,7 @@ import {
 	FEYNMAN_PI_TELEMETRY_PACKAGE,
 	FEYNMAN_PI_TELEMETRY_RESOLVED,
 	FEYNMAN_PI_TELEMETRY_VERSION,
+	resolvePiTelemetryRuntimeVersion,
 	verifyPiTelemetryArchiveContract,
 	verifyPiTelemetryRuntimeLockContract,
 	type PiTelemetryRuntimeLock,
@@ -21,6 +22,25 @@ const CODING_AGENT_ARCHIVE_PATH = `npm/${CODING_AGENT_LOCK_PATH}/package.json`;
 const fail = (message: string): never => {
 	throw new Error(message);
 };
+
+test("Pi telemetry runtime pin falls back only when package-lock is not shipped", () => {
+	assert.equal(
+		resolvePiTelemetryRuntimeVersion(undefined, false),
+		FEYNMAN_PI_TELEMETRY_VERSION,
+	);
+	assert.equal(
+		resolvePiTelemetryRuntimeVersion(FEYNMAN_PI_TELEMETRY_VERSION, true),
+		FEYNMAN_PI_TELEMETRY_VERSION,
+	);
+	assert.throws(
+		() => resolvePiTelemetryRuntimeVersion(undefined, true),
+		/maintained Pi 0\.84\.2 train, found missing/,
+	);
+	assert.throws(
+		() => resolvePiTelemetryRuntimeVersion("0.84.3", true),
+		/maintained Pi 0\.84\.2 train, found 0\.84\.3/,
+	);
+});
 
 function makeRuntimeLock(): PiTelemetryRuntimeLock {
 	return {

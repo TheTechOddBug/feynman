@@ -69,6 +69,10 @@ import {
 	patchAlphaHubSearchSource,
 } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
+import {
+	FEYNMAN_PI_TELEMETRY_PACKAGE,
+	resolvePiTelemetryRuntimeVersion,
+} from "./lib/pi-telemetry-release-contract.mjs";
 import { createDeterministicTarGz } from "./lib/deterministic-archive.mjs";
 import {
 	computeRuntimeArchiveTreeHash,
@@ -99,7 +103,6 @@ const workspaceArchivePath = resolve(feynmanDir, "runtime-workspace.tgz");
 const workspaceArchiveDigestPath = resolve(feynmanDir, "runtime-workspace.sha256");
 const PRUNE_VERSION = 8;
 const PI_RUNTIME_FALLBACK_VERSION = "0.84.2";
-const PI_TELEMETRY_PACKAGE = "@earendil-works/pi-telemetry";
 const RUNTIME_PACKAGE_OVERRIDES = {
 	"@mozilla/readability": "0.6.0",
 	"@modelcontextprotocol/sdk": {
@@ -138,7 +141,7 @@ const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
-	PI_TELEMETRY_PACKAGE,
+	FEYNMAN_PI_TELEMETRY_PACKAGE,
 	"@earendil-works/pi-tui",
 	"brace-expansion",
 	"typebox",
@@ -183,13 +186,11 @@ function readPackageSpecs() {
 		: [];
 
 	for (const packageName of PINNED_RUNTIME_PACKAGES) {
-		const version = readLockedPackageVersion(packageName);
-		if (
-			packageName === PI_TELEMETRY_PACKAGE &&
-			version !== PI_RUNTIME_FALLBACK_VERSION
-		) {
-			throw new Error(
-				`Pi telemetry must match the maintained Pi ${PI_RUNTIME_FALLBACK_VERSION} train, found ${version ?? "missing"}`,
+		let version = readLockedPackageVersion(packageName);
+		if (packageName === FEYNMAN_PI_TELEMETRY_PACKAGE) {
+			version = resolvePiTelemetryRuntimeVersion(
+				version,
+				existsSync(packageLockPath),
 			);
 		}
 		if (version) {

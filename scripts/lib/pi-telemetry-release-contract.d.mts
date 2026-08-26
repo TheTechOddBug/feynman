@@ -18,6 +18,11 @@ export interface PiTelemetryRuntimeLock {
 export type PiTelemetryContractFailure = (message: string) => never;
 export type ReadArchivedJson = (entryPath: string) => unknown;
 
+export function resolvePiTelemetryRuntimeVersion(
+	lockedVersion: string | undefined,
+	hasRootPackageLock: boolean,
+): "0.84.2";
+
 export function verifyPiTelemetryRuntimeLockContract(
 	runtimeLock: PiTelemetryRuntimeLock,
 	expectedVersion: string,
