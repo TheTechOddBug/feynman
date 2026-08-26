@@ -8,6 +8,12 @@ import {
 	PI_OPENAI_RESPONSES_NO_TOOLS_MARKER,
 	patchPiOpenAiResponsesNoToolsSource,
 } from "./pi-openai-responses-no-tools-patch.mjs";
+import {
+	assertPiBedrockForwardFixSource,
+	PI_BEDROCK_RESPONSE_HEADERS_MARKER,
+	PI_BEDROCK_TOOL_RESULT_IMAGES_MARKER,
+	patchPiBedrockForwardFixSource,
+} from "./pi-bedrock-forward-fixes-patch.mjs";
 
 /**
  * Temporary Pi 0.84.2 forward patches for upstream commits:
@@ -24,10 +30,11 @@ import {
  * - b7bb00b936dbe21b8e160b3e89efdec361846699 (reasoning signature storage)
  * - c5ad7c1b0f7623bbfdf64dd4967fa6e99c15c01a (reasoning delta concatenation)
  * - 7280f89b42e4b233afc4f18e41366e845d179cef (Responses no-tools contract, Pi #8649/#8650)
+ * - 331e187b8ee86cc87360600eef6f9620a5d1967b (Bedrock OpenAI tool-result images, Pi #8643)
  * - https://github.com/earendil-works/pi/issues/8507 (transient OpenRouter budget retry)
  *
  * Removal condition: delete this patch after Feynman adopts a released Pi
- * version that contains all fourteen fixes.
+ * version that contains all fifteen fixes.
  */
 
 export const PI_AI_FORWARD_FIX_REQUIRED_VERSION = "0.84.2";
@@ -63,7 +70,8 @@ export const PI_AI_FORWARD_FIX_MARKERS = Object.freeze({
 	googleGenerativeAi: "Feynman Pi 0.84.2 forward patch: Google thinking level maps",
 	googleShared: "Feynman Pi 0.84.2 forward patch: resolve Google thinking level maps",
 	googleVertex: "Feynman Pi 0.84.2 forward patch: Vertex thinking level maps",
-	bedrock: "Feynman Pi 0.84.2 forward patch: Bedrock Smithy response headers",
+	bedrock: PI_BEDROCK_RESPONSE_HEADERS_MARKER,
+	bedrockToolResultImages: PI_BEDROCK_TOOL_RESULT_IMAGES_MARKER,
 	toolChoice: "Feynman Pi 0.84.2 forward patch: provider-neutral tool choice",
 	openAiCompletions: "Feynman Pi 0.84.2 forward patch: Gemini signatures and bounded tool IDs",
 	openAiResponsesNoTools: PI_OPENAI_RESPONSES_NO_TOOLS_MARKER,
@@ -418,12 +426,7 @@ export function assertPiAiForwardFixSource(relativePath, source) {
 			]);
 			return;
 		case "dist/api/bedrock-converse-stream.js":
-			assertSourceFragments(source, relativePath, [
-				PI_AI_FORWARD_FIX_MARKERS.bedrock,
-				"addResponseHeadersMiddleware(client, options.onResponse, model",
-				"if (!observedRawResponse && response.$metadata.httpStatusCode !== undefined)",
-				'name: "pi-ai-response-headers"',
-			]);
+			assertPiBedrockForwardFixSource(source);
 			return;
 		case "dist/api/openai-completions.js":
 			assertSourceFragments(source, relativePath, [
@@ -607,65 +610,6 @@ function patchGoogleVertex(source) {
 	patched = replaceRequired(patched, "customBudgets?.[effort]", "customBudgets?.[level]", "Google Vertex custom budget check");
 	patched = replaceRequired(patched, "customBudgets[effort]", "customBudgets[level]", "Google Vertex custom budget value");
 	patched = replaceRequiredCount(patched, "budgets[effort]", "budgets[level]", 2, "Google Vertex built-in budgets");
-	assertPiAiForwardFixSource(relativePath, patched);
-	return patched;
-}
-
-function patchBedrock(source) {
-	const relativePath = "dist/api/bedrock-converse-stream.js";
-	if (source.includes(PI_AI_FORWARD_FIX_MARKERS.bedrock)) {
-		assertPiAiForwardFixSource(relativePath, source);
-		return source;
-	}
-	let patched = replaceRequired(
-		source,
-		"            const client = new BedrockRuntimeClient(config);",
-		`            const client = new BedrockRuntimeClient(config);
-            let observedRawResponse = false;
-            if (options.onResponse) {
-                addResponseHeadersMiddleware(client, options.onResponse, model, () => {
-                    observedRawResponse = true;
-                });
-            }`,
-		"Bedrock response middleware registration",
-	);
-	patched = replaceRequired(
-		patched,
-		"            if (response.$metadata.httpStatusCode !== undefined) {",
-		"            if (!observedRawResponse && response.$metadata.httpStatusCode !== undefined) {",
-		"Bedrock metadata fallback",
-	);
-	const anchor = `    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });
-}
-export const streamSimple`;
-	const helper = `    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });
-}
-// ${PI_AI_FORWARD_FIX_MARKERS.bedrock}
-function isSmithyHttpResponse(response) {
-    if (!response || typeof response !== "object")
-        return false;
-    const candidate = response;
-    return typeof candidate.statusCode === "number" && !!candidate.headers && typeof candidate.headers === "object";
-}
-function toProviderResponse(response) {
-    if (!isSmithyHttpResponse(response))
-        return undefined;
-    return { status: response.statusCode, headers: { ...response.headers } };
-}
-function addResponseHeadersMiddleware(client, onResponse, model, onObserved) {
-    const middleware = (next) => async (args) => {
-        const result = await next(args);
-        const providerResponse = toProviderResponse(result.response);
-        if (providerResponse) {
-            onObserved();
-            await onResponse(providerResponse, model);
-        }
-        return result;
-    };
-    client.middlewareStack.add(middleware, { step: "deserialize", name: "pi-ai-response-headers" });
-}
-export const streamSimple`;
-	patched = replaceRequired(patched, anchor, helper, "Bedrock response middleware");
 	assertPiAiForwardFixSource(relativePath, patched);
 	return patched;
 }
@@ -1167,7 +1111,7 @@ export function patchPiAiForwardFixSource(relativePath, source) {
 			patched = patchGoogleVertex(patched);
 			break;
 		case "dist/api/bedrock-converse-stream.js":
-			patched = patchBedrock(patched);
+			patched = patchPiBedrockForwardFixSource(patched);
 			break;
 		case "dist/api/openai-completions.js":
 			patched = patchOpenAiCompletions(patched);

@@ -23,6 +23,13 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 ### Model reliability
 
 - OpenAI-compatible structured reasoning deltas are accumulated without reparsing and reserializing the complete history for every streamed detail, preventing long reasoning streams from blocking the event loop while preserving same-model replay.
+- OpenAI models reached through Amazon Bedrock now receive images returned by research tools as sibling user-image blocks instead of unsupported images nested inside `toolResult.content`. Text stays attached to its tool result, image-only results retain an explicit placeholder, and Anthropic Bedrock models keep their native nested-image shape.
+
+### Runtime reliability
+
+- Non-interactive Pi extension handler work now has a cumulative 30-second budget. A handler that never settles reports its extension and event, expires its local context, safely absorbs late settlement, and lets later handlers and the research session continue.
+- Timed-out model-tool and user-shell policy handlers still allow later policy handlers to run, then fail closed. User-shell interception returns an explicit non-executing result, so both TUI and RPC paths do not run the command after a policy timeout.
+- Project trust, OAuth, and interactive dialogs preserve their supported behavior: documented UI prompts pause the remaining handler budget instead of resetting it, parent cancellation settles even a non-cooperative dialog, and OAuth callbacks remain outside the bounded event runner.
 
 ### Document research
 
@@ -31,6 +38,8 @@ This page summarizes what changed in recent Feynman releases. GitHub releases us
 ### Validation
 
 - Added executable abort-queue, Responses payload, structured-reasoning scale, small-context compaction, and summary-usability regressions across the maintained Pi runtime.
+- Added executable extension-handler deadline coverage for downstream progress, timeout reporting, expired contexts, late rejection handling, fail-closed TUI/RPC user-shell interception, cumulative dialog timing, parent cancellation, project trust, and tool permission dialogs.
+- Added exact source, root/nested runtime, package-tree, and runtime-archive verifier coverage for Bedrock tool-result images across bare, regional, and global OpenAI model IDs, with an Anthropic control.
 - Re-ran installed document parsing, page-count, search, screenshot, package-artifact, runtime, and clean-consumer verification against LiteParse `2.14.0`.
 
 ## v0.3.43 - 2026-08-25

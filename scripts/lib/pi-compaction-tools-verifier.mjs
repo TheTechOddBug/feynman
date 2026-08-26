@@ -179,13 +179,13 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 	};
 	const checkpointSummary = [
 		"## Goal",
-		"Verify a research claim against its cited source.",
+		"Verify a research claim against its cited source and preserve the exact evidence trail.",
 		"",
 		"## Progress",
-		"- Located and checked the primary paper.",
+		"- Located and checked the primary paper, DOI, cohort size, and reported confidence interval.",
 		"",
 		"## Next Steps",
-		"1. Reproduce the reported result.",
+		"1. Reproduce the reported result independently and compare it against the paper.",
 	].join("\n");
 	let observedOptions;
 	const textStream = async (_model, _context, options) => {
@@ -217,6 +217,88 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		compaction.getEffectiveCompactionSettings(compaction.DEFAULT_COMPACTION_SETTINGS, 128000),
 		compaction.DEFAULT_COMPACTION_SETTINGS,
 	);
+	const branchCheckpointSummary = `${checkpointSummary}\n\n${"Preserve the exact research evidence, methods, provenance, and reproduction state. ".repeat(12)}`;
+	const verifyBranchRequestBudget = async (branchModel, entries, expectedMaxTokens) => {
+		let observedContext;
+		let observedBranchOptions;
+		const branchStream = async (_model, context, options) => {
+			observedContext = context;
+			observedBranchOptions = options;
+			return {
+				result: async () => assistantMessage(
+					branchModel,
+					[{ type: "text", text: branchCheckpointSummary }],
+				),
+			};
+		};
+		const result = await branch.generateBranchSummary(entries, {
+			model: branchModel,
+			apiKey: "test",
+			streamFn: branchStream,
+		});
+		assert.equal(result.error, undefined);
+		assert.equal(observedBranchOptions?.maxTokens, expectedMaxTokens);
+		assert.ok(
+			observedBranchOptions.maxTokens <= branchModel.maxTokens,
+			"Branch summary output exceeded the model output limit",
+		);
+		const inputTokens =
+			Math.ceil((observedContext.systemPrompt?.length ?? 0) / 4) +
+			observedContext.messages.reduce(
+				(total, message) => total + compaction.estimateTokens(message),
+				0,
+			);
+		assert.ok(
+			inputTokens + observedBranchOptions.maxTokens <= branchModel.contextWindow,
+			"Branch summary system, prompt, and output exceeded the model context window",
+		);
+		return observedContext;
+	};
+	const eightKModel = { ...model, contextWindow: 8192, maxTokens: 4096 };
+	await verifyBranchRequestBudget(
+		eightKModel,
+		Array.from({ length: 30 }, (_, index) => ({
+			type: "message",
+			id: `branch-budget-${index}`,
+			parentId: index === 0 ? null : `branch-budget-${index - 1}`,
+			timestamp: new Date(index + 1).toISOString(),
+			message: { role: "user", content: "A".repeat(800), timestamp: index + 1 },
+		})),
+		2048,
+	);
+	await verifyBranchRequestBudget(
+		{ ...model, contextWindow: 1024, maxTokens: 128 },
+		[{
+			type: "message",
+			id: "branch-budget-tiny",
+			parentId: null,
+			timestamp: new Date(1).toISOString(),
+			message: { role: "user", content: "B".repeat(1200), timestamp: 1 },
+		}],
+		128,
+	);
+	const largeContext = await verifyBranchRequestBudget(
+		model,
+		Array.from({ length: 114 }, (_, index) => ({
+			type: "message",
+			id: `branch-budget-large-${index}`,
+			parentId: index === 0 ? null : `branch-budget-large-${index - 1}`,
+			timestamp: new Date(index + 1).toISOString(),
+			message: {
+				role: "user",
+				content: `${index === 0 ? "OLDEST_BRANCH_SENTINEL" : "branch"}${"C".repeat(3980)}`,
+				timestamp: index + 1,
+			},
+		})),
+		2048,
+	);
+	const largePrompt = JSON.stringify(largeContext.messages);
+	assert.doesNotMatch(
+		largePrompt,
+		/OLDEST_BRANCH_SENTINEL/,
+		"Large-context branch summaries must preserve the existing reserve",
+	);
+	assert.match(largePrompt, /branchC{100}/, "Large-context branch summary dropped recent context");
 	const tinyStructuredStub = [
 		"## Goal",
 		"Research",

@@ -134,6 +134,7 @@ test("Pi AI forward patch covers root and nested 0.84.2 runtime copies", () => {
 		"4ca636c5",
 		"b7bb00b9",
 		"c5ad7c1b",
+		"331e187",
 	]) {
 		assert.match(patchSource, new RegExp(commit));
 	}
@@ -286,21 +287,6 @@ test("Pi AI forward patch applies each unsupported 0.84.2 source layout once", (
 	assert.match(vertex, new RegExp(PI_AI_FORWARD_FIX_MARKERS.googleVertex));
 	assert.match(vertex, /getGemini3ThinkingLevel\(resolvedLevel, geminiModel\)/);
 	assert.doesNotMatch(vertex, /budgets\[effort\]/);
-
-	const bedrock = patchPiAiForwardFixSource(
-		"dist/api/bedrock-converse-stream.js",
-		[
-			"            const client = new BedrockRuntimeClient(config);",
-			"            if (response.$metadata.httpStatusCode !== undefined) {",
-			'    client.middlewareStack.add(middleware, { step: "build", name: "pi-ai-custom-headers", priority: "low" });',
-			"}",
-			"export const streamSimple",
-			"    const base = buildBaseOptions(model, context, options, undefined);",
-		].join("\n"),
-	);
-	assert.match(bedrock, new RegExp(PI_AI_FORWARD_FIX_MARKERS.bedrock));
-	assert.match(bedrock, /step: "deserialize", name: "pi-ai-response-headers"/);
-	assert.match(bedrock, /!observedRawResponse/);
 
 	const xiaomi = patchPiAiForwardFixSource(
 		"dist/providers/data/xiaomi.json",

@@ -34,10 +34,92 @@ export const PI_COMPACTION_TOOLS_PATCH_MARKERS = Object.freeze({
 	contextBudgets: "Feynman Pi 0.84.2 hotfix: bound compaction budgets to model context",
 	contextCallers: "Feynman Pi 0.84.2 hotfix: pass model context into compaction preparation",
 	contextBudgetTypes: "Feynman Pi 0.84.2 hotfix: type model-bounded compaction budgets",
+	branchRequestBudget: "Feynman Pi 0.84.2 hotfix: bound branch summary request to model limits",
+	branchHistoryCapacity: "Feynman Pi 0.84.2 hotfix: fail closed when non-empty branch history cannot fit",
 	summaryIntegrity: "Feynman Pi 0.84.2 hotfix: reject unusable summary checkpoints",
 	branchIntegrity: "Feynman Pi 0.84.2 hotfix: reject unusable branch checkpoints",
 	summaryIntegrityTypes: "Feynman Pi 0.84.2 hotfix: type summary integrity guard",
 });
+
+const SUMMARY_USABILITY_HELPER_IMPLEMENTATION = `const CHECKPOINT_REQUIRED_SECTIONS = Object.freeze(["Goal", "Progress", "Next Steps"]);
+const TURN_PREFIX_REQUIRED_SECTIONS = Object.freeze(["Original Request", "Early Progress", "Context for Suffix"]);
+const FILE_OPERATION_BLOCK = /<(?:read-files|modified-files)>[\\s\\S]*?<\\/(?:read-files|modified-files)>/gi;
+function summarySections(summary) {
+    const sections = new Map();
+    let current;
+    for (const line of summary.split(/\\r?\\n/)) {
+        const heading = /^##\\s+(.+?)\\s*$/.exec(line);
+        if (heading) {
+            current = heading[1].trim().toLowerCase();
+            if (!sections.has(current))
+                sections.set(current, []);
+            continue;
+        }
+        if (current)
+            sections.get(current).push(line);
+    }
+    return sections;
+}
+function isSubstantiveSummarySection(lines) {
+    const normalized = lines
+        .join("\\n")
+        .replace(/^#{3,}\\s+.*$/gm, "")
+        .replace(/^\\s*(?:[-*+]\\s*)?\\[[ xX]\\]\\s*/gm, "")
+        .replace(/^\\s*(?:[-*+]|\\d+[.)])\\s+/gm, "")
+        .replace(/[\`*_>#()[\\]]/g, " ")
+        .replace(/\\s+/g, " ")
+        .trim();
+    if (!normalized || /^(?:none|n\\/?a|not applicable|unknown|no (?:information|context|progress|steps?|request|goal)(?: available| provided| yet)?)[.!]*$/i.test(normalized)) {
+        return false;
+    }
+    return normalized.replace(/[^\\p{L}\\p{N}]+/gu, "").length >= 4;
+}
+function summaryContentCharacters(summary) {
+    return summary.replace(/[^\\p{L}\\p{N}]+/gu, "").length;
+}
+function minimumSummaryContentCharacters(sourceCharacters) {
+    if (!Number.isFinite(sourceCharacters) || sourceCharacters <= 0)
+        return 64;
+    return Math.min(512, Math.max(64, Math.floor(sourceCharacters / 200)));
+}
+export function getSummaryUsabilityFailure(summary, label, requiredSections = CHECKPOINT_REQUIRED_SECTIONS, sourceCharacters) {
+    const checkpoint = summary.replace(FILE_OPERATION_BLOCK, "").trim();
+    if (!checkpoint) {
+        return \`\${label} failed: generated an empty or file-list-only checkpoint\`;
+    }
+    const contentCharacters = summaryContentCharacters(checkpoint);
+    const minimumCharacters = minimumSummaryContentCharacters(sourceCharacters);
+    if (contentCharacters < minimumCharacters) {
+        return \`\${label} failed: generated an implausibly small checkpoint (\${contentCharacters} content characters; minimum \${minimumCharacters})\`;
+    }
+    const sections = summarySections(checkpoint);
+    const missing = requiredSections.filter((heading) => !isSubstantiveSummarySection(sections.get(heading.toLowerCase()) ?? []));
+    if (missing.length > 0) {
+        return \`\${label} failed: generated a structurally unusable checkpoint (missing substantive \${missing.join(", ")})\`;
+    }
+    return undefined;
+}`;
+const HISTORY_SUMMARY_USABILITY_GUARD = `    const usabilityFailure = getSummaryUsabilityFailure(textContent, "Summarization", undefined, conversationText.length + (previousSummary?.length ?? 0));
+    if (usabilityFailure) {
+        throw new Error(usabilityFailure);
+    }`;
+const TURN_PREFIX_SUMMARY_USABILITY_GUARD = `    const usabilityFailure = getSummaryUsabilityFailure(textContent, "Turn prefix summarization", TURN_PREFIX_REQUIRED_SECTIONS, conversationText.length);
+    if (usabilityFailure) {
+        throw new Error(usabilityFailure);
+    }`;
+const BRANCH_SUMMARY_USABILITY_GUARD = `    const usabilityFailure = getSummaryUsabilityFailure(summary, "Branch summarization", replaceInstructions && customInstructions ? [] : undefined, conversationText.length);
+    if (usabilityFailure) {
+        return { error: usabilityFailure };
+    }`;
+const EMPTY_BRANCH_HISTORY_RESULT = `    if (entries.length === 0) {
+        return { summary: "No content to summarize" };
+    }`;
+const BRANCH_PREPARATION_CAPACITY_FAILURE = `    if (messages.length === 0) {
+        return { error: "Branch summarization failed: non-empty branch history did not fit the conversation budget" };
+    }`;
+const BRANCH_SERIALIZATION_CAPACITY_FAILURE = `        if (messages.length === 0) {
+            return { error: "Branch summarization failed: non-empty branch history did not fit the serialized request budget" };
+        }`;
 
 function countOccurrences(source, fragment) {
 	return source.split(fragment).length - 1;
@@ -70,6 +152,15 @@ function assertAbsentFragments(source, relativePath, fragments) {
 		if (source.includes(fragment)) {
 			throw new Error(`Invalid Pi compaction tools patch ${relativePath}: retained ${fragment}`);
 		}
+	}
+}
+
+function assertExactOccurrences(source, relativePath, fragment, label, expectedCount = 1) {
+	const count = countOccurrences(source, fragment);
+	if (count !== expectedCount) {
+		throw new Error(
+			`Incomplete Pi compaction tools patch ${relativePath}: expected ${expectedCount} exact ${label}${expectedCount === 1 ? "" : "s"}, found ${count}`,
+		);
 	}
 }
 
@@ -132,10 +223,29 @@ export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 					'getSummaryUsabilityFailure(textContent, "Summarization", undefined, conversationText.length + (previousSummary?.length ?? 0))',
 					'getSummaryUsabilityFailure(textContent, "Turn prefix summarization", TURN_PREFIX_REQUIRED_SECTIONS, conversationText.length)',
 				]);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					SUMMARY_USABILITY_HELPER_IMPLEMENTATION,
+					"summary integrity helper implementation",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					HISTORY_SUMMARY_USABILITY_GUARD,
+					"history summary usability guard",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					TURN_PREFIX_SUMMARY_USABILITY_GUARD,
+					"turn-prefix summary usability guard",
+				);
 				assertAbsentFragments(source, relativePath, [
 					"return contextTokens > contextWindow - settings.reserveTokens;",
 					"findCutPoint(pathEntries, boundaryStart, boundaryEnd, settings.keepRecentTokens)",
 					"text: contentText(response.content),",
+					"if (false && usabilityFailure)",
 				]);
 			}
 			assertAbsentFragments(source, relativePath, ["//# sourceMappingURL="]);
@@ -150,15 +260,57 @@ export function assertPiCompactionToolsPatchedSource(relativePath, source) {
 			if (isFullBranchSource(source)) {
 				assertFragments(source, relativePath, [
 					PI_COMPACTION_TOOLS_PATCH_MARKERS.contextBudgets,
+					PI_COMPACTION_TOOLS_PATCH_MARKERS.branchRequestBudget,
+					PI_COMPACTION_TOOLS_PATCH_MARKERS.branchHistoryCapacity,
 					PI_COMPACTION_TOOLS_PATCH_MARKERS.branchIntegrity,
 					"getEffectiveCompactionSettings",
 					"getSummaryUsabilityFailure",
 					"const effectiveSettings = getEffectiveCompactionSettings(",
-					"const tokenBudget = contextWindow - effectiveSettings.reserveTokens;",
+					"const modelMaxTokens = Number.isFinite(model.maxTokens) && model.maxTokens > 0",
+					"const systemPromptTokens = estimateTokens({ role: \"user\", content: SUMMARIZATION_SYSTEM_PROMPT, timestamp: 0 });",
+					"const maxTokens = Math.min(2048, modelMaxTokens, effectiveSettings.reserveTokens, contextWindow - emptyRequest.inputTokens - 1);",
+					"const configuredConversationBudget = contextWindow - effectiveSettings.reserveTokens;",
+					"const tokenBudget = Math.min(configuredConversationBudget, contextWindow - emptyRequest.inputTokens - maxTokens);",
+					"const inputTokens = systemPromptTokens + estimateTokens(summarizationMessages[0]);",
+					"while (messages.length > 0 && request.inputTokens + maxTokens > contextWindow)",
+					"const requestOptions = { apiKey, headers, env, signal, maxTokens };",
 					'getSummaryUsabilityFailure(summary, "Branch summarization", replaceInstructions && customInstructions ? [] : undefined, conversationText.length)',
 				]);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					EMPTY_BRANCH_HISTORY_RESULT,
+					"genuinely empty branch result",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					BRANCH_PREPARATION_CAPACITY_FAILURE,
+					"non-empty branch preparation failure",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					BRANCH_SERIALIZATION_CAPACITY_FAILURE,
+					"non-empty branch serialization failure",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					'return { summary: "No content to summarize" };',
+					"genuinely empty branch summary",
+				);
+				assertExactOccurrences(
+					source,
+					relativePath,
+					BRANCH_SUMMARY_USABILITY_GUARD,
+					"branch summary usability guard",
+				);
 				assertAbsentFragments(source, relativePath, [
 					"const tokenBudget = contextWindow - reserveTokens;",
+					"const tokenBudget = contextWindow - effectiveSettings.reserveTokens;",
+					"maxTokens: 2048",
+					"if (false && usabilityFailure)",
 				]);
 			} else {
 				assertFragments(source, relativePath, [
@@ -375,64 +527,7 @@ export function getEffectiveCompactionSettings(settings, contextWindow) {
 			"\nfunction createSummarizationOptions(",
 			`
 // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.summaryIntegrity}
-const CHECKPOINT_REQUIRED_SECTIONS = Object.freeze(["Goal", "Progress", "Next Steps"]);
-const TURN_PREFIX_REQUIRED_SECTIONS = Object.freeze(["Original Request", "Early Progress", "Context for Suffix"]);
-const FILE_OPERATION_BLOCK = /<(?:read-files|modified-files)>[\\s\\S]*?<\\/(?:read-files|modified-files)>/gi;
-function summarySections(summary) {
-    const sections = new Map();
-    let current;
-    for (const line of summary.split(/\\r?\\n/)) {
-        const heading = /^##\\s+(.+?)\\s*$/.exec(line);
-        if (heading) {
-            current = heading[1].trim().toLowerCase();
-            if (!sections.has(current))
-                sections.set(current, []);
-            continue;
-        }
-        if (current)
-            sections.get(current).push(line);
-    }
-    return sections;
-}
-function isSubstantiveSummarySection(lines) {
-    const normalized = lines
-        .join("\\n")
-        .replace(/^#{3,}\\s+.*$/gm, "")
-        .replace(/^\\s*(?:[-*+]\\s*)?\\[[ xX]\\]\\s*/gm, "")
-        .replace(/^\\s*(?:[-*+]|\\d+[.)])\\s+/gm, "")
-        .replace(/[\`*_>#()[\\]]/g, " ")
-        .replace(/\\s+/g, " ")
-        .trim();
-    if (!normalized || /^(?:none|n\\/?a|not applicable|unknown|no (?:information|context|progress|steps?|request|goal)(?: available| provided| yet)?)[.!]*$/i.test(normalized)) {
-        return false;
-    }
-    return normalized.replace(/[^\\p{L}\\p{N}]+/gu, "").length >= 4;
-}
-function summaryContentCharacters(summary) {
-    return summary.replace(/[^\\p{L}\\p{N}]+/gu, "").length;
-}
-function minimumSummaryContentCharacters(sourceCharacters) {
-    if (!Number.isFinite(sourceCharacters) || sourceCharacters <= 0)
-        return 64;
-    return Math.min(512, Math.max(64, Math.floor(sourceCharacters / 200)));
-}
-export function getSummaryUsabilityFailure(summary, label, requiredSections = CHECKPOINT_REQUIRED_SECTIONS, sourceCharacters) {
-    const checkpoint = summary.replace(FILE_OPERATION_BLOCK, "").trim();
-    if (!checkpoint) {
-        return \`\${label} failed: generated an empty or file-list-only checkpoint\`;
-    }
-    const contentCharacters = summaryContentCharacters(checkpoint);
-    const minimumCharacters = minimumSummaryContentCharacters(sourceCharacters);
-    if (contentCharacters < minimumCharacters) {
-        return \`\${label} failed: generated an implausibly small checkpoint (\${contentCharacters} content characters; minimum \${minimumCharacters})\`;
-    }
-    const sections = summarySections(checkpoint);
-    const missing = requiredSections.filter((heading) => !isSubstantiveSummarySection(sections.get(heading.toLowerCase()) ?? []));
-    if (missing.length > 0) {
-        return \`\${label} failed: generated a structurally unusable checkpoint (missing substantive \${missing.join(", ")})\`;
-    }
-    return undefined;
-}
+${SUMMARY_USABILITY_HELPER_IMPLEMENTATION}
 
 function createSummarizationOptions(`,
 			"summary integrity helper",
@@ -442,10 +537,7 @@ function createSummarizationOptions(`,
 			`    const textContent = contentText(response.content);
     return { text: textContent, usage: response.usage };`,
 			`    const textContent = contentText(response.content);
-    const usabilityFailure = getSummaryUsabilityFailure(textContent, "Summarization", undefined, conversationText.length + (previousSummary?.length ?? 0));
-    if (usabilityFailure) {
-        throw new Error(usabilityFailure);
-    }
+${HISTORY_SUMMARY_USABILITY_GUARD}
     return { text: textContent, usage: response.usage };`,
 			"history summary integrity",
 		);
@@ -456,10 +548,7 @@ function createSummarizationOptions(`,
         usage: response.usage,
     };`,
 			`    const textContent = contentText(response.content);
-    const usabilityFailure = getSummaryUsabilityFailure(textContent, "Turn prefix summarization", TURN_PREFIX_REQUIRED_SECTIONS, conversationText.length);
-    if (usabilityFailure) {
-        throw new Error(usabilityFailure);
-    }
+${TURN_PREFIX_SUMMARY_USABILITY_GUARD}
     return {
         text: textContent,
         usage: response.usage,
@@ -593,16 +682,144 @@ function patchBranchSummarizationSource(source) {
 			"branch summarization token budget",
 		);
 	}
+	if (isFullBranchSource(patched) && !patched.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchRequestBudget)) {
+		patched = replaceRequired(
+			patched,
+			`    // Token budget = context window minus reserved space for prompt + response
+    const contextWindow = model.contextWindow || 128000;
+    // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.contextBudgets}
+    const effectiveSettings = getEffectiveCompactionSettings({ enabled: true, reserveTokens, keepRecentTokens: 1 }, contextWindow);
+    const tokenBudget = contextWindow - effectiveSettings.reserveTokens;
+    const { messages, fileOps } = prepareBranchEntries(entries, tokenBudget);
+    if (messages.length === 0) {
+        return { summary: "No content to summarize" };
+    }
+    // Transform to LLM-compatible messages, then serialize to text
+    // Serialization prevents the model from treating it as a conversation to continue
+    const llmMessages = convertToLlm(messages);
+    const conversationText = serializeConversation(llmMessages);
+    // Build prompt
+    let instructions;
+    if (replaceInstructions && customInstructions) {
+        instructions = customInstructions;
+    }
+    else if (customInstructions) {
+        instructions = \`\${BRANCH_SUMMARY_PROMPT}\\n\\nAdditional focus: \${customInstructions}\`;
+    }
+    else {
+        instructions = BRANCH_SUMMARY_PROMPT;
+    }
+    const promptText = \`<conversation>\\n\${conversationText}\\n</conversation>\\n\\n\${instructions}\`;
+    const summarizationMessages = [
+        {
+            role: "user",
+            content: [{ type: "text", text: promptText }],
+            timestamp: Date.now(),
+        },
+    ];`,
+			`    // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.branchHistoryCapacity}
+${EMPTY_BRANCH_HISTORY_RESULT}
+    // Token budget includes the actual system prompt, serialized prompt, and output allowance.
+    const contextWindow = Number.isFinite(model.contextWindow) && model.contextWindow > 0
+        ? Math.max(1, Math.floor(model.contextWindow))
+        : 128000;
+    // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.contextBudgets}
+    const effectiveSettings = getEffectiveCompactionSettings({ enabled: true, reserveTokens, keepRecentTokens: 1 }, contextWindow);
+    // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.branchRequestBudget}
+    const modelMaxTokens = Number.isFinite(model.maxTokens) && model.maxTokens > 0
+        ? Math.floor(model.maxTokens)
+        : Number.POSITIVE_INFINITY;
+    let instructions;
+    if (replaceInstructions && customInstructions) {
+        instructions = customInstructions;
+    }
+    else if (customInstructions) {
+        instructions = \`\${BRANCH_SUMMARY_PROMPT}\\n\\nAdditional focus: \${customInstructions}\`;
+    }
+    else {
+        instructions = BRANCH_SUMMARY_PROMPT;
+    }
+    const systemPromptTokens = estimateTokens({ role: "user", content: SUMMARIZATION_SYSTEM_PROMPT, timestamp: 0 });
+    const buildRequest = (branchMessages) => {
+        // Transform to LLM-compatible messages, then serialize to text. Serialization
+        // prevents the model from treating the branch as a conversation to continue.
+        const conversationText = serializeConversation(convertToLlm(branchMessages));
+        const promptText = \`<conversation>\\n\${conversationText}\\n</conversation>\\n\\n\${instructions}\`;
+        const summarizationMessages = [
+            {
+                role: "user",
+                content: [{ type: "text", text: promptText }],
+                timestamp: Date.now(),
+            },
+        ];
+        const inputTokens = systemPromptTokens + estimateTokens(summarizationMessages[0]);
+        return { conversationText, summarizationMessages, inputTokens };
+    };
+    const emptyRequest = buildRequest([]);
+    if (emptyRequest.inputTokens >= contextWindow - 1) {
+        return { error: "Branch summarization prompt exceeds the model context window" };
+    }
+    const maxTokens = Math.min(2048, modelMaxTokens, effectiveSettings.reserveTokens, contextWindow - emptyRequest.inputTokens - 1);
+    const configuredConversationBudget = contextWindow - effectiveSettings.reserveTokens;
+    const tokenBudget = Math.min(configuredConversationBudget, contextWindow - emptyRequest.inputTokens - maxTokens);
+    if (tokenBudget < 1) {
+        return { error: "Branch summarization prompt leaves no conversation capacity" };
+    }
+    let { messages, fileOps } = prepareBranchEntries(entries, tokenBudget);
+${BRANCH_PREPARATION_CAPACITY_FAILURE}
+    let request = buildRequest(messages);
+    while (messages.length > 0 && request.inputTokens + maxTokens > contextWindow) {
+        messages = messages.slice(1);
+${BRANCH_SERIALIZATION_CAPACITY_FAILURE}
+        request = buildRequest(messages);
+    }
+    const { conversationText, summarizationMessages } = request;`,
+			"branch summary context and output budget",
+		);
+		patched = replaceRequired(
+			patched,
+			"    const requestOptions = { apiKey, headers, env, signal, maxTokens: 2048 };",
+			"    const requestOptions = { apiKey, headers, env, signal, maxTokens };",
+			"branch summary output budget",
+		);
+	}
+	if (
+		isFullBranchSource(patched) &&
+		patched.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchRequestBudget) &&
+		!patched.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchHistoryCapacity)
+	) {
+		patched = replaceRequired(
+			patched,
+			"    // Token budget includes the actual system prompt, serialized prompt, and output allowance.",
+			`    // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.branchHistoryCapacity}
+${EMPTY_BRANCH_HISTORY_RESULT}
+    // Token budget includes the actual system prompt, serialized prompt, and output allowance.`,
+			"genuinely empty branch result",
+		);
+		patched = replaceRequired(
+			patched,
+			`    if (messages.length === 0) {
+        return { summary: "No content to summarize" };
+    }`,
+			BRANCH_PREPARATION_CAPACITY_FAILURE,
+			"non-empty branch preparation failure",
+		);
+		patched = replaceRequired(
+			patched,
+			`        if (messages.length === 0) {
+            return { summary: "No content to summarize" };
+        }`,
+			BRANCH_SERIALIZATION_CAPACITY_FAILURE,
+			"non-empty branch serialization failure",
+		);
+	}
 	if (isFullBranchSource(patched) && !patched.includes(PI_COMPACTION_TOOLS_PATCH_MARKERS.branchIntegrity)) {
 		patched = replaceRequired(
 			patched,
 			"    let summary = contentText(response.content);",
 			`    let summary = contentText(response.content);
     // ${PI_COMPACTION_TOOLS_PATCH_MARKERS.branchIntegrity}
-    const usabilityFailure = getSummaryUsabilityFailure(summary, "Branch summarization", replaceInstructions && customInstructions ? [] : undefined, conversationText.length);
-    if (usabilityFailure) {
-        return { error: usabilityFailure };
-    }`,
+${BRANCH_SUMMARY_USABILITY_GUARD}`,
 			"branch summary integrity",
 		);
 	}

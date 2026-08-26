@@ -44,7 +44,41 @@ export const FEYNMAN_LITEPARSE_NATIVE_PLATFORMS = Object.freeze({
 	"@llamaindex/liteparse-win32-x64-msvc": { cpu: ["x64"], os: ["win32"] },
 });
 
+const LITEPARSE_NATIVE_PACKAGE_PREFIX = "@llamaindex/liteparse-";
+const LOCK_PACKAGE_PREFIX = "node_modules/";
+const EXPECTED_NATIVE_PACKAGES = FEYNMAN_LITEPARSE_NATIVE_PACKAGES.toSorted();
+const EXPECTED_LITEPARSE_URL =
+	`https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-${FEYNMAN_LITEPARSE_VERSION}.tgz`;
+
+function lockPackageNames(packagePath) {
+	const normalizedPath = packagePath.startsWith(LOCK_PACKAGE_PREFIX)
+		? packagePath.slice(LOCK_PACKAGE_PREFIX.length)
+		: packagePath;
+	return normalizedPath === "" ? [] : normalizedPath.split(`/${LOCK_PACKAGE_PREFIX}`);
+}
+
+function verifyLiteparseNativeOptionalDependencies(manifest, fail, label) {
+	const nativePackages = Object.keys(manifest?.optionalDependencies ?? {})
+		.filter((packageName) => packageName.startsWith(LITEPARSE_NATIVE_PACKAGE_PREFIX))
+		.sort();
+	if (JSON.stringify(nativePackages) !== JSON.stringify(EXPECTED_NATIVE_PACKAGES)) {
+		fail(`${label} LiteParse does not declare exactly the reviewed seven native packages`);
+	}
+	for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
+		if (manifest?.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
+			fail(`${label} LiteParse optional package ${packageName} is not ${FEYNMAN_LITEPARSE_VERSION}`);
+		}
+	}
+}
+
 function verifyLiteparseNativeLockEntries(lock, fail, label) {
+	const nativePackages = Object.keys(lock.packages ?? {})
+		.flatMap(lockPackageNames)
+		.filter((packageName) => packageName.startsWith(LITEPARSE_NATIVE_PACKAGE_PREFIX))
+		.sort();
+	if (JSON.stringify(nativePackages) !== JSON.stringify(EXPECTED_NATIVE_PACKAGES)) {
+		fail(`${label} does not lock exactly the reviewed seven native LiteParse packages`);
+	}
 	for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
 		const entry = lock.packages?.[`node_modules/${packageName}`];
 		const platform = FEYNMAN_LITEPARSE_NATIVE_PLATFORMS[packageName];
@@ -63,48 +97,39 @@ function verifyLiteparseNativeLockEntries(lock, fail, label) {
 	}
 }
 
+function verifyLiteparseLockEntry(lock, fail, label) {
+	const entry = lock.packages?.["node_modules/@llamaindex/liteparse"];
+	if (
+		entry?.version !== FEYNMAN_LITEPARSE_VERSION ||
+		entry?.resolved !== EXPECTED_LITEPARSE_URL ||
+		entry?.integrity !== FEYNMAN_LITEPARSE_INTEGRITY
+	) {
+		fail(`${label} does not resolve exact LiteParse ${FEYNMAN_LITEPARSE_VERSION}`);
+	}
+	verifyLiteparseManifestContract(entry, fail, label);
+}
+
 export function verifyLiteparseManifestContract(manifest, fail, label) {
 	if (manifest.version !== FEYNMAN_LITEPARSE_VERSION) {
 		fail(`${label} LiteParse is not ${FEYNMAN_LITEPARSE_VERSION}`);
 	}
-	const nativePackages = Object.keys(manifest.optionalDependencies ?? {})
-		.filter((packageName) => packageName.startsWith("@llamaindex/liteparse-"))
-		.sort();
-	if (
-		JSON.stringify(nativePackages) !==
-		JSON.stringify(FEYNMAN_LITEPARSE_NATIVE_PACKAGES.toSorted())
-	) {
-		fail(`${label} LiteParse does not declare the reviewed seven native packages`);
-	}
-	for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
-		if (manifest.optionalDependencies?.[packageName] !== FEYNMAN_LITEPARSE_VERSION) {
-			fail(`${label} LiteParse optional package ${packageName} is not ${FEYNMAN_LITEPARSE_VERSION}`);
-		}
-	}
+	verifyLiteparseNativeOptionalDependencies(manifest, fail, label);
+}
+
+export function verifyLiteparseRootManifestContract(rootManifest, fail) {
+	verifyLiteparseNativeOptionalDependencies(rootManifest, fail, "package.json");
 }
 
 export function verifyLiteparseRootLockContract(rootLock, fail) {
-	for (const packageName of FEYNMAN_LITEPARSE_NATIVE_PACKAGES) {
-		if (
-			rootLock.packages?.[""]?.optionalDependencies?.[packageName] !==
-			FEYNMAN_LITEPARSE_VERSION
-		) {
-			fail(`package-lock.json does not request ${packageName} ${FEYNMAN_LITEPARSE_VERSION}`);
-		}
-	}
+	verifyLiteparseNativeOptionalDependencies(
+		rootLock.packages?.[""],
+		fail,
+		"package-lock.json",
+	);
 	verifyLiteparseNativeLockEntries(rootLock, fail, "package-lock.json");
 }
 
 export function verifyLiteparseRuntimeLockContract(runtimeLock, fail) {
-	const entry = runtimeLock.packages?.["node_modules/@llamaindex/liteparse"];
-	if (
-		entry?.version !== FEYNMAN_LITEPARSE_VERSION ||
-		entry?.resolved !==
-			`https://registry.npmjs.org/@llamaindex/liteparse/-/liteparse-${FEYNMAN_LITEPARSE_VERSION}.tgz` ||
-		entry?.integrity !== FEYNMAN_LITEPARSE_INTEGRITY
-	) {
-		fail(`committed runtime lock does not resolve exact LiteParse ${FEYNMAN_LITEPARSE_VERSION}`);
-	}
-	verifyLiteparseManifestContract(entry, fail, "committed runtime lock");
+	verifyLiteparseLockEntry(runtimeLock, fail, "committed runtime lock");
 	verifyLiteparseNativeLockEntries(runtimeLock, fail, "committed runtime lock");
 }

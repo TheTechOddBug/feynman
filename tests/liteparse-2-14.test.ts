@@ -6,6 +6,8 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 import {
+	verifyLiteparseManifestContract,
+	verifyLiteparseRootManifestContract,
 	verifyLiteparseRootLockContract,
 	verifyLiteparseRuntimeLockContract,
 } from "../scripts/lib/liteparse-release-contract.mjs";
@@ -31,6 +33,7 @@ const NATIVE_INTEGRITIES: Record<string, string> = {
 	"@llamaindex/liteparse-win32-x64-msvc":
 		"sha512-bv7T2/l9S4x2Cf66MlFK647yHyNVfeNmeJt+8YHcuG1KbBLwCO47brQdbetqw3+UJKCr4usEc8rt8+Kl1LvnVA==",
 };
+const FAKE_NATIVE_PACKAGE = "@llamaindex/liteparse-freebsd-x64";
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
 function nativeLiteParsePackage() {
@@ -159,11 +162,19 @@ test("LiteParse 2.14 release identity and all native locks are exact", () => {
 	const fail = (message: string): never => {
 		throw new Error(message);
 	};
+	assert.doesNotThrow(() => verifyLiteparseRootManifestContract(manifest, fail));
 	assert.doesNotThrow(() => verifyLiteparseRootLockContract(lock, fail));
 	const runtimeLock = JSON.parse(
 		readFileSync(resolve(".feynman/runtime-package-lock.json"), "utf8"),
 	);
 	assert.doesNotThrow(() => verifyLiteparseRuntimeLockContract(runtimeLock, fail));
+	assert.doesNotThrow(() =>
+		verifyLiteparseManifestContract(
+			runtimeLock.packages["node_modules/@llamaindex/liteparse"],
+			fail,
+			"runtime",
+		),
+	);
 	const mutatedRuntimeLock = structuredClone(runtimeLock);
 	Object.assign(
 		mutatedRuntimeLock.packages["node_modules/@llamaindex/liteparse-win32-x64-msvc"],
@@ -176,6 +187,165 @@ test("LiteParse 2.14 release identity and all native locks are exact", () => {
 	assert.throws(
 		() => verifyLiteparseRuntimeLockContract(mutatedRuntimeLock, fail),
 		/liteparse-win32-x64-msvc@2\.14\.0/,
+	);
+});
+
+test("LiteParse contracts reject missing or extra native package sets", () => {
+	const manifest = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+	const lock = JSON.parse(readFileSync(resolve("package-lock.json"), "utf8"));
+	const runtimeLock = JSON.parse(
+		readFileSync(resolve(".feynman/runtime-package-lock.json"), "utf8"),
+	);
+	const fail = (message: string): never => {
+		throw new Error(message);
+	};
+	const expectedSetFailure = /exactly the reviewed seven native/;
+	const nativePackages = Object.keys(NATIVE_INTEGRITIES);
+	const nativePackage = nativePackages[0];
+
+	const rootManifestWithExtra = structuredClone(manifest);
+	rootManifestWithExtra.optionalDependencies[FAKE_NATIVE_PACKAGE] = LITEPARSE_VERSION;
+	assert.throws(
+		() => verifyLiteparseRootManifestContract(rootManifestWithExtra, fail),
+		expectedSetFailure,
+	);
+	const rootManifestMissingNative = structuredClone(manifest);
+	delete rootManifestMissingNative.optionalDependencies[nativePackage];
+	assert.throws(
+		() => verifyLiteparseRootManifestContract(rootManifestMissingNative, fail),
+		expectedSetFailure,
+	);
+	for (const packageName of nativePackages) {
+		const rootManifestWithVersionDrift = structuredClone(manifest);
+		rootManifestWithVersionDrift.optionalDependencies[packageName] = "9.9.9";
+		assert.throws(
+			() => verifyLiteparseRootManifestContract(rootManifestWithVersionDrift, fail),
+			new RegExp(`${packageName}.*${LITEPARSE_VERSION}`),
+			`package.json accepted version drift for ${packageName}`,
+		);
+	}
+
+	const rootLockWithExtra = structuredClone(lock);
+	rootLockWithExtra.packages[""].optionalDependencies[FAKE_NATIVE_PACKAGE] =
+		LITEPARSE_VERSION;
+	rootLockWithExtra.packages[`node_modules/${FAKE_NATIVE_PACKAGE}`] = {
+		version: LITEPARSE_VERSION,
+		optional: true,
+	};
+	assert.throws(
+		() => verifyLiteparseRootLockContract(rootLockWithExtra, fail),
+		expectedSetFailure,
+	);
+	const rootLockWithOrphanExtra = structuredClone(lock);
+	rootLockWithOrphanExtra.packages[`node_modules/${FAKE_NATIVE_PACKAGE}`] = {
+		version: LITEPARSE_VERSION,
+		optional: true,
+	};
+	assert.throws(
+		() => verifyLiteparseRootLockContract(rootLockWithOrphanExtra, fail),
+		expectedSetFailure,
+	);
+	const rootLockWithNestedExtra = structuredClone(lock);
+	rootLockWithNestedExtra.packages[
+		`node_modules/pi-docparser/node_modules/${FAKE_NATIVE_PACKAGE}`
+	] = {
+		version: LITEPARSE_VERSION,
+		optional: true,
+	};
+	assert.throws(
+		() => verifyLiteparseRootLockContract(rootLockWithNestedExtra, fail),
+		expectedSetFailure,
+	);
+	const rootLockWithNestedExtraParent = structuredClone(lock);
+	rootLockWithNestedExtraParent.packages[
+		`node_modules/${FAKE_NATIVE_PACKAGE}/node_modules/commander`
+	] = {
+		version: "12.1.0",
+	};
+	assert.throws(
+		() => verifyLiteparseRootLockContract(rootLockWithNestedExtraParent, fail),
+		expectedSetFailure,
+	);
+	const rootLockMissingNative = structuredClone(lock);
+	delete rootLockMissingNative.packages[""].optionalDependencies[nativePackage];
+	delete rootLockMissingNative.packages[`node_modules/${nativePackage}`];
+	assert.throws(
+		() => verifyLiteparseRootLockContract(rootLockMissingNative, fail),
+		expectedSetFailure,
+	);
+	for (const packageName of nativePackages) {
+		const rootLockWithRequestedVersionDrift = structuredClone(lock);
+		rootLockWithRequestedVersionDrift.packages[""].optionalDependencies[
+			packageName
+		] = "9.9.9";
+		assert.throws(
+			() => verifyLiteparseRootLockContract(rootLockWithRequestedVersionDrift, fail),
+			new RegExp(`${packageName}.*${LITEPARSE_VERSION}`),
+			`package-lock.json accepted requested version drift for ${packageName}`,
+		);
+	}
+
+	const nativeEntryDrift = {
+		version: "9.9.9",
+		resolved: "https://packages.example.invalid/native.tgz",
+		integrity: "sha512-foreign",
+		optional: false,
+		cpu: ["foreign"],
+		os: ["foreign"],
+	};
+	for (const packageName of nativePackages) {
+		for (const [field, replacement] of Object.entries(nativeEntryDrift)) {
+			const rootLockWithNativeIdentityDrift = structuredClone(lock);
+			rootLockWithNativeIdentityDrift.packages[
+				`node_modules/${packageName}`
+			][field] = replacement;
+			assert.throws(
+				() =>
+					verifyLiteparseRootLockContract(
+						rootLockWithNativeIdentityDrift,
+						fail,
+					),
+				new RegExp(`${packageName}.*${LITEPARSE_VERSION}`),
+				`package-lock.json accepted ${field} drift for ${packageName}`,
+			);
+		}
+		const rootLockWithNativeLibcDrift = structuredClone(lock);
+		const nativeEntry =
+			rootLockWithNativeLibcDrift.packages[`node_modules/${packageName}`];
+		nativeEntry.libc = nativeEntry.libc ? ["foreign"] : ["glibc"];
+		assert.throws(
+			() => verifyLiteparseRootLockContract(rootLockWithNativeLibcDrift, fail),
+			new RegExp(`${packageName}.*${LITEPARSE_VERSION}`),
+			`package-lock.json accepted libc drift for ${packageName}`,
+		);
+	}
+
+	const genericManifestWithExtra = structuredClone(
+		runtimeLock.packages["node_modules/@llamaindex/liteparse"],
+	);
+	genericManifestWithExtra.optionalDependencies[FAKE_NATIVE_PACKAGE] =
+		LITEPARSE_VERSION;
+	assert.throws(
+		() => verifyLiteparseManifestContract(genericManifestWithExtra, fail, "runtime"),
+		expectedSetFailure,
+	);
+	const genericManifestMissingNative = structuredClone(
+		runtimeLock.packages["node_modules/@llamaindex/liteparse"],
+	);
+	delete genericManifestMissingNative.optionalDependencies[nativePackage];
+	assert.throws(
+		() => verifyLiteparseManifestContract(genericManifestMissingNative, fail, "runtime"),
+		expectedSetFailure,
+	);
+
+	const runtimeLockWithOrphanExtra = structuredClone(runtimeLock);
+	runtimeLockWithOrphanExtra.packages[`node_modules/${FAKE_NATIVE_PACKAGE}`] = {
+		version: LITEPARSE_VERSION,
+		optional: true,
+	};
+	assert.throws(
+		() => verifyLiteparseRuntimeLockContract(runtimeLockWithOrphanExtra, fail),
+		expectedSetFailure,
 	);
 });
 

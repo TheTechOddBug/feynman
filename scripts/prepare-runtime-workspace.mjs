@@ -38,6 +38,11 @@ import {
 	patchPiTransformMessagesSource,
 } from "./lib/pi-runtime-correctness-patch.mjs";
 import { patchPiLlamaUsageSource } from "./lib/pi-llama-usage-patch.mjs";
+import {
+	assertPiExtensionHandlerTimeoutVersion,
+	PI_EXTENSION_HANDLER_TIMEOUT_TARGET,
+	patchPiExtensionHandlerTimeoutSource,
+} from "./lib/pi-extension-handler-timeout-patch.mjs";
 import { patchPiExtensionLoaderSource } from "./lib/pi-extension-loader-patch.mjs";
 import { patchPiModelRegistrySource } from "./lib/pi-model-registry-patch.mjs";
 import { patchPiStateFilePermissionsSource } from "./lib/pi-state-file-permissions-patch.mjs";
@@ -64,6 +69,10 @@ import {
 	patchAlphaHubSearchSource,
 } from "./lib/alpha-hub-search-patch.mjs";
 import { patchMcpSdkPackageJsonSource } from "./lib/mcp-sdk-package-patch.mjs";
+import {
+	FEYNMAN_PI_TELEMETRY_PACKAGE,
+	resolvePiTelemetryRuntimeVersion,
+} from "./lib/pi-telemetry-release-contract.mjs";
 import { createDeterministicTarGz } from "./lib/deterministic-archive.mjs";
 import {
 	computeRuntimeArchiveTreeHash,
@@ -132,6 +141,7 @@ const PINNED_RUNTIME_PACKAGES = [
 	"@earendil-works/pi-agent-core",
 	"@earendil-works/pi-ai",
 	"@earendil-works/pi-coding-agent",
+	FEYNMAN_PI_TELEMETRY_PACKAGE,
 	"@earendil-works/pi-tui",
 	"brace-expansion",
 	"typebox",
@@ -176,7 +186,13 @@ function readPackageSpecs() {
 		: [];
 
 	for (const packageName of PINNED_RUNTIME_PACKAGES) {
-		const version = readLockedPackageVersion(packageName);
+		let version = readLockedPackageVersion(packageName);
+		if (packageName === FEYNMAN_PI_TELEMETRY_PACKAGE) {
+			version = resolvePiTelemetryRuntimeVersion(
+				version,
+				existsSync(packageLockPath),
+			);
+		}
 		if (version) {
 			packageSpecs.push(`${packageName}@${version}`);
 		}
@@ -644,6 +660,46 @@ function patchBundledPiRuntimeCorrectness() {
 	return changed;
 }
 
+function patchBundledPiExtensionHandlerTimeout() {
+	const candidates = [];
+	for (const scope of ["@earendil-works", "@mariozechner"]) {
+		const packageRoot = resolve(
+			workspaceNodeModulesDir,
+			scope,
+			"pi-coding-agent",
+		);
+		if (!existsSync(packageRoot)) continue;
+		const version = JSON.parse(
+			readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+		).version;
+		assertPiExtensionHandlerTimeoutVersion(
+			version,
+			`runtime workspace ${scope}/pi-coding-agent`,
+		);
+		const path = resolve(
+			packageRoot,
+			...PI_EXTENSION_HANDLER_TIMEOUT_TARGET.split("/"),
+		);
+		if (!existsSync(path)) {
+			throw new Error(`Pi extension handler timeout target is missing: ${path}`);
+		}
+		const source = readFileSync(path, "utf8");
+		candidates.push({
+			path,
+			source,
+			patched: patchPiExtensionHandlerTimeoutSource(source, version),
+		});
+	}
+
+	let changed = false;
+	for (const candidate of candidates) {
+		if (candidate.patched === candidate.source) continue;
+		writeFileSync(candidate.path, candidate.patched, "utf8");
+		changed = true;
+	}
+	return changed;
+}
+
 function patchBundledPiEditLineEndings() {
 	let changed = false;
 	for (const scope of ["@earendil-works", "@mariozechner"]) {
@@ -878,6 +934,7 @@ function patchBundledRuntime(
 	changed = patchBundledPiCodingAgentPackageJson() || changed;
 	changed = patchBundledPiAgentCore() || changed;
 	changed = patchBundledPiRuntimeCorrectness() || changed;
+	changed = patchBundledPiExtensionHandlerTimeout() || changed;
 	changed = patchBundledPiEditLineEndings() || changed;
 	changed = patchBundledPiLlamaUsage() || changed;
 	changed = patchBundledPiExtensionLoader() || changed;

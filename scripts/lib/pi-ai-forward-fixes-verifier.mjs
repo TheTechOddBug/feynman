@@ -50,6 +50,149 @@ function sha256(source) {
 	return createHash("sha256").update(source).digest("hex");
 }
 
+const BEDROCK_TOOL_RESULT_IMAGES = Object.freeze(["Zmlyc3Q=", "c2Vjb25k"]);
+const BEDROCK_EMPTY_USAGE = Object.freeze({
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }),
+});
+
+function bedrockToolResultModel(id) {
+	return {
+		id,
+		name: id,
+		api: "bedrock-converse-stream",
+		provider: "amazon-bedrock",
+		baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1_000_000,
+		maxTokens: 128_000,
+	};
+}
+
+function bedrockToolResultContext(modelId) {
+	return {
+		messages: [
+			{ role: "user", content: "Inspect two charts", timestamp: 1 },
+			{
+				role: "assistant",
+				content: [
+					{ type: "toolCall", id: "tool-1", name: "read", arguments: { path: "/tmp/chart-1.png" } },
+					{ type: "toolCall", id: "tool-2", name: "read", arguments: { path: "/tmp/chart-2.png" } },
+				],
+				api: "bedrock-converse-stream",
+				provider: "amazon-bedrock",
+				model: modelId,
+				usage: BEDROCK_EMPTY_USAGE,
+				stopReason: "toolUse",
+				timestamp: 2,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "tool-1",
+				toolName: "read",
+				content: [
+					{ type: "text", text: "rendered chart" },
+					{ type: "image", data: BEDROCK_TOOL_RESULT_IMAGES[0], mimeType: "image/png" },
+				],
+				isError: true,
+				timestamp: 3,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "tool-2",
+				toolName: "read",
+				content: [{ type: "image", data: BEDROCK_TOOL_RESULT_IMAGES[1], mimeType: "image/png" }],
+				isError: true,
+				timestamp: 4,
+			},
+		],
+	};
+}
+
+async function captureBedrockToolResultPayload(piAiRoot, modelId, label) {
+	const bedrock = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "bedrock-converse-stream.js")).href}?bedrock-tool-images=${Date.now()}-${label}`
+	);
+	let payload;
+	const result = await bedrock.stream(
+		bedrockToolResultModel(modelId),
+		bedrockToolResultContext(modelId),
+		{
+			cacheRetention: "none",
+			env: { AWS_BEDROCK_SKIP_AUTH: "1" },
+			onPayload: (request) => {
+				payload = request;
+				throw new Error(`captured ${label} Bedrock tool-result payload`);
+			},
+		},
+	).result();
+	assert.match(result.errorMessage ?? "", new RegExp(`captured ${label} Bedrock tool-result payload`));
+	assert.ok(payload, `${label} Bedrock tool-result payload was not captured`);
+	return payload;
+}
+
+function assertHoistedBedrockOpenAiToolResultPayload(payload, label) {
+	const message = payload.messages.at(-1);
+	assert.equal(message.role, "user", `${label} Bedrock tool results must remain a user message`);
+	assert.equal(message.content.length, 4, `${label} must retain two tool results and two sibling images`);
+	assert.deepEqual(message.content[0].toolResult, {
+		toolUseId: "tool-1",
+		content: [{ text: "rendered chart" }],
+		status: "error",
+	});
+	assert.deepEqual(message.content[1].toolResult, {
+		toolUseId: "tool-2",
+		content: [{ text: "<empty>" }],
+		status: "error",
+	});
+	assert.deepEqual(
+		message.content.slice(2).map((block) => ({
+			format: block.image?.format,
+			data: Buffer.from(block.image?.source?.bytes ?? []).toString("base64"),
+		})),
+		BEDROCK_TOOL_RESULT_IMAGES.map((data) => ({ format: "png", data })),
+		`${label} must preserve sibling image order and bytes`,
+	);
+}
+
+function assertNestedBedrockAnthropicToolResultPayload(payload, label) {
+	const message = payload.messages.at(-1);
+	assert.equal(message.role, "user", `${label} Bedrock tool results must remain a user message`);
+	assert.equal(message.content.length, 2, `${label} Anthropic control must not gain sibling images`);
+	assert.deepEqual(
+		message.content[0].toolResult.content.map((block) => Object.keys(block)[0]),
+		["text", "image"],
+	);
+	assert.deepEqual(
+		message.content[1].toolResult.content.map((block) => Object.keys(block)[0]),
+		["image"],
+	);
+}
+
+async function verifyBedrockToolResultImageBehavior(piAiRoot, label) {
+	for (const modelId of [
+		"openai.gpt-5.6-sol",
+		"us.openai.gpt-5.6-sol",
+		"global.openai.gpt-5.6-sol",
+	]) {
+		const payload = await captureBedrockToolResultPayload(piAiRoot, modelId, `${label}-${modelId}`);
+		assertHoistedBedrockOpenAiToolResultPayload(payload, `${label} ${modelId}`);
+	}
+	const anthropicModelId = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
+	const anthropicPayload = await captureBedrockToolResultPayload(
+		piAiRoot,
+		anthropicModelId,
+		`${label}-anthropic`,
+	);
+	assertNestedBedrockAnthropicToolResultPayload(anthropicPayload, `${label} ${anthropicModelId}`);
+}
+
 function assertPiAiModelDataManifest(readSource, copy, surface) {
 	const manifestPath = "dist/providers/data/.manifest.json";
 	const manifest = JSON.parse(readSource(manifestPath, copy));
@@ -187,6 +330,8 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 		"installed",
 		resolvePiAiForwardFixVerificationTargets({ prunedNative }),
 	);
+	await verifyBedrockToolResultImageBehavior(piAiRoot, "installed-root");
+	await verifyBedrockToolResultImageBehavior(nestedPiAiRoot, "installed-nested");
 
 	const codingAgent = await import(
 		`${pathToFileURL(resolve(codingAgentRoot, "dist", "index.js")).href}?installed-forward-fix=${Date.now()}`
