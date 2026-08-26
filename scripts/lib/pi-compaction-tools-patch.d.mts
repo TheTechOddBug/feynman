@@ -9,6 +9,12 @@ export declare const PI_COMPACTION_TOOLS_PATCH_MARKERS: Readonly<{
 	branchResponse: string;
 	summaryFailure: string;
 	summaryFailureTypes: string;
+	contextBudgets: string;
+	contextCallers: string;
+	contextBudgetTypes: string;
+	summaryIntegrity: string;
+	branchIntegrity: string;
+	summaryIntegrityTypes: string;
 }>;
 export declare function assertPiCompactionToolsPatchedSource(relativePath: string, source: string): void;
 export declare function patchPiCompactionToolsSource(relativePath: string, source: string): string;

@@ -7,9 +7,18 @@
  *
  * This deliberately ports only the research-session continuity fix from issue
  * #8331 / closed PR #8593, not its enabled default or adjacent coding-agent UI.
+ * It also ports only the post-turn abort guard from closed upstream PR #8658
+ * (head daad15954920894581c59ced4cae7c295f755e45), adapted to Pi 0.84.2's
+ * optional AbortSignal.
+ *
  * Removal condition: adopt a released Pi watchdog that is safe for silent local
- * prefills and settles without awaiting a non-cooperative provider iterator.
+ * prefills and settles without awaiting a non-cooperative provider iterator,
+ * and which preserves queued steering/follow-up input after a tool-time abort.
  */
+
+const PI_AGENT_CORE_PATCH_REQUIRED_VERSION = "0.84.2";
+const ABORT_QUEUE_GUARD_MARKER =
+	`Feynman Pi ${PI_AGENT_CORE_PATCH_REQUIRED_VERSION} forward patch: preserve queued input on abort #8658`;
 
 export const PI_AGENT_CORE_PATCH_MARKERS = Object.freeze({
 	toolAliases: "function normalizeFeynmanToolAlias(",
@@ -154,6 +163,19 @@ const PATCHED_STREAM_TIMEOUT_CONFIG =
 const LEGACY_STREAM_TIMEOUT_CONFIG =
 	'    const configured = parseFeynmanStreamIdleTimeoutMs(config.streamIdleTimeoutMs, "streamIdleTimeoutMs");';
 
+const ORIGINAL_POST_TURN_SEQUENCE = `            await emit({ type: "turn_end", message, toolResults });
+            const nextTurnContext = {`;
+
+const PATCHED_POST_TURN_SEQUENCE = `            await emit({ type: "turn_end", message, toolResults });
+            // ${ABORT_QUEUE_GUARD_MARKER}
+            // Stop before prepareNextTurn or either queue callback. The owning
+            // Agent/session can then restore the untouched queued input.
+            if (signal?.aborted) {
+                await emit({ type: "agent_end", messages: newMessages });
+                return;
+            }
+            const nextTurnContext = {`;
+
 const PATCHED_STREAM_LOOP = `    let partialMessage = null;
     let addedPartial = false;
     const iterator = response[Symbol.asyncIterator]();
@@ -227,6 +249,10 @@ ${PATCHED_STREAM_NEXT_SEQUENCE}
             break;
         const event = settled.value;`;
 
+function countOccurrences(source, fragment) {
+	return source.split(fragment).length - 1;
+}
+
 function stripStaleSourceMapDirective(source) {
 	const marker = "//# sourceMappingURL=";
 	const first = source.indexOf(marker);
@@ -276,6 +302,22 @@ export function assertPiAgentCorePatchSource(source, surface = "Pi AgentCore") {
 	}
 	if (source.includes("//# sourceMappingURL=")) {
 		throw new Error(`Incomplete ${surface} patch: retained stale source map directive`);
+	}
+	const hasAgentLoopSurface =
+		source.includes("function createAgentStream()") ||
+		source.includes("async function runLoop(") ||
+		source.includes(ABORT_QUEUE_GUARD_MARKER);
+	if (hasAgentLoopSurface) {
+		if (countOccurrences(source, PATCHED_POST_TURN_SEQUENCE) !== 1) {
+			throw new Error(
+				`Incomplete ${surface} patch: missing exact post-turn abort queue guard`,
+			);
+		}
+		if (source.includes(ORIGINAL_POST_TURN_SEQUENCE)) {
+			throw new Error(
+				`Incomplete ${surface} patch: retained unguarded post-turn queue path`,
+			);
+		}
 	}
 }
 
@@ -381,10 +423,33 @@ function patchStreamWatchdog(source) {
 	return patched;
 }
 
+function patchAbortQueueGuard(source) {
+	// Unit fixtures that exercise only the stream/tool transforms intentionally
+	// omit runLoop. Real Pi AgentCore sources must match the exact 0.84.2 layout.
+	const hasAgentLoopSurface =
+		source.includes("function createAgentStream()") ||
+		source.includes("async function runLoop(") ||
+		source.includes(ABORT_QUEUE_GUARD_MARKER);
+	if (!hasAgentLoopSurface) {
+		return source;
+	}
+	if (source.includes(ABORT_QUEUE_GUARD_MARKER)) {
+		return source;
+	}
+	const occurrences = countOccurrences(source, ORIGINAL_POST_TURN_SEQUENCE);
+	if (occurrences !== 1) {
+		throw new Error(
+			`Unsupported Pi ${PI_AGENT_CORE_PATCH_REQUIRED_VERSION} AgentCore abort queue layout; expected 1 occurrence, found ${occurrences}`,
+		);
+	}
+	return source.replace(ORIGINAL_POST_TURN_SEQUENCE, PATCHED_POST_TURN_SEQUENCE);
+}
+
 export function patchPiAgentCoreSource(source) {
 	let patched = stripStaleSourceMapDirective(source);
 	patched = patchToolAliases(patched);
 	patched = patchStreamWatchdog(patched);
+	patched = patchAbortQueueGuard(patched);
 	assertPiAgentCorePatchSource(patched);
 	return patched;
 }

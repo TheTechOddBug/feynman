@@ -6,6 +6,30 @@ GitHub release notes are generated from the matching `## vX.Y.Z` section in this
 
 ## Unreleased
 
+## v0.3.44 - 2026-08-26
+
+### Research continuity
+
+- Stopping a tool run now ends the active Pi loop before queued steering or follow-up research input can be drained into an already-aborted model call. The queued input remains available for the next turn instead of producing a second spurious cancellation.
+
+### Compaction integrity
+
+- Small-context local and proxy models now bound compaction reserve and retained-history budgets to the model's actual context window, preventing empty or short sessions from compacting continuously.
+- Empty or structurally unusable summaries no longer replace research history. OpenAI Responses providers such as Grok also omit `tool_choice` when a compaction request has no tools.
+
+### Model reliability
+
+- OpenAI-compatible structured reasoning deltas are accumulated without reparsing and reserializing the complete history for every streamed detail, preventing long reasoning streams from blocking the event loop while preserving same-model replay.
+
+### Document research
+
+- Updated the bundled LiteParse runtime to `2.14.0`. OCR rasterization now runs in bounded worker-sized rounds, and dense PDF layout deduplication avoids quadratic work. Existing parse, search, and screenshot interfaces are unchanged.
+
+### Validation
+
+- Added executable abort-queue, Responses payload, structured-reasoning scale, small-context compaction, and summary-usability regressions across the maintained Pi runtime.
+- Re-ran installed document parsing, page-count, search, screenshot, package-artifact, runtime, and clean-consumer verification against LiteParse `2.14.0`.
+
 ## v0.3.43 - 2026-08-25
 
 ### Installation reliability

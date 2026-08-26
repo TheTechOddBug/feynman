@@ -341,6 +341,34 @@ export async function verifyRuntimeForwardFixBehavior(packageRoot, { prunedNativ
 	assert.equal("tool_choice" in compactionPayload, false);
 	assert.equal("tools" in compactionPayload, false);
 
+	const openAiResponses = await import(
+		`${pathToFileURL(resolve(piAiRoot, "dist", "api", "openai-responses.js")).href}?installed-forward-fix=${Date.now()}`
+	);
+	const responsesModel = {
+		...openAiModel,
+		id: "grok-4.6-installed-verifier",
+		name: "grok-4.6-installed-verifier",
+		api: "openai-responses",
+		provider: "xai",
+		baseUrl: "https://api.x.ai/v1",
+	};
+	let responsesPayload;
+	const responsesResult = await openAiResponses.streamSimple(
+		responsesModel,
+		{ messages: [{ role: "user", content: "summarize", timestamp: 0 }] },
+		{
+			apiKey: "test",
+			toolChoice: "none",
+			onPayload: (payload) => {
+				responsesPayload = payload;
+				throw new Error("installed Responses payload captured");
+			},
+		},
+	).result();
+	assert.match(responsesResult.errorMessage ?? "", /installed Responses payload captured/);
+	assert.equal("tool_choice" in responsesPayload, false);
+	assert.equal("tools" in responsesPayload, false);
+
 	const providerRetry = await import(
 		`${pathToFileURL(resolve(piAiRoot, "dist", "utils", "provider-retry.js")).href}?installed-forward-fix=${Date.now()}`
 	);

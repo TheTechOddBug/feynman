@@ -100,7 +100,16 @@ function isOpenAICompletionsReasoningField(field) {
     return OPENAI_COMPLETIONS_REASONING_FIELDS.includes(field);
 }`;
 
-const OPENAI_REASONING_STREAM_CAPTURE = `                    const reasoningDetails = choice.delta.reasoning_details;
+const OPENAI_REASONING_STREAM_STATE = `        const openAiReasoningDetailsByBlock = new WeakMap();
+        const finalizeOpenAiReasoningDetails = (block) => {
+            const preservedDetails = openAiReasoningDetailsByBlock.get(block);
+            if (!preservedDetails || preservedDetails.length === 0)
+                return;
+            block.thinkingSignature = JSON.stringify(preservedDetails);
+            openAiReasoningDetailsByBlock.delete(block);
+        };`;
+
+const OPENAI_REASONING_QUADRATIC_STREAM_CAPTURE = `                    const reasoningDetails = choice.delta.reasoning_details;
                     if (Array.isArray(reasoningDetails)) {
                         for (const detail of reasoningDetails) {
                             if (!isOpenAIReasoningDetail(detail))
@@ -114,6 +123,32 @@ const OPENAI_REASONING_STREAM_CAPTURE = `                    const reasoningDeta
                             block.thinkingSignature = JSON.stringify(preservedDetails);
                         }
                     }`;
+
+const OPENAI_REASONING_STREAM_CAPTURE = `                    const reasoningDetails = choice.delta.reasoning_details;
+                    if (Array.isArray(reasoningDetails)) {
+                        for (const detail of reasoningDetails) {
+                            if (!isOpenAIReasoningDetail(detail))
+                                continue;
+                            const block = ensureThinkingBlock("");
+                            let preservedDetails = openAiReasoningDetailsByBlock.get(block);
+                            if (!preservedDetails) {
+                                preservedDetails = [];
+                                openAiReasoningDetailsByBlock.set(block, preservedDetails);
+                            }
+                            // Accumulate provider replay data in memory. OpenRouter streams
+                            // reasoning_details as deltas: consecutive text/summary deltas are merged into
+                            // logical entries, while encrypted entries remain opaque and discrete.
+                            appendOpenAIReasoningDetail(preservedDetails, detail);
+                        }
+                    }`;
+
+const OPENAI_REASONING_FINISH_BOUNDARY = `                else if (block.type === "thinking") {
+                    finalizeOpenAiReasoningDetails(block);
+                    stream.push({`;
+
+const OPENAI_REASONING_ERROR_BOUNDARY = `            for (const block of output.content) {
+                finalizeOpenAiReasoningDetails(block);
+                delete block.index;`;
 
 const OPENAI_REASONING_REPLAY_SETUP = `            const thinkingBlocks = msg.content.filter(isThinkingContentBlock);
             const toolCalls = msg.content.filter(isToolCallBlock);
@@ -153,7 +188,13 @@ const OPENAI_REASONING_REPLAY_ASSIGNMENT = `            if (preservedReasoningDe
             }`;
 
 export function isPiOpenAiStructuredReasoningPatched(source) {
-	return source.includes(OPENAI_REASONING_DETAIL_HELPERS);
+	return [
+		OPENAI_REASONING_DETAIL_HELPERS,
+		OPENAI_REASONING_STREAM_STATE,
+		OPENAI_REASONING_STREAM_CAPTURE,
+		OPENAI_REASONING_FINISH_BOUNDARY,
+		OPENAI_REASONING_ERROR_BOUNDARY,
+	].every((fragment) => source.includes(fragment));
 }
 
 export function assertPiOpenAiStructuredReasoningSource(
@@ -162,7 +203,10 @@ export function assertPiOpenAiStructuredReasoningSource(
 ) {
 	for (const fragment of [
 		OPENAI_REASONING_DETAIL_HELPERS,
+		OPENAI_REASONING_STREAM_STATE,
 		OPENAI_REASONING_STREAM_CAPTURE,
+		OPENAI_REASONING_FINISH_BOUNDARY,
+		OPENAI_REASONING_ERROR_BOUNDARY,
 		OPENAI_REASONING_REPLAY_SETUP,
 		OPENAI_REASONING_RAW_REPLAY,
 		OPENAI_REASONING_REPLAY_ASSIGNMENT,
@@ -180,6 +224,7 @@ export function assertPiOpenAiStructuredReasoningSource(
 		"pendingReasoningDetailsByToolCallId",
 		"appendFeynmanEncryptedReasoningDetail",
 		"function isEncryptedReasoningDetail(",
+		"const preservedDetails = parseOpenAIReasoningDetails(block.thinkingSignature) ?? [];",
 	]) {
 		if (source.includes(forbidden)) {
 			throw new Error(`Incomplete Pi AI forward patch ${relativePath}: retained ${forbidden}`);
@@ -187,9 +232,47 @@ export function assertPiOpenAiStructuredReasoningSource(
 	}
 }
 
+function patchPiOpenAiStructuredReasoningAccumulator(source) {
+	let patched = replaceRequired(
+		source,
+		`            timestamp: Date.now(),
+        };
+        try {`,
+		`            timestamp: Date.now(),
+        };
+${OPENAI_REASONING_STREAM_STATE}
+        try {`,
+		"OpenAI structured reasoning stream accumulator",
+	);
+	patched = replaceRequired(
+		patched,
+		OPENAI_REASONING_QUADRATIC_STREAM_CAPTURE,
+		OPENAI_REASONING_STREAM_CAPTURE,
+		"OpenAI structured reasoning constant-work stream capture",
+	);
+	patched = replaceRequired(
+		patched,
+		`                else if (block.type === "thinking") {
+                    stream.push({`,
+		OPENAI_REASONING_FINISH_BOUNDARY,
+		"OpenAI structured reasoning block-finalization boundary",
+	);
+	patched = replaceRequired(
+		patched,
+		`            for (const block of output.content) {
+                delete block.index;`,
+		OPENAI_REASONING_ERROR_BOUNDARY,
+		"OpenAI structured reasoning error-finalization boundary",
+	);
+	return patched;
+}
+
 export function patchPiOpenAiStructuredReasoningSource(source) {
-	if (source.includes(OPENAI_REASONING_DETAIL_HELPERS)) {
+	if (isPiOpenAiStructuredReasoningPatched(source)) {
 		return source;
+	}
+	if (source.includes(OPENAI_REASONING_DETAIL_HELPERS)) {
+		return patchPiOpenAiStructuredReasoningAccumulator(source);
 	}
 
 	let patched = replaceRequired(
@@ -318,7 +401,7 @@ export function patchPiOpenAiStructuredReasoningSource(source) {
                             }
                         }
                     }`,
-		OPENAI_REASONING_STREAM_CAPTURE,
+		OPENAI_REASONING_QUADRATIC_STREAM_CAPTURE,
 		"OpenAI structured reasoning stream capture",
 	);
 	patched = replaceRequired(
@@ -395,6 +478,5 @@ export function patchPiOpenAiStructuredReasoningSource(source) {
                 assistantMsg.reasoning_content === undefined) {`,
 		"OpenAI structured reasoning replay assignment",
 	);
-	return patched;
+	return patchPiOpenAiStructuredReasoningAccumulator(patched);
 }
-

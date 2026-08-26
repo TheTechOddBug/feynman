@@ -177,11 +177,21 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		contextWindow: 128000,
 		maxTokens: 4096,
 	};
+	const checkpointSummary = [
+		"## Goal",
+		"Verify a research claim against its cited source.",
+		"",
+		"## Progress",
+		"- Located and checked the primary paper.",
+		"",
+		"## Next Steps",
+		"1. Reproduce the reported result.",
+	].join("\n");
 	let observedOptions;
 	const textStream = async (_model, _context, options) => {
 		observedOptions = options;
 		return {
-			result: async () => assistantMessage(model, [{ type: "text", text: "summary" }]),
+			result: async () => assistantMessage(model, [{ type: "text", text: checkpointSummary }]),
 		};
 	};
 	await compaction.completeSummarization(
@@ -191,6 +201,56 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		textStream,
 	);
 	assert.equal(observedOptions?.toolChoice, "none");
+	assert.deepEqual(
+		compaction.getEffectiveCompactionSettings(compaction.DEFAULT_COMPACTION_SETTINGS, 8192),
+		{ enabled: true, reserveTokens: 2048, keepRecentTokens: 4096 },
+	);
+	assert.equal(
+		compaction.shouldCompact(0, 8192, compaction.DEFAULT_COMPACTION_SETTINGS),
+		false,
+	);
+	assert.equal(
+		compaction.shouldCompact(6145, 8192, compaction.DEFAULT_COMPACTION_SETTINGS),
+		true,
+	);
+	assert.deepEqual(
+		compaction.getEffectiveCompactionSettings(compaction.DEFAULT_COMPACTION_SETTINGS, 128000),
+		compaction.DEFAULT_COMPACTION_SETTINGS,
+	);
+	const tinyStructuredStub = [
+		"## Goal",
+		"Research",
+		"## Progress",
+		"Started",
+		"## Next Steps",
+		"Continue",
+	].join("\n");
+	assert.match(
+		compaction.getSummaryUsabilityFailure(
+			tinyStructuredStub,
+			"Summarization",
+			undefined,
+			100_000,
+		) ?? "",
+		/implausibly small checkpoint/,
+	);
+	const mediumStructuredStub = [
+		"## Goal",
+		"A".repeat(60),
+		"## Progress",
+		"B".repeat(60),
+		"## Next Steps",
+		"C".repeat(60),
+	].join("\n");
+	assert.match(
+		compaction.getSummaryUsabilityFailure(
+			mediumStructuredStub,
+			"Summarization",
+			undefined,
+			100_000,
+		) ?? "",
+		/implausibly small checkpoint/,
+	);
 
 	const toolStream = async () => ({
 		result: async () => assistantMessage(
@@ -301,4 +361,48 @@ export async function verifyPiCompactionToolsBehavior(packageRoot) {
 		{ model, apiKey: "test", streamFn: lengthStream },
 	);
 	assert.match(truncatedBranch.error ?? "", /generation hit the token cap/);
+
+	const emptyStream = async () => ({
+		result: async () => assistantMessage(model, [{ type: "text", text: "" }]),
+	});
+	await assert.rejects(
+		() => compaction.generateSummaryWithUsage(
+			[{ role: "user", content: "preserve this research history", timestamp: 1 }],
+			model,
+			2048,
+			"test",
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"off",
+			emptyStream,
+		),
+		/empty or file-list-only checkpoint/,
+	);
+	const emptyBranch = await branch.generateBranchSummary(
+		[{
+			type: "message",
+			id: "entry-1",
+			parentId: null,
+			timestamp: new Date(1).toISOString(),
+			message: { role: "user", content: "abandoned research work", timestamp: 1 },
+		}],
+		{ model, apiKey: "test", streamFn: emptyStream },
+	);
+	assert.match(emptyBranch.error ?? "", /empty or file-list-only checkpoint/);
+
+	const accepted = await compaction.generateSummaryWithUsage(
+		[{ role: "user", content: "preserve this research history", timestamp: 1 }],
+		model,
+		2048,
+		"test",
+		undefined,
+		undefined,
+		undefined,
+		undefined,
+		"off",
+		textStream,
+	);
+	assert.equal(accepted.text, checkpointSummary);
 }
