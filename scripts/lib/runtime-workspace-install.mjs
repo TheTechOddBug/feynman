@@ -104,7 +104,7 @@ export function buildSourceRuntimeArchive(
 		{
 			cwd: appRoot,
 			stdio: ["ignore", "pipe", "pipe"],
-			timeout: 300000,
+			timeout: RUNTIME_WORKSPACE_PACKAGE_INSTALL_TIMEOUT_MS,
 			env,
 		},
 	);

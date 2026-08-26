@@ -308,6 +308,11 @@ test("version reconciliation and post-publish verification cover all release sur
 	assert.match(publishWorkflow, /node-version-file: \.nvmrc/);
 	assert.match(publishWorkflow, /npx npm@11\.18\.0 publish/);
 	assert.match(publishWorkflow, /Windows native launcher failed --help/);
+	assert.match(
+		publishWorkflow,
+		/\[System\.IO\.Compression\.ZipFile\]::ExtractToDirectory/,
+	);
+	assert.doesNotMatch(publishWorkflow, /Expand-Archive/);
 	assert.doesNotMatch(publishWorkflow, /npm@latest/);
 	for (const workflow of [e2eWorkflow, publishWorkflow]) {
 		assert.doesNotMatch(workflow, /uses: actions\/[^@\s]+@v\d/);
