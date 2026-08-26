@@ -84,7 +84,9 @@ const KNOWN_PARTIAL_SHA256 = Object.freeze({
 });
 
 function digest(source) {
-	return createHash("sha256").update(source).digest("hex");
+	return createHash("sha256")
+		.update(source.replace(/\r\n/g, "\n"))
+		.digest("hex");
 }
 
 function assertKnownTargets(targets) {

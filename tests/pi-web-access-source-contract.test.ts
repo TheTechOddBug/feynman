@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -7,6 +8,7 @@ import {
 	assertPiWebAccessPatchedSources,
 	PI_WEB_ACCESS_PATCH_TARGETS,
 	patchPiWebAccessSources,
+	syncPiWebAccessForwardFiles,
 } from "../scripts/lib/pi-web-access-patch.mjs";
 
 function reviewedSources(): Map<string, string> {
@@ -80,6 +82,40 @@ test("pi-web-access source contract covers every production file added or change
 			new RegExp(`${relativePath.replace(".", "\\.")}: unreviewed digest`),
 		);
 	}
+});
+
+test("pi-web-access exact forward fixtures normalize Windows checkout line endings", (t) => {
+	const root = mkdtempSync(join(tmpdir(), "feynman-web-fixture-crlf-"));
+	t.after(() => rmSync(root, { recursive: true, force: true }));
+	const fixtureRoot = join(root, "fixtures", "pi-web-access-0.25.0");
+	const packageRoot = join(root, "package");
+	mkdirSync(fixtureRoot, { recursive: true });
+	mkdirSync(packageRoot, { recursive: true });
+	const source = readFileSync(
+		join(
+			import.meta.dirname,
+			"fixtures",
+			"pi-web-access-0.25.0",
+			"data-uri-sanitize.ts.fixture",
+		),
+		"utf8",
+	);
+	writeFileSync(
+		join(fixtureRoot, "data-uri-sanitize.ts"),
+		source.replace(/\n/g, "\r\n"),
+		"utf8",
+	);
+
+	assert.equal(
+		syncPiWebAccessForwardFiles(root, packageRoot, "0.25.0"),
+		true,
+	);
+	const synced = readFileSync(
+		join(packageRoot, "data-uri-sanitize.ts"),
+		"utf8",
+	);
+	assert.equal(synced.includes("\r"), false);
+	assert.equal(synced, source);
 });
 
 test("pi-web-access patched contract rejects disabled proxy and Windows ADC guards", () => {

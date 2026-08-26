@@ -726,7 +726,7 @@ export function syncPiWebAccessForwardFiles(appRoot, packageRoot, version) {
 			throw new Error(`pi-web-access forward fixture is missing: ${relativePath}`);
 		}
 		const entryPath = resolve(packageRoot, relativePath);
-		const fixtureSource = readFileSync(fixturePath, "utf8");
+		const fixtureSource = readFileSync(fixturePath, "utf8").replace(/\r\n/g, "\n");
 		if (!existsSync(entryPath) || readFileSync(entryPath, "utf8") !== fixtureSource) {
 			writeFileSync(entryPath, fixtureSource, "utf8");
 			changed = true;
